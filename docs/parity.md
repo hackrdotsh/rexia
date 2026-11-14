@@ -46,7 +46,6 @@ when checked, and are built in this order; each moves to its section once it's d
 
 | Gap | Source |
 | --- | --- |
-| Tooltips on buttons, with their shortcuts | preview.9, 23 |
 | Hover cards for tabs and pane headers: each pane's program, activity and directory; click a pane to go to it | preview.14, 16 |
 | Mute Tab: no notifications, sounds or badge count from it; a crossed-out speaker; kept across launches | preview.24 |
 | Dragging: tabs to reorder, a pane onto another tab, between tabs for a new tab, Ctrl-drag from anywhere in a pane | preview.14, 16, 29 |
@@ -99,6 +98,11 @@ when checked, and are built in this order; each moves to its section once it's d
 ## Behavior
 
 Working:
+
+- Tooltips on buttons: resting the pointer on a button for half a second names what it
+  does, with the keys bound to it in the keymap in use (so a shortcut changed with Change
+  Shortcut or in init.lua shows), in Noctalia's popup style. The toolbar, tab, sidebar,
+  pane header, Activity, Find and notice buttons all have one.
 
 - The terminal grid sits on whole device pixels, as Ghostty's does: a cell is a whole
   number of device pixels wide (rounded) and tall (rounded up), and the grid starts on a
