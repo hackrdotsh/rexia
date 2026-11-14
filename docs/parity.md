@@ -6,7 +6,7 @@ preview.19 server.
 
 ## Actions
 
-Rex for Mac lists 116 actions. rexia implements 101 of them under the same names, so
+Rex for Mac lists 116 actions. rexia implements 102 of them under the same names, so
 init.lua bindings, `rex do` and `client.perform` reach rexia the same way. It also adds
 three of its own: `client.sidebar.activity.toggle`, `.by_session` and `.by_priority`.
 Preview.30's Enable Cursor Shaders and Change Cursor Shader aren't in the published action
@@ -35,7 +35,7 @@ Not implemented yet:
 | --- | --- |
 | `client.theme.change`, `client.theme.import`, `client.appearance.switch_mode` | Not planned: colors follow Noctalia. |
 | `client.update.*` (7) | Not applicable: rexia ships through Nix. |
-| `client.agents.setup`, `client.onboarding`, `client.pair_device`, `client.permissions`, `client.quick_look` | macOS-specific or tied to Rex.app's installer. |
+| `client.onboarding`, `client.pair_device`, `client.permissions`, `client.quick_look` | macOS-specific or tied to Rex.app's installer. |
 
 ## Settings
 
@@ -59,7 +59,17 @@ Not implemented yet:
 | Server › Rex Server | Settings › Server shows whether the server is running, where, and for how long, with its version, build, platform, API revisions, process and session count. Compatibility compares the server's API revision with the revisions rexia speaks, and, for this computer's server, the installed `rex` with the running one: after an update it says the server is still the old version and offers Restart Server (also in the palette). |
 | Server › Remote Address, Tailscale | Remote Address lists the addresses other devices can use (network listeners and built-in Tailscale's HTTPS address), who each lets in, whether its certificate is ready, and copies them. Pairing a device by QR code is the Mac and iOS apps' and isn't built; add the address as a host instead. Tailscale turns built-in Tailscale on and off, shows its state as it changes (starting, needs signing in, needs approval, running as its name and account), opens or asks for the sign-in link, limits access to your account or lets tailnet members in, sets the preferred hostname and renames the device, takes tags and a control server before signing in and shows them after, and signs out. The server only takes these over its local socket, so they're shown read-only for remote hosts. Adding listeners such as `--extra-listen` stays a server start option. |
 | Remote Hosts | HTTPS, WebSocket and `ssh://[USER@]HOST[:PORT][/SOCKET]` hosts, kept on the home server (`hosts.put`, `hosts.remove`) and shared with other clients. SSH hosts go through the system `ssh` (your keys, agent and `~/.ssh/config`) and `rex __internal dial-stdio` on the host, as the Rex CLI does; Settings › Client & Hosts › SSH picks the agent ssh asks for keys: ssh's default (`SSH_AUTH_SOCK`, or `IdentityAgent` in `~/.ssh/config`), an agent found on this computer (the session's, systemd's ssh-agent, GnuPG, GNOME Keyring, 1Password or Bitwarden), or a custom socket. ssh gets it as `IdentityAgent`, with `SSH_AUTH_SOCK` set to match, and the agent's status says whether it answers and how many keys it holds. |
-| Integrations, Developer, App Icon, Launch | Not applicable or not built. |
+| Integrations › Coding Agents, Agent Behavior | Integrate with available agents installs or removes Rex's skill and session hooks with `rex skill setup` and `rex skill remove` on this computer, for Claude Code, Codex, OpenCode and Pi; each agent's row says whether it was found and whether its skill and hook are installed, from an older Rex, or held by another skill named rex, and an Update button appears when they're out of date. Let agents name sessions passes `--session-naming`. Install Rex for Agents (`client.agents.setup`) runs setup from the palette and says what changed. |
+| Interface › Animation | Not built: animation style (snappy, natural, off) for pane motion and the sidebar. |
+| Terminal › Keyboard | Key sequence hints always show; turning them off isn't built. The Option key setting is macOS-only (Alt always sends Alt). |
+| Terminal › Scrolling, Resizing | Not built: smooth (pixel) scrolling, and reflowing text locally while a pane resizes. |
+| Terminal › Selection | Copy on select only. Not built: the copy animation, selection colors and rounded selection corners. |
+| Terminal › Links | Not built: asking before links that open other apps, and trusted links. Ctrl+click opens only web, mail and file links. |
+| Terminal › Integrated Path Browser | Not built: recently used paths first in Insert Path. |
+| Terminal › Titles, Shell | Not built: prefer generated titles, and a startup command for new local terminals. |
+| Developer › Local API, Web Client Origins, Rex Installation | Not built: showing the local API URL, managing web client origins, and choosing the server installation. Developer Mode, App Version and update experiments are macOS app options. |
+| Developer › Experimental | Not built: terminal anchoring and the new quick switcher. |
+| App Icon, Launch | Not applicable: macOS app options. |
 
 ## Behavior
 
