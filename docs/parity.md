@@ -46,7 +46,6 @@ when checked, and are built in this order; each moves to its section once it's d
 
 | Gap | Source |
 | --- | --- |
-| Terminal context menu: Copy, Paste, Copy Link, Show in Files, Quick Look, Split, Zoom, Clear, Reset, Close Pane | preview.5, 8, 10, 14, 19, 28 |
 | Paste safety: a paste that could run commands asks first; copied files paste as shell-escaped paths; an image-only clipboard pastes as a read-only temp file | preview.7, 8 |
 | Drop files on a terminal: local paths typed, files for a remote host uploaded (`upload_begin`) with progress and Cancel | preview.14, 27 |
 | Autobalance splits: even out a tab's panes when one opens or closes, keeping dividers you drag | Interface › Splits & Focus; preview.10, 26 |
@@ -104,6 +103,14 @@ when checked, and are built in this order; each moves to its section once it's d
 ## Behavior
 
 Working:
+
+- The terminal's context menu: right-click a pane, or Shift+right-click when its program
+  uses the mouse. Copy (only with a selection), Paste and Select All; then what's under the
+  pointer: a web link (Open Link, Copy Link, Quick Look) or a file (Open File, Copy Path,
+  Show in Files through the file manager's `org.freedesktop.FileManager1`, or its folder
+  without one, and Quick Look); then Split Right and Down, Zoom, Float, Clear Terminal and
+  Reset Terminal (the server's block actions), Copy Pane ID and Close Pane. Items show their
+  shortcuts; the arrow keys and Enter choose, and Escape or a click elsewhere closes it.
 
 - Quick Look (`client.quick_look`, ctrl+shift+y) previews what's under the pointer in the
   focused pane: a program's link first, else a path or URL in the text (a `:line:col`
