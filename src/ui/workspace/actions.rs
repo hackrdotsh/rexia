@@ -879,6 +879,7 @@ impl Workspace {
             "client.server.restart" => self.ask_restart_server(cx).map_err(refused)?,
             "client.shortcuts.edit" => self.edit_shortcuts(window, cx),
             "client.agents.setup" => self.setup_agents(None, cx),
+            "client.quick_look" => self.quick_look(cx).map_err(refused)?,
             "client.onboarding" => self.open_onboarding(cx),
             "client.cursor_shader.toggle" => self.toggle_cursor_shaders(cx),
             "client.cursor_shader.change" => match arg(args, "shader") {

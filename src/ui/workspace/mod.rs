@@ -14,6 +14,7 @@ pub mod motion;
 pub mod onboarding;
 mod overlay;
 mod preferences;
+pub mod quick_look;
 pub mod remote;
 pub mod server_status;
 mod ssh;
@@ -143,6 +144,9 @@ pub struct Workspace {
     reveal: toolbar::Reveal,
     highlight: highlight::Track,
     swipe: gestures::SwipeTracker,
+    /// The bus GNOME's previewer is on, if not the session bus, and what Quick Look showed.
+    preview_bus: Option<String>,
+    quick_looks: Vec<quick_look::Shown>,
     /// Onboarding walkthroughs' steps as the server last answered rexia, by block, and
     /// the blocks already asked.
     onboarding: HashMap<String, (u64, String)>,
@@ -325,6 +329,8 @@ impl Workspace {
             reveal: Default::default(),
             highlight: Default::default(),
             swipe: Default::default(),
+            preview_bus: None,
+            quick_looks: Vec::new(),
             onboarding: HashMap::new(),
             onboarding_asked: Default::default(),
             origin_error: None,

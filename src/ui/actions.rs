@@ -140,6 +140,13 @@ pub const ACTIONS: &[ActionDef] = &[
         []
     ),
     action!(
+        "client.quick_look",
+        "Quick Look",
+        "View",
+        "quick look preview file image link path url web pointer hover",
+        [(&["ctrl+shift+y"], None)]
+    ),
+    action!(
         "client.agents.setup",
         "Install Rex for Agents",
         "App",

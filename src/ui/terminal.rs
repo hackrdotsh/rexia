@@ -325,6 +325,8 @@ pub struct TerminalPane {
     pub selection: crate::settings::SelectionLook,
     /// When the copy shine started, and how many copies have shone.
     shine: Option<std::time::Instant>,
+    /// The cell the pointer was last over.
+    pointer: Option<(u16, u16)>,
     /// Where the text sits when the pane is taller than its whole lines.
     pub anchor: crate::settings::TerminalAnchor,
     /// Reflow text locally as the pane changes size, and the size last reflowed to.
@@ -390,6 +392,7 @@ impl TerminalPane {
             smooth_scrolling: true,
             smooth_resizing: true,
             anchor: Default::default(),
+            pointer: None,
             reflowed: None,
             scroll_carry: 0.,
             shines: 0,
@@ -547,6 +550,16 @@ impl TerminalPane {
                 None
             }
         }
+    }
+
+    /// The cell the pointer was last over, for Quick Look.
+    pub fn pointer_cell(&self) -> Option<(u16, u16)> {
+        self.pointer
+    }
+
+    /// The pane's stream, for asking it about its text.
+    pub fn handle(&self) -> Option<crate::rex::host::PaneHandle> {
+        self.pane()
     }
 
     /// Where the grid's top-left corner is drawn, for tests.
@@ -1008,6 +1021,7 @@ impl TerminalPane {
 
     fn on_mouse_move(&mut self, event: &MouseMoveEvent, _: &mut Window, cx: &mut Context<Self>) {
         let at = self.cell_at(event.position);
+        self.pointer = Some(at);
         if let Some(button) = self.reporting {
             self.mouse_report("motion", Some(button), at, &event.modifiers);
             return;
