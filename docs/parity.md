@@ -66,7 +66,7 @@ Not implemented yet:
 | Terminal › Selection | Copy on select only. Not built: the copy animation, selection colors and rounded selection corners. |
 | Terminal › Links | Not built: asking before links that open other apps, and trusted links. Ctrl+click opens only web, mail and file links. |
 | Terminal › Integrated Path Browser | Not built: recently used paths first in Insert Path. |
-| Terminal › Titles, Shell | Not built: prefer generated titles, and a startup command for new local terminals. |
+| Terminal › Titles, Shell | Prefer generated titles names panes and tabs after the running program and its directory (`nvim · rexia`) instead of titles programs set. Startup command: a program alone starts as the shell (so a shell such as fish starts as a login shell); with arguments it runs directly. It applies to new terminals on local hosts only, so remote hosts keep their own shells. Empty runs the login shell. |
 | Developer › Local API, Web Client Origins, Rex Installation | Not built: showing the local API URL, managing web client origins, and choosing the server installation. Developer Mode, App Version and update experiments are macOS app options. |
 | Developer › Experimental | Not built: terminal anchoring and the new quick switcher. |
 | App Icon, Launch | Not applicable: macOS app options. |
