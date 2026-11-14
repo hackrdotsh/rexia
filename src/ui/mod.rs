@@ -1,4 +1,5 @@
 //! The GPUI interface.
+pub mod actions;
 pub mod components;
 pub mod fonts;
 pub mod icons;

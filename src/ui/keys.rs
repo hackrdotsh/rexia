@@ -148,6 +148,98 @@ pub fn key_event(keystroke: &Keystroke, repeat: bool) -> Option<Value> {
     Some(event)
 }
 
+/// `key_a` → `KeyA`, `arrow_left` → `ArrowLeft`: the W3C spelling Rex writes in brackets.
+pub fn w3c_code(code: &str) -> String {
+    code.split('_')
+        .map(|part| {
+            let mut chars = part.chars();
+            match chars.next() {
+                Some(first) => first.to_uppercase().chain(chars).collect(),
+                None => String::new(),
+            }
+        })
+        .collect()
+}
+
+/// GPUI key names that Rex spells differently.
+fn rex_key_name(key: &str) -> &str {
+    match key {
+        "escape" => "esc",
+        other => other,
+    }
+}
+
+/// A keystroke as the keymap matches it.
+pub fn stroke(keystroke: &Keystroke) -> crate::keymap::Stroke {
+    let physical = physical_key(&keystroke.key);
+    let modifiers = &keystroke.modifiers;
+    let unshifted = physical
+        .as_ref()
+        .filter(|(_, layout_shift, _)| *layout_shift)
+        .and_then(|(_, _, base)| base.map(|c| c.to_string()));
+    crate::keymap::Stroke {
+        ctrl: modifiers.control,
+        alt: modifiers.alt,
+        shift: modifiers.shift,
+        cmd: modifiers.platform,
+        key: rex_key_name(&keystroke.key).to_owned(),
+        unshifted,
+        code: physical.map(|(code, _, _)| w3c_code(&code)),
+    }
+}
+
+/// True for a press of a modifier alone, which never runs a binding.
+pub fn is_modifier(keystroke: &Keystroke) -> bool {
+    matches!(
+        keystroke.key.as_str(),
+        "shift" | "control" | "alt" | "platform" | "function" | "super" | "capslock"
+    )
+}
+
+/// A `client.key` event for a key written as Rex spells it, such as `ctrl+l` or `enter`.
+pub fn event_from_spelling(spelling: &str) -> Option<Value> {
+    let mut rest = spelling.trim();
+    let mut modifiers = Modifiers::default();
+    loop {
+        if let Some(after) = rest.strip_prefix("ctrl+") {
+            modifiers.control = true;
+            rest = after;
+        } else if let Some(after) = rest.strip_prefix("alt+") {
+            modifiers.alt = true;
+            rest = after;
+        } else if let Some(after) = rest.strip_prefix("shift+") {
+            modifiers.shift = true;
+            rest = after;
+        } else if let Some(after) = rest
+            .strip_prefix("cmd+")
+            .or_else(|| rest.strip_prefix("super+"))
+        {
+            modifiers.platform = true;
+            rest = after;
+        } else {
+            break;
+        }
+    }
+    let key = match rest {
+        "esc" => "escape",
+        other => other,
+    };
+    let typed =
+        (key.chars().count() == 1 && !modifiers.control && !modifiers.platform).then(|| {
+            if modifiers.shift {
+                key.to_uppercase()
+            } else {
+                key.to_owned()
+            }
+        });
+    let keystroke = Keystroke {
+        modifiers,
+        key: key.to_lowercase(),
+        key_char: typed,
+    };
+    key_event(&keystroke, false)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -248,6 +340,42 @@ mod tests {
             false,
         );
         assert_eq!(all, "shift+ctrl+alt+super");
+    }
+
+    #[test]
+    fn strokes_and_spellings_meet_the_keymap() {
+        let brace = with_char("}", "}");
+        let stroke = super::stroke(&Keystroke {
+            modifiers: Modifiers {
+                control: true,
+                ..Default::default()
+            },
+            ..brace
+        });
+        assert_eq!(
+            stroke.spellings(),
+            vec!["ctrl+}", "ctrl+shift+]", "ctrl+shift+[BracketRight]"]
+        );
+        let escape = super::stroke(&stroke_of("escape"));
+        assert!(escape.is_escape());
+        assert_eq!(w3c_code("arrow_left"), "ArrowLeft");
+        let ctrl_l = event_from_spelling("ctrl+l").unwrap();
+        assert_eq!(
+            (
+                ctrl_l["key"].as_str(),
+                ctrl_l["mods"].as_str(),
+                ctrl_l["text"].as_str()
+            ),
+            (Some("key_l"), Some("ctrl"), Some(""))
+        );
+        let enter = event_from_spelling("enter").unwrap();
+        assert_eq!(enter["key"], "enter");
+        let upper = event_from_spelling("shift+a").unwrap();
+        assert_eq!(upper["text"], "A");
+    }
+
+    fn stroke_of(text: &'static str) -> Keystroke {
+        Keystroke::parse(text).unwrap()
     }
 
     #[test]
