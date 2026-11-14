@@ -1,0 +1,331 @@
+//! A single-line text field for palettes, dialogs and the find bar.
+use super::theme::Theme;
+use gpui::{
+    App, ClipboardItem, Context, EventEmitter, FocusHandle, Focusable, KeyDownEvent, SharedString,
+    Window, div, prelude::*, px,
+};
+
+#[derive(Clone, Debug, PartialEq)]
+pub enum InputEvent {
+    Changed(String),
+    /// Enter, with whether shift was held.
+    Submit {
+        shift: bool,
+    },
+    Cancel,
+    /// Up (-1) or Down (1), for moving through a list under the field.
+    Navigate(i32),
+    Tab,
+}
+
+pub struct TextInput {
+    focus: FocusHandle,
+    text: String,
+    /// Byte offsets: the cursor, and the other end of the selection when there is one.
+    cursor: usize,
+    anchor: Option<usize>,
+    placeholder: SharedString,
+}
+
+impl EventEmitter<InputEvent> for TextInput {}
+
+impl Focusable for TextInput {
+    fn focus_handle(&self, _: &App) -> FocusHandle {
+        self.focus.clone()
+    }
+}
+
+fn previous_boundary(text: &str, at: usize) -> usize {
+    text[..at].char_indices().next_back().map_or(0, |(i, _)| i)
+}
+
+fn next_boundary(text: &str, at: usize) -> usize {
+    text[at..].chars().next().map_or(at, |c| at + c.len_utf8())
+}
+
+/// The start of the word before `at`, skipping spaces and punctuation first.
+fn word_start(text: &str, at: usize) -> usize {
+    let before = &text[..at];
+    let trimmed = before.trim_end_matches(|c: char| !c.is_alphanumeric());
+    trimmed
+        .char_indices()
+        .rev()
+        .find(|(_, c)| !c.is_alphanumeric())
+        .map_or(0, |(i, c)| i + c.len_utf8())
+}
+
+fn word_end(text: &str, at: usize) -> usize {
+    let after = &text[at..];
+    let skipped = after.len()
+        - after
+            .trim_start_matches(|c: char| !c.is_alphanumeric())
+            .len();
+    let rest = &after[skipped..];
+    at + skipped
+        + rest
+            .find(|c: char| !c.is_alphanumeric())
+            .unwrap_or(rest.len())
+}
+
+impl TextInput {
+    pub fn new(placeholder: impl Into<SharedString>, cx: &mut Context<Self>) -> Self {
+        Self {
+            focus: cx.focus_handle(),
+            text: String::new(),
+            cursor: 0,
+            anchor: None,
+            placeholder: placeholder.into(),
+        }
+    }
+
+    pub fn text(&self) -> &str {
+        &self.text
+    }
+
+    /// Replace the text, select all of it (so typing replaces it), and report the change.
+    pub fn set_text(&mut self, text: impl Into<String>, cx: &mut Context<Self>) {
+        self.text = text.into();
+        self.cursor = self.text.len();
+        self.anchor = (!self.text.is_empty()).then_some(0);
+        cx.emit(InputEvent::Changed(self.text.clone()));
+        cx.notify();
+    }
+
+    pub fn focus(&self, window: &mut Window, cx: &mut App) {
+        window.focus(&self.focus, cx);
+    }
+
+    fn selection(&self) -> Option<(usize, usize)> {
+        let anchor = self.anchor?;
+        (anchor != self.cursor).then(|| (anchor.min(self.cursor), anchor.max(self.cursor)))
+    }
+
+    fn delete_selection(&mut self) -> bool {
+        let Some((start, end)) = self.selection() else {
+            return false;
+        };
+        self.text.replace_range(start..end, "");
+        self.cursor = start;
+        self.anchor = None;
+        true
+    }
+
+    fn insert(&mut self, text: &str) {
+        self.delete_selection();
+        let clean: String = text.chars().filter(|c| !c.is_control()).collect();
+        self.text.insert_str(self.cursor, &clean);
+        self.cursor += clean.len();
+    }
+
+    fn move_to(&mut self, to: usize, extend: bool) {
+        if extend {
+            self.anchor.get_or_insert(self.cursor);
+        } else {
+            self.anchor = None;
+        }
+        self.cursor = to.min(self.text.len());
+    }
+
+    fn on_key_down(&mut self, event: &KeyDownEvent, _: &mut Window, cx: &mut Context<Self>) {
+        let keystroke = &event.keystroke;
+        let m = keystroke.modifiers;
+        let ctrl = m.control || m.platform;
+        let before = self.text.clone();
+        let handled = match keystroke.key.as_str() {
+            "enter" => {
+                cx.emit(InputEvent::Submit { shift: m.shift });
+                true
+            }
+            "escape" => {
+                cx.emit(InputEvent::Cancel);
+                true
+            }
+            "up" => {
+                cx.emit(InputEvent::Navigate(-1));
+                true
+            }
+            "down" => {
+                cx.emit(InputEvent::Navigate(1));
+                true
+            }
+            "tab" => {
+                cx.emit(InputEvent::Tab);
+                true
+            }
+            "backspace" => {
+                if !self.delete_selection() && self.cursor > 0 {
+                    let start = if ctrl || m.alt {
+                        word_start(&self.text, self.cursor)
+                    } else {
+                        previous_boundary(&self.text, self.cursor)
+                    };
+                    self.text.replace_range(start..self.cursor, "");
+                    self.cursor = start;
+                }
+                true
+            }
+            "delete" => {
+                if !self.delete_selection() && self.cursor < self.text.len() {
+                    let end = if ctrl || m.alt {
+                        word_end(&self.text, self.cursor)
+                    } else {
+                        next_boundary(&self.text, self.cursor)
+                    };
+                    self.text.replace_range(self.cursor..end, "");
+                }
+                true
+            }
+            "left" => {
+                let to = if ctrl || m.alt {
+                    word_start(&self.text, self.cursor)
+                } else if let (Some((start, _)), false) = (self.selection(), m.shift) {
+                    start
+                } else {
+                    previous_boundary(&self.text, self.cursor)
+                };
+                self.move_to(to, m.shift);
+                true
+            }
+            "right" => {
+                let to = if ctrl || m.alt {
+                    word_end(&self.text, self.cursor)
+                } else if let (Some((_, end)), false) = (self.selection(), m.shift) {
+                    end
+                } else {
+                    next_boundary(&self.text, self.cursor)
+                };
+                self.move_to(to, m.shift);
+                true
+            }
+            "home" => {
+                self.move_to(0, m.shift);
+                true
+            }
+            "end" => {
+                self.move_to(self.text.len(), m.shift);
+                true
+            }
+            "a" if ctrl => {
+                self.anchor = Some(0);
+                self.cursor = self.text.len();
+                true
+            }
+            "u" if m.control && !m.shift => {
+                self.text.replace_range(..self.cursor, "");
+                self.cursor = 0;
+                self.anchor = None;
+                true
+            }
+            "w" if m.control && !m.shift => {
+                let start = word_start(&self.text, self.cursor);
+                self.text.replace_range(start..self.cursor, "");
+                self.cursor = start;
+                true
+            }
+            "c" | "x" if ctrl => {
+                if let Some((start, end)) = self.selection() {
+                    cx.write_to_clipboard(ClipboardItem::new_string(
+                        self.text[start..end].to_owned(),
+                    ));
+                    if keystroke.key == "x" {
+                        self.delete_selection();
+                    }
+                }
+                true
+            }
+            "v" if ctrl => {
+                if let Some(text) = cx.read_from_clipboard().and_then(|item| item.text()) {
+                    self.insert(&text);
+                }
+                true
+            }
+            _ => match keystroke.key_char.as_deref() {
+                Some(text) if !ctrl && !text.is_empty() => {
+                    self.insert(text);
+                    true
+                }
+                _ => false,
+            },
+        };
+        if handled {
+            cx.stop_propagation();
+            if self.text != before {
+                cx.emit(InputEvent::Changed(self.text.clone()));
+            }
+            cx.notify();
+        }
+    }
+}
+
+impl Render for TextInput {
+    fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+        let theme = Theme::get(cx).clone();
+        let focused = self.focus.is_focused(window);
+        let primary = theme.primary;
+        let cursor = move || div().flex_none().w(px(1.5)).h(px(18.)).bg(primary);
+        let mut line = div()
+            .flex()
+            .items_center()
+            .min_w_0()
+            .overflow_hidden()
+            .whitespace_nowrap();
+        if self.text.is_empty() {
+            line = line.when(focused, |d| d.child(cursor())).child(
+                div()
+                    .text_color(theme.text_muted)
+                    .child(self.placeholder.clone()),
+            );
+        } else if let Some((start, end)) = self.selection() {
+            line = line.child(self.text[..start].to_owned()).child(
+                div()
+                    .bg(theme.primary)
+                    .text_color(theme.on_primary)
+                    .child(self.text[start..end].to_owned()),
+            );
+            line = line.child(self.text[end..].to_owned());
+        } else {
+            line = line
+                .child(self.text[..self.cursor].to_owned())
+                .when(focused, |d| d.child(cursor()))
+                .child(self.text[self.cursor..].to_owned());
+        }
+        div()
+            .id("text-input")
+            .track_focus(&self.focus)
+            .key_context("TextInput")
+            .on_key_down(cx.listener(Self::on_key_down))
+            .flex()
+            .items_center()
+            .h(px(36.))
+            .px(px(10.))
+            .rounded(theme.radius_small())
+            .bg(theme.background)
+            .when(theme.input_borders, |d| {
+                d.border(theme.border_width).border_color(if focused {
+                    theme.primary
+                } else {
+                    theme.border
+                })
+            })
+            .text_size(px(14.))
+            .text_color(theme.text)
+            .cursor_text()
+            .child(line)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn word_motions_skip_punctuation() {
+        let text = "git commit --amend";
+        assert_eq!(word_start(text, text.len()), 13);
+        assert_eq!(word_start(text, 13), 4);
+        assert_eq!(word_end(text, 0), 3);
+        assert_eq!(word_end(text, 3), 10);
+        assert_eq!(previous_boundary("aé", 3), 1);
+        assert_eq!(next_boundary("éa", 0), 2);
+    }
+}
