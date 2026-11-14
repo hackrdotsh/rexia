@@ -46,7 +46,6 @@ when checked, and are built in this order; each moves to its section once it's d
 
 | Gap | Source |
 | --- | --- |
-| Autobalance splits: even out a tab's panes when one opens or closes, keeping dividers you drag | Interface › Splits & Focus; preview.10, 26 |
 | Ask before closing a tab, pane or session whose program is working, blocked, unread or just finished | preview.25 |
 | Tooltips on buttons, with their shortcuts | preview.9, 23 |
 | Hover cards for tabs and pane headers: each pane's program, activity and directory; click a pane to go to it | preview.14, 16 |
@@ -70,7 +69,7 @@ when checked, and are built in this order; each moves to its section once it's d
 | Notifications › Program Activity | All of it: activity in tabs, idle processes, each process, desktop notifications, launcher badge (Unity LauncherEntry), sounds with volume, and the per-state tabs/notify/sound switches. |
 | Notifications › System Notifications | Terminal notifications (OSC 9 and 777). Tailscale notices aren't built yet (see the audit). |
 | Notifications › In-App Notifications | Notification position: click a spot in a picture of the window to float notices at the top or bottom, left, center or right. |
-| Interface › Panes, Active Pane, Splits & Focus | Pane style, pane headers (always, hover, hidden), active pane highlight with its color (accent, terminal text, or one of the 16 terminal colors), opacity and animation (fade in, move from the previous pane, or instant), fade inactive panes, fade panes for inactive windows, focus follows mouse. Autobalancing splits isn't built yet (see the audit). |
+| Interface › Panes, Active Pane, Splits & Focus | Pane style, pane headers (always, hover, hidden), active pane highlight with its color (accent, terminal text, or one of the 16 terminal colors), opacity and animation (fade in, move from the previous pane, or instant), fade inactive panes, fade panes for inactive windows, focus follows mouse. Autobalance splits (on by default): when a pane opens or closes in the tab on screen, its splits even out; a divider you drag or move with the keyboard keeps its place on screen until Balance Splits, and one dropped near the middle of its split snaps there. |
 | Interface › Appearance, Themes | Replaced by Noctalia: palette, corner radius, borders, shadows and the interface font follow its live config. |
 | Interface › Toolbar, Tab behavior | Toolbar layout (above, or down the sidebar on the left or right side), toolbar behavior (always, on hover, or hidden until Reveal Toolbar; a toolbar that isn't always shown floats over the panes so they don't resize), and tabs filling the bar. With vertical tabs, the selected session's tabs are listed in the sidebar. |
 | Interface › Tab icons, Window | Tab icons: show zero to five pane icons per tab (vertical tabs stop at three), focused pane first; use color always, for active panes, for active tabs, or never; shell icon theme (default artwork, terminal theme colors, or accent). Colored icons sit on a tile in their program's color from the terminal palette. Window: sidebar text size (small, medium or large; Linux has no system sidebar size to follow), and a gesture to toggle the sidebar (a two-finger touchpad swipe sideways, a swipe with Alt held, or off). Showing or hiding the sidebar always keeps the window's width, as tiling compositors expect. |
