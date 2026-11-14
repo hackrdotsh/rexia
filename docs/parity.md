@@ -74,11 +74,13 @@ Working:
 - Program status (OSC 7501): badges on tabs, sessions and pane headers; the activity list;
   desktop notifications for panes out of view that open the pane when clicked; sounds
   from the desktop's sound theme.
+- Input methods (IBus, Fcitx and others through Wayland or XIM): composing text shows
+  underlined at the cursor, the candidate window opens there, and committed text goes to
+  the program as typed text.
 - Several hosts in one sidebar, streaming only the host on screen, with reconnects.
 - Servers that only speak API revisions below 8 are refused, with a message to update the
   server.
 
 Known gaps:
 
-- No input method support (IME composition) in terminal panes.
 - One window per process.
