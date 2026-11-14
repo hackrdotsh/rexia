@@ -343,6 +343,15 @@ impl Workspace {
         self.panes.get(block)?.read(cx).drawn_text_color(row, col)
     }
 
+    /// The Kitty graphics drawn in the focused pane: image ID and area within the grid.
+    pub fn focused_images(&self, cx: &gpui::App) -> Vec<(u32, gpui::Bounds<gpui::Pixels>)> {
+        self.focused
+            .as_ref()
+            .and_then(|block| self.panes.get(block))
+            .map(|pane| pane.read(cx).image_areas())
+            .unwrap_or_default()
+    }
+
     /// The program colors filling the focused pane's padding, and its header's color.
     pub fn focused_padding_fill(&self, cx: &gpui::App) -> Option<(Vec<u32>, Option<u32>)> {
         let block = self.focused.as_ref()?;

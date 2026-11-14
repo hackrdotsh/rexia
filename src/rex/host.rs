@@ -1452,6 +1452,7 @@ async fn stream(
                     }
                 };
                 let mut fresh_state = TerminalState::new(fresh.nonce)?;
+                fresh_state.set_local(endpoint.is_local())?;
                 fresh_state.set_local_theme(theme.clone())?;
                 fresh_state.set_default_cursor(cursor)?;
                 state = Some(fresh_state);
@@ -1466,7 +1467,12 @@ async fn stream(
             let mut tick = tokio::time::interval(Duration::from_millis(16));
             tick.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
             loop {
+                // A playing Kitty animation draws its next frame when it's due.
+                let animation = terminal.animation_wait();
                 tokio::select! {
+                    _ = tokio::time::sleep(animation.unwrap_or_default()), if animation.is_some() && visible => {
+                        dirty = true;
+                    }
                     bytes = data::next_binary(&mut socket) => {
                         terminal.feed(&bytes?)?;
                         dirty = true;

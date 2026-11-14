@@ -6,11 +6,13 @@ use super::{
     keys,
     theme::{Theme, color},
 };
+use crate::rex::images::{Layer, Placement};
 use crate::rex::{
     host::{HostCommand, HostHandle, PaneCommand, PaneStatus, Scroll},
     stream::{CursorShape, Frame, SelectMode, flags},
 };
 use crate::settings::PaddingFill;
+use gpui::RenderImage;
 use gpui::{
     App, Bounds, ClipboardItem, Context, FocusHandle, Focusable, Font, FontStyle, FontWeight, Hsla,
     KeyDownEvent, Modifiers, MouseButton, MouseDownEvent, MouseMoveEvent, MouseUpEvent, Pixels,
@@ -18,7 +20,7 @@ use gpui::{
     UnderlineStyle, Window, canvas, div, fill, font, point, prelude::*, px, size,
 };
 use serde_json::json;
-use std::sync::Arc;
+use std::{collections::HashMap, sync::Arc};
 
 /// Links a click may open: web, mail and local files. Other schemes could start programs.
 pub fn openable(link: &str) -> bool {
@@ -130,6 +132,55 @@ fn padding_fills(
     fills
 }
 
+/// One image's part, as GPUI draws it: the source rectangle cut out, in BGRA.
+fn texture(placement: &Placement) -> Option<Arc<RenderImage>> {
+    let pixels = &placement.pixels;
+    let [x, y, w, h] = placement.source;
+    let (x, y) = (x.min(pixels.width), y.min(pixels.height));
+    let (w, h) = (w.min(pixels.width - x), h.min(pixels.height - y));
+    if w == 0 || h == 0 {
+        return None;
+    }
+    let mut bgra = Vec::with_capacity(w as usize * h as usize * 4);
+    for row in y..y + h {
+        let start = (row as usize * pixels.width as usize + x as usize) * 4;
+        let line = pixels.rgba.get(start..start + w as usize * 4)?;
+        for p in line.as_chunks::<4>().0 {
+            bgra.extend_from_slice(&[p[2], p[1], p[0], p[3]]);
+        }
+    }
+    let buffer = image::RgbaImage::from_raw(w, h, bgra)?;
+    Some(Arc::new(RenderImage::new(vec![image::Frame::new(buffer)])))
+}
+
+/// Where an image draws: its cell, offset and size are in the terminal's pixels, which
+/// scale to this pane's cells.
+fn image_area(
+    placement: &Placement,
+    cell_px: (u32, u32),
+    origin: Point<Pixels>,
+    cell: CellSize,
+) -> Bounds<Pixels> {
+    let scale = |ours: Pixels, theirs: u32| {
+        if theirs == 0 {
+            1.
+        } else {
+            f32::from(ours) / theirs as f32
+        }
+    };
+    let (sx, sy) = (scale(cell.width, cell_px.0), scale(cell.height, cell_px.1));
+    Bounds::new(
+        point(
+            origin.x + cell.width * placement.col as f32 + px(placement.offset_x as f32 * sx),
+            origin.y + cell.height * placement.row as f32 + px(placement.offset_y as f32 * sy),
+        ),
+        size(
+            px(placement.width as f32 * sx),
+            px(placement.height as f32 * sy),
+        ),
+    )
+}
+
 /// Measured once per font: the size of one cell.
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct CellSize {
@@ -138,6 +189,8 @@ pub struct CellSize {
 }
 
 pub struct TerminalPane {
+    /// Kitty graphics ready to draw, by image, generation and the part shown.
+    textures: HashMap<(u32, u64, [u32; 4]), Arc<RenderImage>>,
     host: HostHandle,
     pub session_id: String,
     pub block_id: String,
@@ -199,6 +252,7 @@ impl TerminalPane {
             copy_on_select: false,
             colors: TextColors::default(),
             padding_fill: PaddingFill::Off,
+            textures: HashMap::new(),
             revision: 0,
             force_cursor: None,
             blink: None,
@@ -255,6 +309,60 @@ impl TerminalPane {
     /// The color the pane header takes to match the program, while the padding fills.
     pub fn header_fill(&self) -> Option<u32> {
         top_fill(&*self.frame()?, self.padding_fill)
+    }
+
+    /// The frame's images with their textures, made once per image and part. Textures
+    /// no longer on screen leave the GPU.
+    fn image_textures(
+        &mut self,
+        frame: Option<&Frame>,
+        window: &mut Window,
+    ) -> Vec<(Placement, Arc<RenderImage>)> {
+        let placements = frame.map(|f| f.images.as_slice()).unwrap_or_default();
+        let mut live = HashMap::with_capacity(placements.len());
+        let mut drawn = Vec::with_capacity(placements.len());
+        for placement in placements {
+            let key = (
+                placement.pixels.id,
+                placement.pixels.generation,
+                placement.source,
+            );
+            let texture = match self
+                .textures
+                .remove(&key)
+                .or_else(|| live.get(&key).cloned())
+            {
+                Some(texture) => texture,
+                None => match texture(placement) {
+                    Some(texture) => texture,
+                    None => continue,
+                },
+            };
+            live.insert(key, texture.clone());
+            drawn.push((placement.clone(), texture));
+        }
+        for (_, stale) in std::mem::replace(&mut self.textures, live) {
+            let _ = window.drop_image(stale);
+        }
+        drawn
+    }
+
+    /// The images drawn now, by image ID, for tests and diagnostics: where each is
+    /// relative to the grid, in this pane's pixels.
+    pub fn image_areas(&self) -> Vec<(u32, Bounds<Pixels>)> {
+        let (Some(frame), Some(cell)) = (self.frame(), self.cell) else {
+            return Vec::new();
+        };
+        frame
+            .images
+            .iter()
+            .map(|p| {
+                (
+                    p.pixels.id,
+                    image_area(p, frame.cell_px, Point::default(), cell),
+                )
+            })
+            .collect()
     }
 
     /// The size of one character cell, once measured.
@@ -871,6 +979,7 @@ impl Render for TerminalPane {
         self.drawn_cursor = cursor_shape;
         let preedit = self.preedit.clone().filter(|p| !p.is_empty() && focused);
         let focus_handle = self.focus.clone();
+        let images = self.image_textures(frame.as_deref(), window);
 
         let grid = canvas(
             {
@@ -894,6 +1003,20 @@ impl Render for TerminalPane {
                 for (area, rgb) in padding_fills(&frame, padding_fill, bounds, origin, cell) {
                     window.paint_quad(fill(area, color(rgb)));
                 }
+                // Kitty graphics draw in three layers around the cell backgrounds and text.
+                let paint_images = |layer: Layer, window: &mut Window| {
+                    for (placement, texture) in images.iter().filter(|(p, _)| p.layer == layer) {
+                        let area = image_area(placement, frame.cell_px, origin, cell);
+                        let _ = window.paint_image(
+                            bounds,
+                            area,
+                            gpui::Corners::default(),
+                            texture.clone(),
+                            0,
+                            false,
+                        );
+                    }
+                };
                 let cell_bounds = |col: u16, row: usize, cols: u16| {
                     Bounds::new(
                         point(
@@ -913,11 +1036,17 @@ impl Render for TerminalPane {
                     ansi: frame.ansi,
                 };
                 window.with_content_mask(Some(gpui::ContentMask { bounds }), |window| {
+                    paint_images(Layer::BelowBackground, window);
+                    let mut rows = Vec::with_capacity(frame.lines.len());
                     for (row, cells) in frame.lines.iter().enumerate() {
                         let (segments, backgrounds) = segments(cells, &look);
                         for (start, end, bg) in backgrounds {
                             window.paint_quad(fill(cell_bounds(start, row, end - start), bg));
                         }
+                        rows.push(segments);
+                    }
+                    paint_images(Layer::BelowText, window);
+                    for (row, segments) in rows.into_iter().enumerate() {
                         for segment in segments {
                             let runs: Vec<TextRun> = segment
                                 .runs
@@ -961,6 +1090,7 @@ impl Render for TerminalPane {
                             let _ = line.paint(at, cell.height, TextAlign::Left, None, window, cx);
                         }
                     }
+                    paint_images(Layer::AboveText, window);
                     if let (Some(cursor), Some(shape), false) =
                         (frame.cursor, cursor_shape, cursor_hidden)
                     {
@@ -1242,6 +1372,9 @@ mod tests {
             has_selection: false,
             search: None,
             ansi: [0; 16],
+            images: Vec::new(),
+            cell_px: (0, 0),
+            mediums: Default::default(),
         }
     }
 
