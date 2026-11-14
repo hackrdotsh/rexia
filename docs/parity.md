@@ -9,6 +9,9 @@ preview.19 server.
 Rex for Mac lists 116 actions. rexia implements 101 of them under the same names, so
 init.lua bindings, `rex do` and `client.perform` reach rexia the same way. It also adds
 three of its own: `client.sidebar.activity.toggle`, `.by_session` and `.by_priority`.
+Preview.30's Enable Cursor Shaders and Change Cursor Shader aren't in the published action
+list yet, so rexia names them `client.cursor_shader.toggle` and `client.cursor_shader.change`
+(with an optional `shader`, such as `{"shader": "blaze"}`).
 Keys follow Linux conventions: where Mac uses `cmd`, rexia uses `ctrl+shift` (Ghostty's
 convention), and `ctrl` alone for font size and Settings (`ctrl+,`).
 
@@ -48,7 +51,7 @@ Not implemented yet:
 | Interface › Gestures | Use trackpad gestures: spread two fingers over a pane to zoom it, pinch to restore it, and swipe for the sidebar. Pinches need a compositor with pointer gestures (Wayland `zwp_pointer_gestures_v1`). |
 | Interface › Padding | Padding X and Y, fill with program colors (off; automatic, which fills while a full-screen program runs along edges of one color; always, which extends every edge cell), and include pane header. |
 | Terminal › Typography | Font family, size and line height. Defaults come from Ghostty's config, then fontconfig. |
-| Terminal › Cursor | Cursor style (block, bar, underline) for programs that don't choose one, force style, and blink speed (off, slow, normal, fast, or a custom interval). As in preview.30, a cursor blinks only when its program asks. When a pane attaches, a program's explicit steady block looks like the default, so it shows your style until the program sets the cursor again. Cursor shaders aren't built. |
+| Terminal › Cursor | Cursor style (block, bar, underline) for programs that don't choose one, force style, and blink speed (off, slow, normal, fast, or a custom interval). As in preview.30, a cursor blinks only when its program asks. When a pane attaches, a program's explicit steady block looks like the default, so it shows your style until the program sets the cursor again. Cursor shaders: a trail behind the focused cursor when it jumps two cells or more, in eight effects (Warp, Sweep, Comet, Blaze, Tapered, Rainbow, Gradient, Frozen), with a preview to click in. GPUI has no custom GPU shaders, so each effect is drawn as a shape with its own taper, gradient, glow and fade rather than as Rex's own shader code. |
 | Terminal › Advanced Font | Character spacing, ligatures, which of bold and italic draw in their style, and fallback fonts. Font smoothing and forced faux bold and italic are left to the system's font rasterizer. |
 | Terminal › Colors | Improve text contrast (text below a 3:1 contrast ratio against its background is lifted just enough) and force theme palette for text (program colors become the perceptually nearest theme color, then contrast is corrected). Display P3 doesn't apply on Linux. |
 | Terminal › Selection | Copy on select. |
