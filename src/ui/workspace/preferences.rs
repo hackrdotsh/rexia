@@ -5,8 +5,9 @@ use crate::{
     rex::stream::CursorShape,
     rex::{activity::ProgramState, host::HostCommand},
     settings::{
-        BlinkSpeed, FadeInactive, HighlightAnimation, HighlightColor, NoticePosition, PaneHeaders,
-        PaneStyle, Settings, StateActivity, TextStyles, ToolbarBehavior, ToolbarLayout,
+        BlinkSpeed, FadeInactive, HighlightAnimation, HighlightColor, NoticePosition, PaddingFill,
+        PaneHeaders, PaneStyle, Settings, StateActivity, TextStyles, ToolbarBehavior,
+        ToolbarLayout,
     },
     sound::{self, Cue},
     ui::{
@@ -272,6 +273,7 @@ impl Workspace {
         let force_cursor = terminal.force_cursor_style.then_some(terminal.cursor_style);
         let blink = terminal.blink_interval();
         let cursor = terminal.cursor_style;
+        let padding_fill = terminal.padding_fill;
         let colors = crate::ui::terminal::TextColors {
             improve_contrast: terminal.improve_contrast,
             theme_palette: terminal.theme_palette,
@@ -284,6 +286,7 @@ impl Workspace {
                 pane.force_cursor = force_cursor;
                 pane.blink = blink;
                 pane.colors = colors;
+                pane.padding_fill = padding_fill;
                 cx.notify();
             });
         }
@@ -337,6 +340,13 @@ impl Workspace {
     pub fn focused_text_color(&self, row: usize, col: usize, cx: &gpui::App) -> Option<u32> {
         let block = self.focused.as_ref()?;
         self.panes.get(block)?.read(cx).drawn_text_color(row, col)
+    }
+
+    /// The program colors filling the focused pane's padding, and its header's color.
+    pub fn focused_padding_fill(&self, cx: &gpui::App) -> Option<(Vec<u32>, Option<u32>)> {
+        let block = self.focused.as_ref()?;
+        let pane = self.panes.get(block)?.read(cx);
+        Some((pane.padding_fill_colors(), pane.header_fill()))
     }
 
     /// The focused pane's character cell width, in pixels.
@@ -741,6 +751,29 @@ impl Workspace {
                 format!("{:.0} px", t.padding_y),
                 |s| s.terminal.padding_y = (s.terminal.padding_y - 1.).max(0.),
                 |s| s.terminal.padding_y = (s.terminal.padding_y + 1.).min(48.),
+                theme,
+                cx,
+            ),
+            self.choice_row(
+                "padding-fill",
+                "Fill with program colors",
+                "Let a full-screen program's background reach into the padding.",
+                &[
+                    (PaddingFill::Off, "Off"),
+                    (PaddingFill::Automatic, "Automatic"),
+                    (PaddingFill::Always, "Always"),
+                ],
+                t.padding_fill,
+                |s, v| s.terminal.padding_fill = v,
+                theme,
+                cx,
+            ),
+            self.toggle_row(
+                "padding-fill-header",
+                "Include pane header",
+                "Color the pane header to match the program too, while the padding fills.",
+                |s| s.terminal.padding_fill_header,
+                |s, v| s.terminal.padding_fill_header = v,
                 theme,
                 cx,
             ),

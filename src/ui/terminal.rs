@@ -10,6 +10,7 @@ use crate::rex::{
     host::{HostCommand, HostHandle, PaneCommand, PaneStatus, Scroll},
     stream::{CursorShape, Frame, SelectMode, flags},
 };
+use crate::settings::PaddingFill;
 use gpui::{
     App, Bounds, ClipboardItem, Context, FocusHandle, Focusable, Font, FontStyle, FontWeight, Hsla,
     KeyDownEvent, Modifiers, MouseButton, MouseDownEvent, MouseMoveEvent, MouseUpEvent, Pixels,
@@ -23,6 +24,110 @@ use std::sync::Arc;
 pub fn openable(link: &str) -> bool {
     url::Url::parse(link)
         .is_ok_and(|url| matches!(url.scheme(), "http" | "https" | "mailto" | "file"))
+}
+
+/// The background of the cell at `row`, `col`.
+fn cell_bg(frame: &Frame, row: usize, col: usize) -> u32 {
+    frame
+        .lines
+        .get(row)
+        .and_then(|cells| cells.get(col))
+        .and_then(|cell| cell.bg)
+        .unwrap_or(frame.bg)
+}
+
+/// One color for the whole edge, if its cells share one.
+fn uniform(colors: impl IntoIterator<Item = u32>) -> Option<u32> {
+    let mut colors = colors.into_iter();
+    let first = colors.next()?;
+    colors.all(|c| c == first).then_some(first)
+}
+
+/// The colors the top edge gives the padding and the pane header, if any.
+fn top_fill(frame: &Frame, mode: PaddingFill) -> Option<u32> {
+    let active = match mode {
+        PaddingFill::Off => false,
+        PaddingFill::Automatic => frame.alternate_screen,
+        PaddingFill::Always => true,
+    };
+    active
+        .then(|| uniform((0..frame.cols as usize).map(|c| cell_bg(frame, 0, c))))
+        .flatten()
+}
+
+/// Areas of the padding around the grid and the program colors that fill them: each edge
+/// cell's background reaches out to the pane's edge, as Ghostty's `window-padding-color =
+/// extend` does. Automatic fills only while a full-screen program runs, and only along
+/// edges of one color.
+fn padding_fills(
+    frame: &Frame,
+    mode: PaddingFill,
+    bounds: Bounds<Pixels>,
+    origin: Point<Pixels>,
+    cell: CellSize,
+) -> Vec<(Bounds<Pixels>, u32)> {
+    let automatic = match mode {
+        PaddingFill::Off => return Vec::new(),
+        PaddingFill::Automatic if !frame.alternate_screen => return Vec::new(),
+        PaddingFill::Automatic => true,
+        PaddingFill::Always => false,
+    };
+    let (cols, rows) = (
+        frame.cols as usize,
+        frame.lines.len().min(frame.rows as usize),
+    );
+    if cols == 0 || rows == 0 {
+        return Vec::new();
+    }
+    let left = bounds.origin.x;
+    let top = bounds.origin.y;
+    let right = bounds.origin.x + bounds.size.width;
+    let bottom = bounds.origin.y + bounds.size.height;
+    let grid_right = origin.x + cell.width * cols as f32;
+    let grid_bottom = origin.y + cell.height * rows as f32;
+    let x = |c: usize| origin.x + cell.width * c as f32;
+    let y = |r: usize| origin.y + cell.height * r as f32;
+    let rect = |x0: Pixels, y0: Pixels, x1: Pixels, y1: Pixels| {
+        Bounds::new(
+            point(x0, y0),
+            size((x1 - x0).max(px(0.)), (y1 - y0).max(px(0.))),
+        )
+    };
+    // An Automatic edge fills only if its cells share one color.
+    let edge = |colors: Vec<u32>| -> Option<Vec<u32>> {
+        (!automatic || uniform(colors.iter().copied()).is_some()).then_some(colors)
+    };
+    let mut fills = Vec::new();
+    if let Some(colors) = edge((0..cols).map(|c| cell_bg(frame, 0, c)).collect()) {
+        for (c, rgb) in colors.into_iter().enumerate() {
+            fills.push((rect(x(c), top, x(c + 1), origin.y), rgb));
+        }
+    }
+    if let Some(colors) = edge((0..cols).map(|c| cell_bg(frame, rows - 1, c)).collect()) {
+        for (c, rgb) in colors.into_iter().enumerate() {
+            fills.push((rect(x(c), grid_bottom, x(c + 1), bottom), rgb));
+        }
+    }
+    // The side strips take the corners, reaching up and down from the first and last rows.
+    let span = |r: usize| {
+        let y0 = if r == 0 { top } else { y(r) };
+        let y1 = if r + 1 == rows { bottom } else { y(r + 1) };
+        (y0, y1)
+    };
+    if let Some(colors) = edge((0..rows).map(|r| cell_bg(frame, r, 0)).collect()) {
+        for (r, rgb) in colors.into_iter().enumerate() {
+            let (y0, y1) = span(r);
+            fills.push((rect(left, y0, origin.x, y1), rgb));
+        }
+    }
+    if let Some(colors) = edge((0..rows).map(|r| cell_bg(frame, r, cols - 1)).collect()) {
+        for (r, rgb) in colors.into_iter().enumerate() {
+            let (y0, y1) = span(r);
+            fills.push((rect(grid_right, y0, right, y1), rgb));
+        }
+    }
+    fills.retain(|(area, _)| area.size.width > px(0.) && area.size.height > px(0.));
+    fills
 }
 
 /// Measured once per font: the size of one cell.
@@ -50,6 +155,8 @@ pub struct TerminalPane {
     pub copy_on_select: bool,
     /// Corrections to program colors.
     pub colors: TextColors,
+    /// Whether a program's colors fill the padding.
+    pub padding_fill: PaddingFill,
     /// The pane model revision last drawn.
     pub revision: u64,
     /// A shape to draw whatever the program asks for.
@@ -91,6 +198,7 @@ impl TerminalPane {
             selecting: false,
             copy_on_select: false,
             colors: TextColors::default(),
+            padding_fill: PaddingFill::Off,
             revision: 0,
             force_cursor: None,
             blink: None,
@@ -126,6 +234,27 @@ impl TerminalPane {
             self.blink_on = next;
             cx.notify();
         }
+    }
+
+    /// The colors a program's edges give the padding now, for tests and diagnostics.
+    pub fn padding_fill_colors(&self) -> Vec<u32> {
+        let (Some(frame), Some(cell)) = (self.frame(), self.cell) else {
+            return Vec::new();
+        };
+        let bounds = Bounds::new(Point::default(), size(px(2000.), px(2000.)));
+        let mut colors: Vec<u32> =
+            padding_fills(&frame, self.padding_fill, bounds, self.padding, cell)
+                .into_iter()
+                .map(|(_, rgb)| rgb)
+                .collect();
+        colors.sort_unstable();
+        colors.dedup();
+        colors
+    }
+
+    /// The color the pane header takes to match the program, while the padding fills.
+    pub fn header_fill(&self) -> Option<u32> {
+        top_fill(&*self.frame()?, self.padding_fill)
     }
 
     /// The size of one character cell, once measured.
@@ -725,6 +854,7 @@ impl Render for TerminalPane {
             current_fg: theme.on_primary,
         };
         let (bold, italic, colors) = (self.font.bold, self.font.italic, self.colors);
+        let padding_fill = self.padding_fill;
         let cursor_color = color(theme.terminal.cursor);
         let cursor_text = color(theme.terminal.cursor_text);
         // Only a focused pane's cursor blinks, and only if its program asks.
@@ -761,6 +891,9 @@ impl Render for TerminalPane {
                 window.paint_quad(fill(bounds, background));
                 let Some(frame) = frame else { return };
                 let origin = bounds.origin + padding;
+                for (area, rgb) in padding_fills(&frame, padding_fill, bounds, origin, cell) {
+                    window.paint_quad(fill(area, color(rgb)));
+                }
                 let cell_bounds = |col: u16, row: usize, cols: u16| {
                     Bounds::new(
                         point(
@@ -1082,6 +1215,73 @@ impl gpui::EntityInputHandler for TerminalPane {
 
 #[cfg(test)]
 mod tests {
+    fn frame_with(bgs: &[&[Option<u32>]], alternate: bool) -> Frame {
+        let lines: Vec<Vec<crate::rex::stream::Cell>> = bgs
+            .iter()
+            .map(|row| {
+                row.iter()
+                    .map(|bg| crate::rex::stream::Cell {
+                        text: " ".into(),
+                        fg: 0xffffff,
+                        bg: *bg,
+                        flags: 0,
+                    })
+                    .collect()
+            })
+            .collect();
+        Frame {
+            cols: bgs[0].len() as u16,
+            rows: bgs.len() as u16,
+            lines,
+            fg: 0xffffff,
+            bg: 0x000000,
+            cursor: None,
+            mouse_tracking: false,
+            alternate_screen: alternate,
+            scrollbar: Default::default(),
+            has_selection: false,
+            search: None,
+            ansi: [0; 16],
+        }
+    }
+
+    #[test]
+    fn padding_takes_edge_colors_as_chosen() {
+        let blue = Some(0x2040c0);
+        let red = Some(0xc02020);
+        let cell = CellSize {
+            width: px(10.),
+            height: px(20.),
+        };
+        let bounds = Bounds::new(point(px(0.), px(0.)), size(px(60.), px(60.)));
+        let origin = point(px(5.), px(5.));
+        let colors = |frame: &Frame, mode| {
+            let mut c: Vec<u32> = padding_fills(frame, mode, bounds, origin, cell)
+                .into_iter()
+                .map(|(_, rgb)| rgb)
+                .collect();
+            c.sort_unstable();
+            c.dedup();
+            c
+        };
+        // A full-screen program painted blue: every edge is one color.
+        let editor = frame_with(&[&[blue, blue], &[blue, blue]], true);
+        assert!(colors(&editor, PaddingFill::Off).is_empty());
+        assert_eq!(colors(&editor, PaddingFill::Automatic), vec![0x2040c0]);
+        assert_eq!(top_fill(&editor, PaddingFill::Automatic), Some(0x2040c0));
+        // A shell: Automatic leaves it alone; Always extends each edge cell.
+        let shell = frame_with(&[&[red, None], &[blue, None]], false);
+        assert!(colors(&shell, PaddingFill::Automatic).is_empty());
+        assert_eq!(
+            colors(&shell, PaddingFill::Always),
+            vec![0x000000, 0x2040c0, 0xc02020]
+        );
+        // Mixed edges don't fill in Automatic, even full screen.
+        let mixed = frame_with(&[&[red, blue], &[blue, blue]], true);
+        assert_eq!(colors(&mixed, PaddingFill::Automatic), vec![0x2040c0]);
+        assert_eq!(top_fill(&mixed, PaddingFill::Automatic), None);
+    }
+
     #[test]
     fn only_safe_links_open() {
         assert!(super::openable("https://superlogical.com/rex"));

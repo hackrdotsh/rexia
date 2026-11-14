@@ -419,6 +419,7 @@ impl Workspace {
             .force_cursor_style
             .then_some(self.settings.terminal.cursor_style);
         let blink = self.settings.terminal.blink_interval();
+        let padding_fill = self.settings.terminal.padding_fill;
         let colors = super::terminal::TextColors {
             improve_contrast: self.settings.terminal.improve_contrast,
             theme_palette: self.settings.terminal.theme_palette,
@@ -438,6 +439,7 @@ impl Workspace {
                     pane.force_cursor = force_cursor;
                     pane.blink = blink;
                     pane.colors = colors;
+                    pane.padding_fill = padding_fill;
                     pane
                 })
             });
@@ -1133,6 +1135,12 @@ impl Workspace {
             let state = model.blocks.get(&pane.block_id);
             let is_focused = focused.as_deref() == Some(pane.block_id.as_str());
             let floating = pane.floating.clone();
+            let header_fill = self
+                .settings
+                .terminal
+                .padding_fill_header
+                .then(|| terminal.read(cx).header_fill())
+                .flatten();
             let header = self.header_shown(&pane.block_id).then(|| {
                 self.pane_header(
                     &pane.block_id,
@@ -1143,6 +1151,7 @@ impl Workspace {
                     is_focused,
                     &session,
                     rect,
+                    header_fill,
                     theme,
                     cx,
                 )
@@ -1278,16 +1287,28 @@ impl Workspace {
         focused: bool,
         session: &str,
         rect: Rect,
+        fill: Option<u32>,
         theme: &Theme,
         cx: &mut Context<Self>,
     ) -> AnyElement {
         let label = titles::pane_title(block, state);
         let status = self.mark_for(self.active, block_id, state);
-        let muted = if focused {
+        let mut muted = if focused {
             theme.text
         } else {
             theme.text_muted
         };
+        // On the program's color, the title stays readable: dark on light, light on dark.
+        if let Some(rgb) = fill {
+            let light = crate::ui::text_color::luminance(rgb) > 0.35;
+            muted = gpui::hsla(
+                0.,
+                0.,
+                if light { 0.08 } else { 0.95 },
+                if focused { 1. } else { 0.7 },
+            );
+        }
+        let surface = fill.map_or(theme.surface, crate::ui::theme::color);
         let id = block_id.to_owned();
         let hover_only = self.settings.interface.pane_headers == PaneHeaders::Hover
             && !self.header_revealed(block_id);
@@ -1300,7 +1321,7 @@ impl Workspace {
             .gap(px(6.))
             .h(px(28.))
             .px(px(8.))
-            .bg(theme.surface)
+            .bg(surface)
             .border_b(theme.border_width)
             .border_color(theme.border)
             .text_size(px(12.))

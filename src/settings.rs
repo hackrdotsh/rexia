@@ -112,6 +112,18 @@ pub enum FadeInactive {
     Both,
 }
 
+/// Whether a program's background colors reach into the padding around its text.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum PaddingFill {
+    #[default]
+    Off,
+    /// While a full-screen program runs, along each edge that has one color.
+    Automatic,
+    /// Every edge cell's color, whatever is running.
+    Always,
+}
+
 /// Which of bold and italic text draws in its style; the rest draws plain.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
@@ -155,6 +167,9 @@ pub struct TerminalSettings {
     pub padding_x: f32,
     pub padding_y: f32,
     pub copy_on_select: bool,
+    pub padding_fill: PaddingFill,
+    /// Color the pane header to match the program too, while the padding fills.
+    pub padding_fill_header: bool,
     /// The cursor programs get until they pick one.
     pub cursor_style: crate::rex::stream::CursorShape,
     /// Ignore programs that change the cursor's shape.
@@ -198,6 +213,8 @@ impl Default for TerminalSettings {
             padding_x: 8.,
             padding_y: 6.,
             copy_on_select: false,
+            padding_fill: PaddingFill::Off,
+            padding_fill_header: true,
             cursor_style: crate::rex::stream::CursorShape::Block,
             force_cursor_style: false,
             cursor_blink: BlinkSpeed::Normal,
