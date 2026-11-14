@@ -65,7 +65,8 @@ Working:
 - Panes laid out exactly as the server arranges them, with dividers, floating layers,
   zoom and minimized layers.
 - Terminal rendering through libghostty-vt: colors, styles, wide characters, scrollback,
-  selection, search, mouse reporting, bracketed paste, OSC 52 clipboard writes.
+  selection, search, mouse reporting, bracketed paste, OSC 52 clipboard writes, and
+  OSC 8 links opened with ctrl+click (web, mail and file links only).
 - The server's keymap, including modes, sequences and init.lua bindings. rexia's
   defaults apply until the server answers.
 - Remote control: other clients' `client.perform` requests run in rexia and are answered
@@ -77,6 +78,5 @@ Working:
 
 Known gaps:
 
-- Hyperlinks (OSC 8) are underlined but can't be opened by clicking.
 - No input method support (IME composition) in terminal panes.
 - One window per process.
