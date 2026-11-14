@@ -448,6 +448,8 @@ pub struct InterfaceSettings {
     /// Fade the panes of a window that isn't focused, as inactive panes fade.
     pub fade_inactive_windows: bool,
     pub focus_follows_mouse: bool,
+    /// Even out a tab's splits when a pane opens or closes, keeping dividers people place.
+    pub autobalance_splits: bool,
     /// Show the activity filter in the sidebar instead of sessions.
     pub activity_view: bool,
     /// Sort the activity filter by urgency instead of grouping it by session.
@@ -479,6 +481,7 @@ impl Default for InterfaceSettings {
             fade_inactive: FadeInactive::Off,
             fade_inactive_windows: false,
             focus_follows_mouse: false,
+            autobalance_splits: true,
             activity_view: false,
             activity_by_priority: false,
         }

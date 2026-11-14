@@ -956,6 +956,16 @@ impl Workspace {
                 theme,
                 cx,
             ),
+            self.toggle_row(
+                "autobalance-splits",
+                "Autobalance splits",
+                "Even out a tab's panes when one opens or closes. Dividers you drag or move \
+                 with the keyboard stay put until Balance Splits.",
+                |s| s.interface.autobalance_splits,
+                |s, v| s.interface.autobalance_splits = v,
+                theme,
+                cx,
+            ),
         ]
     }
 

@@ -772,6 +772,7 @@ impl Workspace {
                     .as_ref()
                     .ok_or_else(|| refused("No tab is open"))?;
                 let session = need_session()?;
+                self.unpin_splits(window);
                 for ratio in view::balanced(window) {
                     call(
                         self,
@@ -794,6 +795,7 @@ impl Workspace {
                     .ok_or_else(|| refused("No tab is open"))?;
                 let divider = view::nudge(window, &need_block()?, &dir, amount)
                     .ok_or_else(|| refused(format!("There's no divider to move {dir}")))?;
+                self.pin_split(divider.split_id.clone());
                 call(
                     self,
                     "session.resize_pane",

@@ -332,6 +332,7 @@ fn collect_dividers(node: &Node, out: &mut Vec<Divider>) {
 /// A split's new ratio for `session.resize_pane`, named by the blocks beside its border.
 #[derive(Clone, Debug, PartialEq)]
 pub struct Ratio {
+    pub split_id: Option<String>,
     pub before_block: String,
     pub after_block: String,
     pub horizontal: bool,
@@ -357,6 +358,7 @@ pub fn balanced(window: &Window) -> Vec<Ratio> {
             let a = weight(&split.before, horizontal);
             let b = weight(&split.after, horizontal);
             out.push(Ratio {
+                split_id: split.split_id.clone(),
                 before_block: before.into(),
                 after_block: after.into(),
                 horizontal,
@@ -365,6 +367,126 @@ pub fn balanced(window: &Window) -> Vec<Ratio> {
         }
         walk(&split.before, out);
         walk(&split.after, out);
+    }
+    let mut out = Vec::new();
+    for layer in window.layers.iter().filter(|l| l.kind == "tiled") {
+        if let Some(node) = &layer.layout {
+            walk(node, &mut out);
+        }
+    }
+    out
+}
+
+/// Autobalance: the ratios that even out a tab's splits, and only those that would change.
+/// A `pinned` split (a divider someone placed) keeps its place in the window: its ratio is
+/// worked out again inside its new area, so it stays where it was on screen.
+pub fn rebalanced(window: &Window, pinned: &std::collections::HashSet<String>) -> Vec<Ratio> {
+    fn weight(node: &Node, horizontal: bool) -> f64 {
+        match &node.split {
+            None => 1.,
+            Some(split) if (split.direction != "vertical") == horizontal => {
+                weight(&split.before, horizontal) + weight(&split.after, horizontal)
+            }
+            Some(split) => weight(&split.before, horizontal).max(weight(&split.after, horizontal)),
+        }
+    }
+    /// `area` is the node's new (start, length) along each axis.
+    fn walk(
+        node: &Node,
+        area: [f64; 4],
+        pinned: &std::collections::HashSet<String>,
+        out: &mut Vec<Ratio>,
+    ) {
+        let Some(split) = &node.split else { return };
+        let horizontal = split.direction != "vertical";
+        let (start, length) = if horizontal {
+            (area[0], area[2])
+        } else {
+            (area[1], area[3])
+        };
+        let ratio = match &split.split_id {
+            Some(id) if pinned.contains(id) && node.rect.len() == 4 => {
+                // Where the divider is now, in the window.
+                let (old_start, old_length) = if horizontal {
+                    (node.rect[0], node.rect[2])
+                } else {
+                    (node.rect[1], node.rect[3])
+                };
+                let at = old_start + split.ratio * old_length;
+                ((at - start) / length.max(1e-9)).clamp(0.05, 0.95)
+            }
+            _ => {
+                let a = weight(&split.before, horizontal);
+                let b = weight(&split.after, horizontal);
+                a / (a + b)
+            }
+        };
+        if (ratio - split.ratio).abs() > 1e-3
+            && let (Some(before), Some(after)) =
+                (last_block(&split.before), first_block(&split.after))
+        {
+            out.push(Ratio {
+                split_id: split.split_id.clone(),
+                before_block: before.into(),
+                after_block: after.into(),
+                horizontal,
+                ratio,
+            });
+        }
+        let (mut first, mut second) = (area, area);
+        if horizontal {
+            first[2] = length * ratio;
+            second[0] = start + length * ratio;
+            second[2] = length * (1. - ratio);
+        } else {
+            first[3] = length * ratio;
+            second[1] = start + length * ratio;
+            second[3] = length * (1. - ratio);
+        }
+        walk(&split.before, first, pinned, out);
+        walk(&split.after, second, pinned, out);
+    }
+    let mut out = Vec::new();
+    for layer in window.layers.iter().filter(|l| l.kind == "tiled") {
+        if let Some(node) = &layer.layout {
+            let area = match node.rect.as_slice() {
+                [x, y, w, h] => [*x, *y, *w, *h],
+                _ => [0., 0., 1., 1.],
+            };
+            walk(node, area, pinned, &mut out);
+        }
+    }
+    out
+}
+
+/// The blocks in a tab's tiled layout, in order: what autobalance watches.
+pub fn tiled_blocks(window: &Window) -> Vec<String> {
+    fn walk(node: &Node, out: &mut Vec<String>) {
+        if let Some(block) = &node.block_id {
+            out.push(block.clone());
+        }
+        if let Some(split) = &node.split {
+            walk(&split.before, out);
+            walk(&split.after, out);
+        }
+    }
+    let mut out = Vec::new();
+    for layer in window.layers.iter().filter(|l| l.kind == "tiled") {
+        if let Some(node) = &layer.layout {
+            walk(node, &mut out);
+        }
+    }
+    out
+}
+
+/// The split IDs in a tab's tiled layout.
+pub fn split_ids(window: &Window) -> Vec<String> {
+    fn walk(node: &Node, out: &mut Vec<String>) {
+        if let Some(split) = &node.split {
+            out.extend(split.split_id.clone());
+            walk(&split.before, out);
+            walk(&split.after, out);
+        }
     }
     let mut out = Vec::new();
     for layer in window.layers.iter().filter(|l| l.kind == "tiled") {
@@ -545,6 +667,25 @@ mod tests {
         assert_eq!((moved.before_block.as_str(), moved.ratio), ("b", 0.6));
         let wider = nudge(window, "a", "right", 0.05).unwrap();
         assert!((wider.ratio - 0.65).abs() < 1e-9);
+    }
+
+    #[test]
+    fn rebalancing_leaves_pinned_splits() {
+        let view = view();
+        let window = view.active_window().unwrap();
+        assert_eq!(tiled_blocks(window), ["a", "b", "c"]);
+        assert_eq!(split_ids(window), ["split:1", "split:2"]);
+        let all: Vec<_> = rebalanced(window, &Default::default())
+            .into_iter()
+            .map(|r| r.split_id.unwrap())
+            .collect();
+        assert!(all.contains(&"split:1".to_owned()));
+        let pinned = ["split:1".to_owned()].into_iter().collect();
+        let rest: Vec<_> = rebalanced(window, &pinned)
+            .into_iter()
+            .map(|r| r.split_id.unwrap())
+            .collect();
+        assert!(!rest.contains(&"split:1".to_owned()));
     }
 
     #[test]

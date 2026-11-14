@@ -3,6 +3,7 @@
 mod actions;
 pub mod agents;
 mod attention;
+pub mod autobalance;
 pub mod context_menu;
 mod cursor_shaders;
 mod developer;
@@ -147,6 +148,9 @@ pub struct Workspace {
     reveal: toolbar::Reveal,
     highlight: highlight::Track,
     swipe: gestures::SwipeTracker,
+    /// Each tab's tiled panes as autobalance last saw them, and the dividers people placed.
+    tiled_seen: HashMap<String, Vec<String>>,
+    pinned_splits: HashSet<String>,
     /// Files going to terminals on other machines, and how the last one ended.
     uploads: Vec<uploads::Upload>,
     next_upload: u64,
@@ -341,6 +345,8 @@ impl Workspace {
             reveal: Default::default(),
             highlight: Default::default(),
             swipe: Default::default(),
+            tiled_seen: HashMap::new(),
+            pinned_splits: HashSet::new(),
             uploads: Vec::new(),
             next_upload: 0,
             last_upload: None,
@@ -479,6 +485,7 @@ impl Workspace {
         self.refresh_keymap();
         self.handle_performs(window, cx);
         self.process_activity(window);
+        self.autobalance();
         let model = self.model();
         if let Some(message) = model.notices.last().cloned() {
             self.notice = Some(message);
@@ -840,7 +847,7 @@ impl Workspace {
                 } else {
                     (fy - rect.y) / rect.h.max(1e-6)
                 };
-                divider.ratio = ratio.clamp(0.05, 0.95);
+                divider.ratio = autobalance::snapped(ratio.clamp(0.05, 0.95));
                 // Resize as the pointer moves, at most 20 times a second.
                 if sent.elapsed() > Duration::from_millis(50) {
                     *sent = Instant::now();
@@ -865,6 +872,7 @@ impl Workspace {
             Some(Drag::Divider {
                 session, divider, ..
             }) => {
+                self.pin_split(divider.split_id.clone());
                 let (method, payload) = resize_pane(&session, &divider);
                 self.call(method, payload);
             }
