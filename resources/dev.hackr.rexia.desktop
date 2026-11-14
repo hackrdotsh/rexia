@@ -1,0 +1,12 @@
+[Desktop Entry]
+Type=Application
+Name=rexia
+GenericName=Rex Client
+Comment=Attach to Rex sessions, tabs and panes
+Exec=rexia
+TryExec=rexia
+Icon=dev.hackr.rexia
+Terminal=false
+Categories=System;TerminalEmulator;
+Keywords=rex;terminal;multiplexer;session;
+StartupWMClass=dev.hackr.rexia
