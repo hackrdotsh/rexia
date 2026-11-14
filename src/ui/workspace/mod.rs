@@ -472,6 +472,7 @@ impl Workspace {
         let blink = self.settings.terminal.blink_interval();
         let padding_fill = self.settings.terminal.padding_fill;
         let smooth_scrolling = self.settings.terminal.smooth_scrolling;
+        let smooth_resizing = self.settings.terminal.smooth_resizing;
         let selection = self.settings.terminal.selection;
         let cursor_shader = self
             .settings
@@ -501,6 +502,7 @@ impl Workspace {
                     pane.colors = colors;
                     pane.padding_fill = padding_fill;
                     pane.smooth_scrolling = smooth_scrolling;
+                    pane.smooth_resizing = smooth_resizing;
                     pane.selection = selection;
                     pane.cursor_shader = cursor_shader;
                     pane

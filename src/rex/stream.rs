@@ -191,6 +191,8 @@ pub struct TerminalState {
     local: bool,
     /// Which ways of sending images this terminal takes, besides directly.
     mediums: images::Mediums,
+    /// The size this client last reflowed to.
+    local_size: Option<(u16, u16, u16, u16)>,
     /// The clock Kitty animations play on, and when their next frame is due on it.
     clock: std::time::Instant,
     clock_skip_ms: u64,
@@ -230,6 +232,7 @@ impl TerminalState {
             image_cache: ImageCache::default(),
             local: false,
             mediums: images::Mediums::default(),
+            local_size: None,
             clock: std::time::Instant::now(),
             clock_skip_ms: 0,
             next_animation_ms: None,
@@ -309,6 +312,9 @@ impl TerminalState {
             }
             // A steady block is also the server's default, so it takes this client's.
             self.apply_default_cursor(None)?;
+            if let Some((cols, rows, cell_width, cell_height)) = self.local_size {
+                self.reflow(cols, rows, cell_width, cell_height)?;
+            }
             tail = rest;
             &tail[..]
         } else {
@@ -477,6 +483,25 @@ impl TerminalState {
     }
 
     /// Move the viewport to the previous (`-1`) or next (`1`) shell prompt (OSC 133).
+    /// Reflow the terminal to `cols` by `rows` here, before the server's own resize
+    /// arrives; that one finds it already this size.
+    pub fn reflow(
+        &mut self,
+        cols: u16,
+        rows: u16,
+        cell_width: u16,
+        cell_height: u16,
+    ) -> Result<()> {
+        // A size asked for before the snapshot arrives applies once it has.
+        self.local_size = Some((cols, rows, cell_width, cell_height));
+        if let Some(terminal) = self.terminal.as_mut()
+            && (terminal.cols()?, terminal.rows()?) != (cols, rows)
+        {
+            terminal.resize(cols, rows, u32::from(cell_width), u32::from(cell_height))?;
+        }
+        Ok(())
+    }
+
     pub fn jump_to_prompt(&mut self, direction: i32) -> Result<bool> {
         let Some(terminal) = self.terminal.as_mut() else {
             return Ok(false);
@@ -935,6 +960,35 @@ mod tests {
         println!("remote {remote:?}, local {local:?}");
         assert!(!remote.file && !remote.shared_memory);
         assert!(local.file && local.shared_memory);
+    }
+
+    #[test]
+    fn reflowing_rewraps_text_before_the_server_resizes() {
+        let mut state = stream_from(b"0123456789abcdefghij", 20, 4);
+        assert_eq!(
+            state.frame().unwrap().unwrap().line_text(0).trim_end(),
+            "0123456789abcdefghij"
+        );
+        state.reflow(10, 4, 10, 20).unwrap();
+        let frame = state.frame().unwrap().unwrap();
+        assert_eq!(frame.cols, 10);
+        assert_eq!(frame.line_text(0), "0123456789");
+        assert_eq!(frame.line_text(1).trim_end(), "abcdefghij");
+        // The server's resize to the same size changes nothing.
+        state
+            .feed(
+                concat!(
+                    "\x1b_rex1;42;",
+                    r#"{"type":"resize","cols":10,"rows":4,"cell_width_px":10,"cell_height_px":20}"#,
+                    "\x1b\\"
+                )
+                .as_bytes(),
+            )
+            .unwrap();
+        assert_eq!(
+            state.frame().unwrap().unwrap().line_text(1).trim_end(),
+            "abcdefghij"
+        );
     }
 
     #[test]

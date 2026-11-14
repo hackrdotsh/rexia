@@ -250,6 +250,13 @@ pub enum PaneCommand {
         older: bool,
     },
     Prompt(i32),
+    /// Reflow the local terminal to a new size now, before the server answers a resize.
+    Reflow {
+        cols: u16,
+        rows: u16,
+        cell_width: u16,
+        cell_height: u16,
+    },
     Theme(Option<TerminalTheme>),
     DefaultCursor(Option<CursorShape>),
     Reconnect,
@@ -1604,6 +1611,7 @@ async fn stream(
                             PaneCommand::Search(needle) => terminal.search(needle.as_deref())?,
                             PaneCommand::SearchStep { older } => terminal.search_step(older)?,
                             PaneCommand::Prompt(direction) => { terminal.jump_to_prompt(direction)?; }
+                            PaneCommand::Reflow { cols, rows, cell_width, cell_height } => terminal.reflow(cols, rows, cell_width, cell_height)?,
                             PaneCommand::Theme(next) => { theme = next.clone(); terminal.set_local_theme(next)?; }
                             PaneCommand::DefaultCursor(next) => { cursor = next; terminal.set_default_cursor(next)?; }
                             PaneCommand::Reconnect => return Ok(StreamEnd::Retry),

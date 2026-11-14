@@ -309,6 +309,9 @@ pub struct TerminalPane {
     pub selection: crate::settings::SelectionLook,
     /// When the copy shine started, and how many copies have shone.
     shine: Option<std::time::Instant>,
+    /// Reflow text locally as the pane changes size, and the size last reflowed to.
+    pub smooth_resizing: bool,
+    reflowed: Option<(u16, u16)>,
     /// Move history by pixels on touchpads, and the part of a line scrolled so far.
     pub smooth_scrolling: bool,
     scroll_carry: f32,
@@ -367,6 +370,8 @@ impl TerminalPane {
             shine: None,
             size_hold: None,
             smooth_scrolling: true,
+            smooth_resizing: true,
+            reflowed: None,
             scroll_carry: 0.,
             shines: 0,
             drawn_selection: None,
@@ -523,6 +528,11 @@ impl TerminalPane {
                 None
             }
         }
+    }
+
+    /// The size last asked of the server, for tests.
+    pub fn requested_size(&self) -> Option<(u16, u16)> {
+        self.requested
     }
 
     /// How far the text is drawn below (or above) its lines while smooth scrolling, in
@@ -685,6 +695,28 @@ impl TerminalPane {
 
     /// Ask the server for the grid that fits `bounds`.
     fn fit(&mut self, bounds: Bounds<Pixels>, cell: CellSize) {
+        let inner_w = bounds.size.width - self.padding.x * 2.;
+        let inner_h = bounds.size.height - self.padding.y * 2.;
+        let cols = (inner_w / cell.width).floor().max(2.) as u16;
+        let rows = (inner_h / cell.height).floor().max(1.) as u16;
+        let (cell_width, cell_height) = (
+            f32::from(cell.width).round() as u16,
+            f32::from(cell.height).round() as u16,
+        );
+        // Smooth resizing: the text reflows here on this frame, without waiting for the
+        // server, even while panes move.
+        if self.smooth_resizing
+            && self.reflowed != Some((cols, rows))
+            && let Some(pane) = self.pane()
+        {
+            self.reflowed = Some((cols, rows));
+            pane.send(PaneCommand::Reflow {
+                cols,
+                rows,
+                cell_width,
+                cell_height,
+            });
+        }
         if self
             .size_hold
             .is_some_and(|t| std::time::Instant::now() < t)
@@ -693,10 +725,6 @@ impl TerminalPane {
             return;
         }
         self.size_hold = None;
-        let inner_w = bounds.size.width - self.padding.x * 2.;
-        let inner_h = bounds.size.height - self.padding.y * 2.;
-        let cols = (inner_w / cell.width).floor().max(2.) as u16;
-        let rows = (inner_h / cell.height).floor().max(1.) as u16;
         if self.requested == Some((cols, rows)) {
             return;
         }
@@ -706,8 +734,8 @@ impl TerminalPane {
             block_id: self.block_id.clone(),
             cols,
             rows,
-            cell_width: f32::from(cell.width).round() as u16,
-            cell_height: f32::from(cell.height).round() as u16,
+            cell_width,
+            cell_height,
         });
     }
 

@@ -316,6 +316,8 @@ pub struct TerminalSettings {
     pub key_hints: bool,
     /// Move through history by pixels instead of whole lines.
     pub smooth_scrolling: bool,
+    /// Reflow text on the frame a pane changes size, without waiting for the server.
+    pub smooth_resizing: bool,
     /// List recently chosen paths first in the path browser.
     pub recent_paths: bool,
     pub app_links: AppLinks,
@@ -377,6 +379,7 @@ impl Default for TerminalSettings {
             selection: SelectionLook::default(),
             key_hints: true,
             smooth_scrolling: true,
+            smooth_resizing: true,
             recent_paths: true,
             app_links: AppLinks::Ask,
             trusted_links: Vec::new(),

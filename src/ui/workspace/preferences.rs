@@ -381,6 +381,7 @@ impl Workspace {
         let cursor = terminal.cursor_style;
         let padding_fill = terminal.padding_fill;
         let smooth_scrolling = terminal.smooth_scrolling;
+        let smooth_resizing = terminal.smooth_resizing;
         let selection = terminal.selection;
         let cursor_shader = terminal.cursor_shaders.then_some(terminal.cursor_shader);
         let colors = crate::ui::terminal::TextColors {
@@ -397,6 +398,7 @@ impl Workspace {
                 pane.colors = colors;
                 pane.padding_fill = padding_fill;
                 pane.smooth_scrolling = smooth_scrolling;
+                pane.smooth_resizing = smooth_resizing;
                 pane.selection = selection;
                 pane.cursor_shader = cursor_shader;
                 cx.notify();
@@ -468,6 +470,21 @@ impl Workspace {
         let block = self.focused.as_ref()?;
         let pane = self.panes.get(block)?.read(cx);
         Some((pane.padding_fill_colors(), pane.header_fill()))
+    }
+
+    /// Keep `block`'s pane from asking the server for a new size for `hold`, as moving
+    /// panes do, for tests.
+    pub fn hold_pane_size(&self, block: &str, hold: std::time::Duration, cx: &mut gpui::App) {
+        if let Some(pane) = self.panes.get(block) {
+            pane.update(cx, |pane, _| {
+                pane.hold_size_until(std::time::Instant::now() + hold)
+            });
+        }
+    }
+
+    /// The pane showing `block`, for tests.
+    pub fn terminal_for(&self, block: &str) -> Option<Entity<crate::ui::terminal::TerminalPane>> {
+        self.panes.get(block).cloned()
     }
 
     /// The focused pane, for tests.
@@ -1104,6 +1121,16 @@ impl Workspace {
             "Move through terminal history by pixels instead of whole lines, on a touchpad.",
             |s| s.terminal.smooth_scrolling,
             |s, v| s.terminal.smooth_scrolling = v,
+            theme,
+            cx,
+        ));
+        rows.push(section_label("Resizing", theme));
+        rows.push(self.toggle_row(
+            "smooth-resizing",
+            "Smooth terminal resizing",
+            "Reflow terminal text on the frame a pane changes size, without waiting for the server.",
+            |s| s.terminal.smooth_resizing,
+            |s, v| s.terminal.smooth_resizing = v,
             theme,
             cx,
         ));
