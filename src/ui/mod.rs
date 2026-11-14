@@ -8,6 +8,7 @@ pub mod fuzzy;
 pub mod icons;
 pub mod input;
 pub mod keys;
+pub mod sprites;
 pub mod terminal;
 pub mod text_color;
 pub mod theme;

@@ -1270,8 +1270,15 @@ impl Look {
 /// it's part of a selection.
 type Background = (u16, u16, Hsla, bool);
 
-fn segments(cells: &[crate::rex::stream::Cell], look: &Look) -> (Vec<Segment>, Vec<Background>) {
+/// A character rexia draws itself (see `sprites`): its column, the character and its color.
+type Sprite = (u16, char, Hsla);
+
+fn segments(
+    cells: &[crate::rex::stream::Cell],
+    look: &Look,
+) -> (Vec<Segment>, Vec<Background>, Vec<Sprite>) {
     let palette = &look.palette;
+    let mut sprites: Vec<Sprite> = Vec::new();
     let mut segments: Vec<Segment> = Vec::new();
     let mut backgrounds: Vec<Background> = Vec::new();
     for (col, cell) in cells.iter().enumerate() {
@@ -1314,6 +1321,14 @@ fn segments(cells: &[crate::rex::stream::Cell], look: &Look) -> (Vec<Segment>, V
             .then_some(cell.has(flags::CURLY_UNDERLINE)),
             strike: cell.has(flags::STRIKE),
         };
+        let mut chars = cell.text.chars();
+        if let (Some(c), None) = (chars.next(), chars.next())
+            && !cell.has(flags::WIDE)
+            && super::sprites::is_sprite(c)
+        {
+            sprites.push((col, c, fg));
+            continue;
+        }
         let alone = cell.has(flags::WIDE) || cell.text.chars().count() > 1;
         if alone {
             segments.push(Segment {
@@ -1343,7 +1358,7 @@ fn segments(cells: &[crate::rex::stream::Cell], look: &Look) -> (Vec<Segment>, V
             _ => segment.runs.push((cell.text.len(), style)),
         }
     }
-    (segments, backgrounds)
+    (segments, backgrounds, sprites)
 }
 
 impl Render for TerminalPane {
@@ -1475,8 +1490,10 @@ impl Render for TerminalPane {
                 window.with_content_mask(Some(gpui::ContentMask { bounds }), |window| {
                     paint_images(Layer::BelowBackground, window);
                     let mut rows = Vec::with_capacity(frame.lines.len());
+                    let mut drawn = Vec::new();
                     for (row, cells) in frame.lines.iter().enumerate() {
-                        let (segments, backgrounds) = segments(cells, &look);
+                        let (segments, backgrounds, sprites) = segments(cells, &look);
+                        drawn.extend(sprites.into_iter().map(|(col, c, fg)| (row, col, c, fg)));
                         for (start, end, bg, selected) in backgrounds {
                             let area = cell_bounds(start, row, end - start);
                             if selected && selection.rounded {
@@ -1534,6 +1551,26 @@ impl Render for TerminalPane {
                             );
                             let at = cell_bounds(segment.col, row, 1).origin;
                             let _ = line.paint(at, cell.height, TextAlign::Left, None, window, cx);
+                        }
+                    }
+                    // Braille and block elements, drawn to fit the cell exactly.
+                    let scale = window.scale_factor();
+                    let (cw, ch) = (
+                        f32::from(cell.width) * scale,
+                        f32::from(cell.height) * scale,
+                    );
+                    for (row, col, c, fg) in drawn {
+                        let at = cell_bounds(col, row, 1).origin;
+                        let (x0, y0) = (
+                            (f32::from(at.x) * scale).round(),
+                            (f32::from(at.y) * scale).round(),
+                        );
+                        for p in super::sprites::pieces(c, cw, ch) {
+                            let area = Bounds::new(
+                                point(px((x0 + p.x) / scale), px((y0 + p.y) / scale)),
+                                size(px(p.w / scale), px(p.h / scale)),
+                            );
+                            window.paint_quad(fill(area, fg.opacity(fg.a * p.alpha)));
                         }
                     }
                     paint_images(Layer::AboveText, window);
@@ -2012,7 +2049,7 @@ mod tests {
             cell(" ", 0),
             cell("e", 0),
         ];
-        let (segments, backgrounds) = segments(&row, &look());
+        let (segments, backgrounds, _) = segments(&row, &look());
         assert!(backgrounds.is_empty());
         let shape: Vec<_> = segments
             .iter()
@@ -2039,7 +2076,7 @@ mod tests {
         ];
         row[0].bg = Some(0x101010);
         row[1].bg = Some(0x101010);
-        let (_, backgrounds) = segments(&row, &look());
+        let (_, backgrounds, _) = segments(&row, &look());
         assert_eq!(backgrounds.len(), 3);
         assert!(!backgrounds[0].3 && backgrounds[1].3 && !backgrounds[2].3);
         assert_eq!((backgrounds[0].0, backgrounds[0].1), (0, 2));
