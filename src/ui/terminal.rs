@@ -19,6 +19,12 @@ use gpui::{
 use serde_json::json;
 use std::sync::Arc;
 
+/// Links a click may open: web, mail and local files. Other schemes could start programs.
+pub fn openable(link: &str) -> bool {
+    url::Url::parse(link)
+        .is_ok_and(|url| matches!(url.scheme(), "http" | "https" | "mailto" | "file"))
+}
+
 /// Measured once per font: the size of one cell.
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct CellSize {
@@ -302,6 +308,26 @@ impl TerminalPane {
             json!({"session_id": self.session_id, "block_id": self.block_id}),
         );
         let at = self.cell_at(event.position);
+        // Ctrl-click opens a program's OSC 8 link, as in Ghostty.
+        if event.button == MouseButton::Left
+            && event.modifiers.control
+            && !event.modifiers.shift
+            && let Some(pane) = self.pane()
+        {
+            let (x, y) = at;
+            cx.spawn(async move |_, cx| {
+                let link = pane
+                    .ask(|reply| PaneCommand::LinkAt { x, y, reply })
+                    .await
+                    .flatten()
+                    .filter(|link| openable(link));
+                if let Some(link) = link {
+                    cx.update(|cx| cx.open_url(&link));
+                }
+            })
+            .detach();
+            return;
+        }
         let button = match event.button {
             MouseButton::Left => "left",
             MouseButton::Right => "right",
@@ -730,6 +756,16 @@ impl Render for TerminalPane {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn only_safe_links_open() {
+        assert!(super::openable("https://superlogical.com/rex"));
+        assert!(super::openable("file:///home/me/notes.md"));
+        assert!(super::openable("mailto:me@example.com"));
+        assert!(!super::openable("javascript:alert(1)"));
+        assert!(!super::openable("ssh://box"));
+        assert!(!super::openable("not a url"));
+    }
+
     use super::*;
     use crate::rex::stream::Cell;
 
