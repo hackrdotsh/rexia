@@ -7,6 +7,7 @@ mod filter;
 mod highlight;
 mod overlay;
 mod preferences;
+pub mod tab_icons;
 mod toolbar;
 mod windows;
 
@@ -773,10 +774,6 @@ impl Workspace {
                 let active = active_window.as_deref() == Some(window.id());
                 let label = titles::tab_title(window, model);
                 let activity = self.tab_mark(self.active, window, model);
-                let focused_state = window
-                    .focused_block_id
-                    .as_ref()
-                    .and_then(|b| model.blocks.get(b));
                 // Filling tabs show a background only when there's more than one.
                 let lone = fill && count < 2;
                 let (fg, bg) = if active && !lone {
@@ -786,6 +783,7 @@ impl Workspace {
                 };
                 let select_id = id.clone();
                 let close_id = id.clone();
+                let tab_id = id.clone();
                 div()
                     .id(SharedString::from(format!("tab-{index}")))
                     .group("tab")
@@ -810,11 +808,13 @@ impl Workspace {
                         MouseButton::Middle,
                         cx.listener(move |ws, _, _, cx| ws.close_tab(close_id.clone(), cx)),
                     )
-                    .child(
-                        icon(titles::program_icon(focused_state))
-                            .size(px(15.))
-                            .text_color(fg),
-                    )
+                    .children(tab_icons::render_icons(
+                        &self.tab_icon_list(&tab_id, false, model),
+                        self.settings.interface.shell_icon_theme,
+                        fg,
+                        14.,
+                        theme,
+                    ))
                     .child(
                         div()
                             .flex_1()
@@ -978,10 +978,6 @@ impl Workspace {
                     for window in &view.windows {
                         let active = view.active_window_id.as_deref() == Some(window.id());
                         let window_id = window.id().to_owned();
-                        let state = window
-                            .focused_block_id
-                            .as_ref()
-                            .and_then(|b| model.blocks.get(b));
                         list = list.child(
                             div()
                                 .id(SharedString::from(format!("side-tab-{window_id}")))
@@ -999,7 +995,13 @@ impl Workspace {
                                     d.text_color(theme.text_muted)
                                         .hover(|d| d.bg(theme.overlay(0.06)))
                                 })
-                                .child(icon(titles::program_icon(state)).size(px(14.)))
+                                .children(tab_icons::render_icons(
+                                    &self.tab_icon_list(&window_id, true, &model),
+                                    self.settings.interface.shell_icon_theme,
+                                    if active { theme.text } else { theme.text_muted },
+                                    13.,
+                                    theme,
+                                ))
                                 .child(
                                     div()
                                         .flex_1()

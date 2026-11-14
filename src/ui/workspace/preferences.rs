@@ -1,6 +1,7 @@
 //! The settings page: rexia's preferences by section, applied and saved as they change.
 //! Colors, corners, borders and fonts aren't here: they follow Noctalia.
 use super::{Workspace, overlay::Overlay};
+use crate::settings::{ShellIconTheme, TabIconColor};
 use crate::{
     rex::stream::CursorShape,
     rex::{activity::ProgramState, host::HostCommand},
@@ -554,6 +555,45 @@ impl Workspace {
                 "Tabs above the panes share the tab bar equally.",
                 |s| s.interface.tabs_fill,
                 |s, v| s.interface.tabs_fill = v,
+                theme,
+                cx,
+            ),
+            self.choice_row(
+                "tab-icon-color",
+                "Use color for tab icons",
+                "Which tab icons draw in their program's colors.",
+                &[
+                    (TabIconColor::Always, "Always"),
+                    (TabIconColor::ActivePanes, "Active panes"),
+                    (TabIconColor::ActiveTabs, "Active tabs"),
+                    (TabIconColor::Never, "Never"),
+                ],
+                i.tab_icon_color,
+                |s, v| s.interface.tab_icon_color = v,
+                theme,
+                cx,
+            ),
+            self.choice_row(
+                "shell-icon-theme",
+                "Shell icon theme",
+                "A colored shell icon's own artwork, the terminal theme's colors, or the accent.",
+                &[
+                    (ShellIconTheme::Default, "Default"),
+                    (ShellIconTheme::Theme, "Theme"),
+                    (ShellIconTheme::Accent, "Accent"),
+                ],
+                i.shell_icon_theme,
+                |s, v| s.interface.shell_icon_theme = v,
+                theme,
+                cx,
+            ),
+            self.stepper_row(
+                "tab-icons",
+                "Show tab icons",
+                "Pane icons per tab: up to three in vertical tabs, five in horizontal tabs.",
+                i.tab_icons.to_string(),
+                |s| s.interface.tab_icons = s.interface.tab_icons.saturating_sub(1),
+                |s| s.interface.tab_icons = (s.interface.tab_icons + 1).min(5),
                 theme,
                 cx,
             ),

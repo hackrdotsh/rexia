@@ -112,6 +112,32 @@ pub enum FadeInactive {
     Both,
 }
 
+/// Which tab icons draw in their program's colors; the rest draw in the text color.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum TabIconColor {
+    #[default]
+    Always,
+    /// The icon of each tab's focused pane.
+    ActivePanes,
+    /// Every icon in the selected tab.
+    ActiveTabs,
+    Never,
+}
+
+/// How a colored shell icon is drawn.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ShellIconTheme {
+    /// Its own artwork: a light glyph on a dark tile.
+    #[default]
+    Default,
+    /// The terminal theme's foreground on its background.
+    Theme,
+    /// The theme's accent.
+    Accent,
+}
+
 /// Whether a program's background colors reach into the padding around its text.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
@@ -239,6 +265,10 @@ pub struct InterfaceSettings {
     pub vertical_side: ToolbarLayout,
     /// Horizontal tabs share the tab bar equally.
     pub tabs_fill: bool,
+    pub tab_icon_color: TabIconColor,
+    pub shell_icon_theme: ShellIconTheme,
+    /// How many pane icons a tab shows: up to three in vertical tabs, five in horizontal.
+    pub tab_icons: u8,
     pub pane_style: PaneStyle,
     pub pane_headers: PaneHeaders,
     pub highlight_active_pane: bool,
@@ -264,6 +294,9 @@ impl Default for InterfaceSettings {
             toolbar_behavior: ToolbarBehavior::Always,
             vertical_side: ToolbarLayout::Left,
             tabs_fill: false,
+            tab_icon_color: TabIconColor::Always,
+            shell_icon_theme: ShellIconTheme::Default,
+            tab_icons: 3,
             pane_style: PaneStyle::Comfortable,
             pane_headers: PaneHeaders::Always,
             highlight_active_pane: true,

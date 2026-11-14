@@ -81,20 +81,62 @@ pub fn session_activity<'m>(session_id: &str, model: &'m HostModel) -> Option<&'
         .max_by_key(|r| r.state)
 }
 
+/// The kind of program running in a pane, which picks its icon and color.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Program {
+    Shell,
+    Git,
+    Editor,
+    Remote,
+    Agent,
+    Monitor,
+}
+
+impl Program {
+    pub fn of(state: Option<&BlockState>) -> Self {
+        let name = state
+            .and_then(|s| s.process.name.as_deref())
+            .unwrap_or_default()
+            .to_ascii_lowercase();
+        match name.as_str() {
+            "git" | "lazygit" | "tig" | "jj" => Self::Git,
+            "nvim" | "vim" | "vi" | "hx" | "helix" | "nano" | "emacs" | "kak" => Self::Editor,
+            "ssh" | "mosh" | "et" => Self::Remote,
+            "claude" | "codex" | "opencode" | "pi" | "aider" | "gemini" | "cli.js" => Self::Agent,
+            "htop" | "btop" | "top" => Self::Monitor,
+            _ => Self::Shell,
+        }
+    }
+
+    /// Its Tabler icon.
+    pub fn icon(self) -> &'static str {
+        match self {
+            Self::Shell => "terminal-2",
+            Self::Git => "brand-git",
+            Self::Editor => "file-code",
+            Self::Remote => "world",
+            Self::Agent => "command",
+            Self::Monitor => "layout-grid",
+        }
+    }
+
+    /// The terminal color its icon takes when tab icons use color: one of the bright
+    /// 16-color entries, so it follows the theme's palette.
+    pub fn ansi(self) -> usize {
+        match self {
+            Self::Shell => 10,
+            Self::Git => 9,
+            Self::Editor => 10,
+            Self::Remote => 12,
+            Self::Agent => 13,
+            Self::Monitor => 14,
+        }
+    }
+}
+
 /// A Tabler icon for the program running in a pane.
 pub fn program_icon(state: Option<&BlockState>) -> &'static str {
-    let name = state
-        .and_then(|s| s.process.name.as_deref())
-        .unwrap_or_default()
-        .to_ascii_lowercase();
-    match name.as_str() {
-        "git" | "lazygit" | "tig" | "jj" => "brand-git",
-        "nvim" | "vim" | "vi" | "hx" | "helix" | "nano" | "emacs" | "kak" => "file-code",
-        "ssh" | "mosh" | "et" => "world",
-        "claude" | "codex" | "opencode" | "pi" | "aider" | "gemini" | "cli.js" => "command",
-        "htop" | "btop" | "top" => "layout-grid",
-        _ => "terminal-2",
-    }
+    Program::of(state).icon()
 }
 
 #[cfg(test)]
