@@ -2,8 +2,9 @@
 //! Colors, corners, borders and fonts aren't here: they follow Noctalia.
 use super::{Workspace, overlay::Overlay};
 use crate::{
+    rex::stream::CursorShape,
     rex::{activity::ProgramState, host::HostCommand},
-    settings::{FadeInactive, PaneHeaders, PaneStyle, Settings, StateActivity},
+    settings::{BlinkSpeed, FadeInactive, PaneHeaders, PaneStyle, Settings, StateActivity},
     sound::{self, Cue},
     ui::{
         components::list_row,
@@ -246,13 +247,38 @@ impl Workspace {
         let terminal = &self.settings.terminal;
         let padding = point(px(terminal.padding_x), px(terminal.padding_y));
         let copy_on_select = terminal.copy_on_select;
+        let force_cursor = terminal.force_cursor_style.then_some(terminal.cursor_style);
+        let blink = terminal.blink_interval();
+        let cursor = terminal.cursor_style;
         for pane in self.panes.values() {
             pane.update(cx, |pane, cx| {
                 pane.set_font(font.clone(), cx);
                 pane.padding = padding;
                 pane.copy_on_select = copy_on_select;
+                pane.force_cursor = force_cursor;
+                pane.blink = blink;
                 cx.notify();
             });
+        }
+        for host in &self.hosts {
+            host.handle
+                .send(crate::rex::host::HostCommand::DefaultCursor(Some(cursor)));
+        }
+    }
+
+    /// The focused pane's cursor as drawn: shape, whether it blinks, whether it shows.
+    pub fn focused_cursor(
+        &self,
+        cx: &gpui::App,
+    ) -> Option<(crate::rex::stream::CursorShape, bool, bool)> {
+        let block = self.focused.as_ref()?;
+        self.panes.get(block)?.read(cx).cursor_state()
+    }
+
+    /// Step the focused pane's cursor blink, as its timer would.
+    pub fn blink_focused(&mut self, cx: &mut Context<Self>) {
+        if let Some(pane) = self.focused.as_ref().and_then(|b| self.panes.get(b)) {
+            pane.update(cx, |pane, cx| pane.blink_tick(cx));
         }
     }
 
@@ -492,7 +518,7 @@ impl Workspace {
         cx: &mut Context<Self>,
     ) -> Vec<AnyElement> {
         let t = &self.settings.terminal;
-        vec![
+        let mut rows = vec![
             Self::field_row(
                 "font",
                 "Terminal font",
@@ -552,16 +578,71 @@ impl Workspace {
                 theme,
                 cx,
             ),
-            self.toggle_row(
-                "copy-on-select",
-                "Copy on select",
-                "Copy selected text to the clipboard as soon as it's selected.",
-                |s| s.terminal.copy_on_select,
-                |s, v| s.terminal.copy_on_select = v,
+            self.choice_row(
+                "cursor-style",
+                "Cursor style",
+                "The cursor programs get until they choose their own.",
+                &[
+                    (CursorShape::Block, "Block"),
+                    (CursorShape::Bar, "Bar"),
+                    (CursorShape::Underline, "Underline"),
+                ],
+                t.cursor_style,
+                |s, v| s.terminal.cursor_style = v,
                 theme,
                 cx,
             ),
-        ]
+            self.toggle_row(
+                "force-cursor",
+                "Force style",
+                "Ignore programs that change the cursor's shape.",
+                |s| s.terminal.force_cursor_style,
+                |s, v| s.terminal.force_cursor_style = v,
+                theme,
+                cx,
+            ),
+            self.choice_row(
+                "cursor-blink",
+                "Blink speed",
+                "How fast cursors blink when their program asks them to.",
+                &[
+                    (BlinkSpeed::Off, "Off"),
+                    (BlinkSpeed::Slow, "Slow"),
+                    (BlinkSpeed::Normal, "Normal"),
+                    (BlinkSpeed::Fast, "Fast"),
+                    (BlinkSpeed::Custom, "Custom"),
+                ],
+                t.cursor_blink,
+                |s, v| s.terminal.cursor_blink = v,
+                theme,
+                cx,
+            ),
+        ];
+        if t.cursor_blink == BlinkSpeed::Custom {
+            rows.push(self.stepper_row(
+                "blink-interval",
+                "Blink interval",
+                "The time between blinks.",
+                format!("{} ms", t.cursor_blink_ms),
+                |s| {
+                    s.terminal.cursor_blink_ms =
+                        s.terminal.cursor_blink_ms.saturating_sub(50).max(100)
+                },
+                |s| s.terminal.cursor_blink_ms = (s.terminal.cursor_blink_ms + 50).min(5000),
+                theme,
+                cx,
+            ));
+        }
+        rows.push(self.toggle_row(
+            "copy-on-select",
+            "Copy on select",
+            "Copy selected text to the clipboard as soon as it's selected.",
+            |s| s.terminal.copy_on_select,
+            |s, v| s.terminal.copy_on_select = v,
+            theme,
+            cx,
+        ));
+        rows
     }
 
     fn notifications_section(&self, theme: &Theme, cx: &mut Context<Self>) -> Vec<AnyElement> {

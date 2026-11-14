@@ -50,6 +50,19 @@ pub struct TerminalPane {
     pub copy_on_select: bool,
     /// The pane model revision last drawn.
     pub revision: u64,
+    /// A shape to draw whatever the program asks for.
+    pub force_cursor: Option<CursorShape>,
+    /// The time between blinks for cursors that ask to blink; none never blinks.
+    pub blink: Option<std::time::Duration>,
+    /// The blinking cursor's current phase.
+    blink_on: bool,
+    /// Whether the last paint drew a blinking cursor, which the blink timer then toggles.
+    blinking: bool,
+    /// Typing keeps the cursor solid until this moment.
+    hold_until: std::time::Instant,
+    /// The cursor shape last drawn, for tests and diagnostics.
+    drawn_cursor: Option<CursorShape>,
+    _blink_timer: gpui::Task<()>,
 }
 
 impl TerminalPane {
@@ -74,7 +87,45 @@ impl TerminalPane {
             selecting: false,
             copy_on_select: false,
             revision: 0,
+            force_cursor: None,
+            blink: None,
+            blink_on: true,
+            blinking: false,
+            hold_until: std::time::Instant::now(),
+            drawn_cursor: None,
+            _blink_timer: cx.spawn(async move |this, cx| {
+                loop {
+                    let Ok(interval) = this.read_with(cx, |pane, _| {
+                        pane.blink.unwrap_or(std::time::Duration::from_millis(500))
+                    }) else {
+                        break;
+                    };
+                    cx.background_executor().timer(interval).await;
+                    if this.update(cx, |pane, cx| pane.blink_tick(cx)).is_err() {
+                        break;
+                    }
+                }
+            }),
         }
+    }
+
+    /// Advance the blink: a blinking cursor shows or hides; any other stays shown.
+    pub fn blink_tick(&mut self, cx: &mut Context<Self>) {
+        let next = if self.blinking && self.blink.is_some() {
+            std::time::Instant::now() < self.hold_until || !self.blink_on
+        } else {
+            true
+        };
+        if next != self.blink_on {
+            self.blink_on = next;
+            cx.notify();
+        }
+    }
+
+    /// The cursor as last drawn: its shape, whether it blinks, and whether it's showing.
+    pub fn cursor_state(&self) -> Option<(CursorShape, bool, bool)> {
+        self.drawn_cursor
+            .map(|shape| (shape, self.blinking, self.blink_on || !self.blinking))
     }
 
     pub fn set_font(&mut self, font: TerminalFont, cx: &mut Context<Self>) {
@@ -202,6 +253,9 @@ impl TerminalPane {
             return false;
         };
         self.back_to_live();
+        // The cursor stays solid while typing.
+        self.blink_on = true;
+        self.hold_until = std::time::Instant::now() + self.blink.unwrap_or_default();
         self.input(
             "client.key",
             json!({"session_id": self.session_id, "block_id": self.block_id, "key": key}),
@@ -559,6 +613,18 @@ impl Render for TerminalPane {
         };
         let cursor_color = color(theme.terminal.cursor);
         let cursor_text = color(theme.terminal.cursor_text);
+        // Only a focused pane's cursor blinks, and only if its program asks.
+        let cursor = frame.as_ref().and_then(|f| f.cursor);
+        self.blinking = focused && self.blink.is_some() && cursor.is_some_and(|c| c.blinking);
+        let cursor_hidden = self.blinking && !self.blink_on;
+        let cursor_shape = cursor.map(|c| {
+            if focused {
+                self.force_cursor.unwrap_or(c.shape)
+            } else {
+                CursorShape::HollowBlock
+            }
+        });
+        self.drawn_cursor = cursor_shape;
 
         let grid = canvas(
             {
@@ -632,18 +698,15 @@ impl Render for TerminalPane {
                             let _ = line.paint(at, cell.height, TextAlign::Left, None, window, cx);
                         }
                     }
-                    if let Some(cursor) = frame.cursor {
+                    if let (Some(cursor), Some(shape), false) =
+                        (frame.cursor, cursor_shape, cursor_hidden)
+                    {
                         let width = if cursor.wide { 2 } else { 1 };
                         let area = cell_bounds(cursor.x, cursor.y as usize, width);
                         let color = cursor
                             .color
                             .map(super::theme::color)
                             .unwrap_or(cursor_color);
-                        let shape = if focused {
-                            cursor.shape
-                        } else {
-                            CursorShape::HollowBlock
-                        };
                         match shape {
                             CursorShape::Block => {
                                 window.paint_quad(fill(area, color));

@@ -6,7 +6,7 @@ use super::{
     client::{self, Control, Event, Identity},
     data::{self, PROTOCOL, TERMINAL_CREATOR},
     endpoint::{self, Endpoint},
-    stream::{Frame, SelectMode, TermEvent, TerminalState, TerminalTheme},
+    stream::{CursorShape, Frame, SelectMode, TermEvent, TerminalState, TerminalTheme},
     view::{SessionSummary, View},
 };
 use anyhow::{Context, Result, anyhow};
@@ -217,6 +217,7 @@ pub enum PaneCommand {
     },
     Prompt(i32),
     Theme(Option<TerminalTheme>),
+    DefaultCursor(Option<CursorShape>),
     Reconnect,
     Stop,
 }
@@ -291,6 +292,8 @@ pub enum HostCommand {
     },
     SetLabel(Option<String>),
     TerminalTheme(Option<TerminalTheme>),
+    /// The cursor shape terminals use until their program picks one.
+    DefaultCursor(Option<CursorShape>),
     Reconnect,
     Shutdown,
 }
@@ -474,6 +477,7 @@ struct Host {
     preferred: Option<String>,
     keymap_request: Option<Value>,
     theme: Option<TerminalTheme>,
+    cursor: Option<CursorShape>,
 }
 
 async fn run(
@@ -493,6 +497,7 @@ async fn run(
         preferred,
         keymap_request: None,
         theme: None,
+        cursor: None,
     };
     let mut token: Option<String> = None;
     let mut retry = 0u32;
@@ -526,6 +531,7 @@ async fn run(
                     Ok(HostCommand::Visible(visible)) => host.visible = visible,
                     Ok(HostCommand::Keymap(request)) => host.keymap_request = Some(request),
                     Ok(HostCommand::TerminalTheme(theme)) => host.set_theme(theme),
+                    Ok(HostCommand::DefaultCursor(shape)) => host.set_cursor(shape),
                     Ok(HostCommand::SetLabel(label)) => host.identity.label = label,
                     Ok(HostCommand::Resize { block_id, cols, rows, cell_width, cell_height, .. }) => {
                         if let Some(worker) = host.workers.get_mut(&block_id) {
@@ -1115,6 +1121,7 @@ impl Host {
                     .await?;
             }
             HostCommand::TerminalTheme(theme) => self.set_theme(theme),
+            HostCommand::DefaultCursor(shape) => self.set_cursor(shape),
             HostCommand::Reconnect | HostCommand::Shutdown => unreachable!("handled by the loop"),
         }
         Ok(())
@@ -1147,6 +1154,13 @@ impl Host {
         self.theme = theme.clone();
         for worker in self.workers.values() {
             worker.pane.send(PaneCommand::Theme(theme.clone()));
+        }
+    }
+
+    fn set_cursor(&mut self, shape: Option<CursorShape>) {
+        self.cursor = shape;
+        for worker in self.workers.values() {
+            worker.pane.send(PaneCommand::DefaultCursor(shape));
         }
     }
 
@@ -1201,6 +1215,9 @@ impl Host {
             };
             if let Some(theme) = &self.theme {
                 pane.send(PaneCommand::Theme(Some(theme.clone())));
+            }
+            if self.cursor.is_some() {
+                pane.send(PaneCommand::DefaultCursor(self.cursor));
             }
             self.shared.update(|m| {
                 m.panes.insert(block.clone(), pane.clone());
@@ -1360,6 +1377,7 @@ async fn stream(
     let mut welcome: Option<data::Welcome> = None;
     let mut visible = true;
     let mut theme: Option<TerminalTheme> = None;
+    let mut cursor: Option<CursorShape> = None;
     let mut failures = 0u32;
     loop {
         let attempt: Result<StreamEnd> = async {
@@ -1385,6 +1403,7 @@ async fn stream(
                 };
                 let mut fresh_state = TerminalState::new(fresh.nonce)?;
                 fresh_state.set_local_theme(theme.clone())?;
+                fresh_state.set_default_cursor(cursor)?;
                 state = Some(fresh_state);
                 welcome = Some(fresh);
                 publish(&|m| m.status = PaneStatus::Restoring);
@@ -1432,6 +1451,7 @@ async fn stream(
                             PaneCommand::SearchStep { older } => terminal.search_step(older)?,
                             PaneCommand::Prompt(direction) => { terminal.jump_to_prompt(direction)?; }
                             PaneCommand::Theme(next) => { theme = next.clone(); terminal.set_local_theme(next)?; }
+                            PaneCommand::DefaultCursor(next) => { cursor = next; terminal.set_default_cursor(next)?; }
                             PaneCommand::Reconnect => return Ok(StreamEnd::Retry),
                             PaneCommand::Stop => return Ok(StreamEnd::Stop),
                         }

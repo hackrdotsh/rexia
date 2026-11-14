@@ -71,6 +71,18 @@ pub enum FadeInactive {
     Both,
 }
 
+/// How fast cursors blink when their program asks for a blinking cursor.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum BlinkSpeed {
+    Off,
+    Slow,
+    #[default]
+    Normal,
+    Fast,
+    Custom,
+}
+
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(default)]
 pub struct TerminalSettings {
@@ -81,6 +93,27 @@ pub struct TerminalSettings {
     pub padding_x: f32,
     pub padding_y: f32,
     pub copy_on_select: bool,
+    /// The cursor programs get until they pick one.
+    pub cursor_style: crate::rex::stream::CursorShape,
+    /// Ignore programs that change the cursor's shape.
+    pub force_cursor_style: bool,
+    pub cursor_blink: BlinkSpeed,
+    /// The time between blinks with a custom speed, in milliseconds.
+    pub cursor_blink_ms: u32,
+}
+
+impl TerminalSettings {
+    /// The time between blinks, or none when cursors never blink.
+    pub fn blink_interval(&self) -> Option<std::time::Duration> {
+        let ms = match self.cursor_blink {
+            BlinkSpeed::Off => return None,
+            BlinkSpeed::Slow => 900,
+            BlinkSpeed::Normal => 600,
+            BlinkSpeed::Fast => 300,
+            BlinkSpeed::Custom => self.cursor_blink_ms.clamp(100, 5000),
+        };
+        Some(std::time::Duration::from_millis(ms as u64))
+    }
 }
 
 impl Default for TerminalSettings {
@@ -92,6 +125,10 @@ impl Default for TerminalSettings {
             padding_x: 8.,
             padding_y: 6.,
             copy_on_select: false,
+            cursor_style: crate::rex::stream::CursorShape::Block,
+            force_cursor_style: false,
+            cursor_blink: BlinkSpeed::Normal,
+            cursor_blink_ms: 600,
         }
     }
 }

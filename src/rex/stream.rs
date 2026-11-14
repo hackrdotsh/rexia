@@ -49,7 +49,8 @@ impl Cell {
     }
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "snake_case")]
 pub enum CursorShape {
     Block,
     HollowBlock,
@@ -184,6 +185,18 @@ pub struct TerminalState {
     /// The selection's fixed end, in screen coordinates (scrollback included).
     anchor: Option<(PointCoordinate, SelectMode)>,
     local_theme: Option<TerminalTheme>,
+    /// The cursor programs get until they choose one (and after they reset it).
+    default_cursor: Option<CursorShape>,
+}
+
+fn ghostty_cursor(shape: CursorShape) -> ghostty_vt::terminal::CursorStyle {
+    use ghostty_vt::terminal::CursorStyle;
+    match shape {
+        CursorShape::Block => CursorStyle::Block,
+        CursorShape::HollowBlock => CursorStyle::BlockHollow,
+        CursorShape::Bar => CursorStyle::Bar,
+        CursorShape::Underline => CursorStyle::Underline,
+    }
 }
 
 impl TerminalState {
@@ -201,6 +214,7 @@ impl TerminalState {
             events: Vec::new(),
             anchor: None,
             local_theme: None,
+            default_cursor: None,
         })
     }
 
@@ -238,6 +252,8 @@ impl TerminalState {
             if let Some(theme) = self.local_theme.clone() {
                 self.apply_theme(&theme)?;
             }
+            // A steady block is also the server's default, so it takes this client's.
+            self.apply_default_cursor(None)?;
             tail = rest;
             &tail[..]
         } else {
@@ -339,6 +355,33 @@ impl TerminalState {
                 self.events.push(event);
             }
         }
+    }
+
+    /// The cursor shape programs get by default. A program's own choice stays until it
+    /// resets the cursor; a cursor still showing the old default changes now.
+    pub fn set_default_cursor(&mut self, shape: Option<CursorShape>) -> Result<()> {
+        let previous = std::mem::replace(&mut self.default_cursor, shape);
+        self.apply_default_cursor(previous)
+    }
+
+    fn apply_default_cursor(&mut self, previous: Option<CursorShape>) -> Result<()> {
+        let Some(terminal) = self.terminal.as_mut() else {
+            return Ok(());
+        };
+        terminal.set_default_cursor_style(self.default_cursor.map(ghostty_cursor))?;
+        let snapshot = self.render.update(terminal)?;
+        let current = match snapshot.cursor_visual_style() {
+            Ok(CursorVisualStyle::Bar) => CursorShape::Bar,
+            Ok(CursorVisualStyle::Underline) => CursorShape::Underline,
+            Ok(CursorVisualStyle::BlockHollow) => CursorShape::HollowBlock,
+            _ => CursorShape::Block,
+        };
+        let steady = !snapshot.cursor_blinking().unwrap_or(false);
+        if steady && current == previous.unwrap_or(CursorShape::Block) {
+            // DECSCUSR 0: back to the default, which is now this one.
+            terminal.vt_write(b"\x1b[0 q");
+        }
+        Ok(())
     }
 
     /// Use these colors instead of the server's (the user picked a local theme).
@@ -732,6 +775,50 @@ mod tests {
         let mut state = TerminalState::new(42).unwrap();
         state.feed(&snapshot).unwrap();
         state
+    }
+
+    fn cursor_of(state: &mut TerminalState) -> (CursorShape, bool) {
+        let cursor = state.frame().unwrap().unwrap().cursor.unwrap();
+        (cursor.shape, cursor.blinking)
+    }
+
+    #[test]
+    fn default_cursor_applies_until_a_program_chooses() {
+        // A pane whose program hasn't chosen a cursor takes the default, even mid-stream.
+        let mut state = stream_from(b"$ ", 20, 4);
+        state.set_default_cursor(Some(CursorShape::Bar)).unwrap();
+        assert_eq!(cursor_of(&mut state), (CursorShape::Bar, false));
+        // A program's choice wins (vim's steady block), and its reset brings the default back.
+        state.feed(b"\x1b[2 q").unwrap();
+        assert_eq!(cursor_of(&mut state), (CursorShape::Block, false));
+        state
+            .set_default_cursor(Some(CursorShape::Underline))
+            .unwrap();
+        assert_eq!(cursor_of(&mut state), (CursorShape::Block, false));
+        state.feed(b"\x1b[0 q").unwrap();
+        assert_eq!(cursor_of(&mut state), (CursorShape::Underline, false));
+        // A blinking bar the program asked for is left alone.
+        state.feed(b"\x1b[5 q").unwrap();
+        state.set_default_cursor(None).unwrap();
+        assert_eq!(cursor_of(&mut state), (CursorShape::Bar, true));
+    }
+
+    #[test]
+    fn a_fresh_stream_starts_with_the_default_cursor() {
+        let mut terminal = Terminal::new(TerminalOptions {
+            cols: 20,
+            rows: 4,
+            ..Default::default()
+        })
+        .unwrap();
+        terminal.vt_write(b"$ ");
+        let snapshot = ghostty_vt::snapshot::encode(&terminal).unwrap();
+        let mut state = TerminalState::new(7).unwrap();
+        state
+            .set_default_cursor(Some(CursorShape::Underline))
+            .unwrap();
+        state.feed(&snapshot).unwrap();
+        assert_eq!(cursor_of(&mut state), (CursorShape::Underline, false));
     }
 
     #[test]

@@ -183,14 +183,18 @@ impl Workspace {
                 let preferred = (index == active)
                     .then(|| settings.last_session.clone())
                     .flatten();
-                spawn_host(
+                let entry = spawn_host(
                     config.clone(),
                     &identity,
                     preferred,
                     index == active,
                     window,
                     cx,
-                )
+                );
+                entry.handle.send(HostCommand::DefaultCursor(Some(
+                    settings.terminal.cursor_style,
+                )));
+                entry
             })
             .collect();
 
@@ -289,6 +293,9 @@ impl Workspace {
                 endpoint,
             };
             let mut entry = spawn_host(config, &self.identity, None, false, window, cx);
+            entry.handle.send(HostCommand::DefaultCursor(Some(
+                self.settings.terminal.cursor_style,
+            )));
             entry.server_id = Some(id);
             self.hosts.push(entry);
         }
@@ -355,6 +362,12 @@ impl Workspace {
         self.panes
             .retain(|block, _| visible.iter().any(|(_, id)| id == block));
         let copy_on_select = self.settings.terminal.copy_on_select;
+        let force_cursor = self
+            .settings
+            .terminal
+            .force_cursor_style
+            .then_some(self.settings.terminal.cursor_style);
+        let blink = self.settings.terminal.blink_interval();
         let padding = Point::new(
             px(self.settings.terminal.padding_x),
             px(self.settings.terminal.padding_y),
@@ -367,6 +380,8 @@ impl Workspace {
                     let mut pane = TerminalPane::new(host, session, block, font, cx);
                     pane.copy_on_select = copy_on_select;
                     pane.padding = padding;
+                    pane.force_cursor = force_cursor;
+                    pane.blink = blink;
                     pane
                 })
             });
