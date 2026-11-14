@@ -1,5 +1,7 @@
 //! The main window: a toolbar with the session's tabs, a sidebar of hosts and sessions,
 //! and the active tab's panes laid out exactly as the server arranges them.
+mod actions;
+
 use super::{
     components::{dot, heading, icon_button, list_row, small_icon_button, title},
     fonts::{self, TerminalFont},
@@ -9,6 +11,7 @@ use super::{
     titles,
 };
 use crate::{
+    keymap::{self, Keymap},
     noctalia,
     rex::{
         activity::ProgramState,
@@ -19,6 +22,7 @@ use crate::{
     },
     settings::{HostConfig, PaneHeaders, PaneStyle, Settings},
 };
+pub use actions::{Outcome, Target};
 use gpui::{
     AnyElement, App, Bounds, Context, Entity, FocusHandle, Focusable, Hsla, MouseButton,
     MouseMoveEvent, MouseUpEvent, Pixels, Point, SharedString, Task, Window, canvas, div,
@@ -68,6 +72,13 @@ pub struct Workspace {
     /// Sessions whose tabs are listed in the sidebar.
     expanded: HashSet<String>,
     pub notice: Option<String>,
+    /// The active host's keymap, and the reply it came from.
+    keymap: Keymap,
+    keymap_source: Option<Value>,
+    /// Active key modes, innermost last.
+    modes: Vec<String>,
+    /// Keys typed so far of a sequence, each as its spellings.
+    pending: Vec<Vec<String>>,
     _tasks: Vec<Task<()>>,
     _watcher: Option<noctalia::Watcher>,
 }
@@ -127,6 +138,7 @@ impl Workspace {
                 let handle = HostHandle::spawn(endpoint_for(config), identity.clone(), preferred);
                 handle.send(HostCommand::TerminalTheme(Some(theme.clone())));
                 handle.send(HostCommand::Visible(index == active));
+                handle.send(HostCommand::Keymap(super::actions::keymap_request()));
                 let wake = handle.wake.clone();
                 tasks.push(cx.spawn_in(window, async move |this, cx| {
                     while wake.recv_async().await.is_ok() {
@@ -187,6 +199,10 @@ impl Workspace {
             focused: None,
             expanded: HashSet::new(),
             notice: None,
+            keymap: Keymap::default(),
+            keymap_source: None,
+            modes: Vec::new(),
+            pending: Vec::new(),
             _tasks: tasks,
             _watcher: watcher,
         }
@@ -210,6 +226,8 @@ impl Workspace {
 
     /// Bring panes in line with the active host's model after it changed.
     pub fn sync(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        self.refresh_keymap();
+        self.handle_performs(window, cx);
         let model = self.model();
         if let Some(message) = model.notices.last().cloned() {
             self.notice = Some(message);
@@ -285,16 +303,26 @@ impl Workspace {
         self.model().selected
     }
 
-    pub fn select_session(&mut self, host: usize, session: String, cx: &mut Context<Self>) {
-        if host != self.active {
-            self.hosts[self.active]
-                .handle
-                .send(HostCommand::Visible(false));
-            self.active = host;
-            self.panes.clear();
-            self.focused = None;
-            self.hosts[host].handle.send(HostCommand::Visible(true));
+    /// Show another host's sessions; only the shown host streams terminals.
+    pub fn switch_host(&mut self, host: usize, cx: &mut Context<Self>) {
+        if host == self.active || host >= self.hosts.len() {
+            return;
         }
+        self.hosts[self.active]
+            .handle
+            .send(HostCommand::Visible(false));
+        self.active = host;
+        self.panes.clear();
+        self.focused = None;
+        self.modes.clear();
+        self.pending.clear();
+        self.hosts[host].handle.send(HostCommand::Visible(true));
+        self.refresh_keymap();
+        cx.notify();
+    }
+
+    pub fn select_session(&mut self, host: usize, session: String, cx: &mut Context<Self>) {
+        self.switch_host(host, cx);
         self.hosts[host]
             .handle
             .send(HostCommand::Select(session.clone()));
@@ -303,14 +331,7 @@ impl Workspace {
     }
 
     pub fn new_session(&mut self, host: usize, cx: &mut Context<Self>) {
-        if host != self.active {
-            self.hosts[self.active]
-                .handle
-                .send(HostCommand::Visible(false));
-            self.active = host;
-            self.panes.clear();
-            self.hosts[host].handle.send(HostCommand::Visible(true));
-        }
+        self.switch_host(host, cx);
         self.hosts[host].handle.send(HostCommand::CreateSession {
             label: None,
             reply: None,
@@ -1217,6 +1238,91 @@ fn activity_mark(
     mark.into_any_element()
 }
 
+impl Workspace {
+    /// The innermost active key mode.
+    pub fn active_mode(&self) -> Option<String> {
+        self.modes.last().cloned()
+    }
+
+    /// How many keys of a sequence are waiting for the rest.
+    pub fn pending_keys(&self) -> usize {
+        self.pending.len()
+    }
+
+    /// The active mode, and the keys that can follow a started sequence.
+    fn key_hint(&self, theme: &Theme) -> Option<AnyElement> {
+        let mode = self.modes.last();
+        if mode.is_none() && self.pending.is_empty() {
+            return None;
+        }
+        let mut pill = div()
+            .absolute()
+            .bottom(px(16.))
+            .right(px(16.))
+            .flex()
+            .flex_col()
+            .gap(px(4.))
+            .p(px(10.))
+            .max_w(px(420.))
+            .rounded(theme.radius())
+            .bg(theme.surface_high)
+            .when(theme.popup_borders, |d| {
+                d.border(theme.border_width).border_color(theme.border)
+            })
+            .when(theme.popup_shadows, |d| d.shadow_lg())
+            .text_size(px(12.));
+        if let Some(mode) = mode {
+            pill = pill.child(
+                div()
+                    .flex()
+                    .gap(px(6.))
+                    .child(
+                        div()
+                            .px(px(6.))
+                            .rounded(theme.radius_small())
+                            .bg(theme.primary)
+                            .text_color(theme.on_primary)
+                            .child(mode.clone()),
+                    )
+                    .child(div().text_color(theme.text_muted).child("Esc leaves")),
+            );
+        }
+        if !self.pending.is_empty() {
+            let typed = self.pending.len();
+            for binding in self
+                .keymap
+                .continuations(mode.map(String::as_str), &self.pending)
+                .into_iter()
+                .take(12)
+            {
+                let title = super::actions::find(&binding.action)
+                    .map(|a| a.title.to_owned())
+                    .or_else(|| {
+                        self.keymap
+                            .actions
+                            .iter()
+                            .find(|a| a.name == binding.action)
+                            .and_then(|a| a.title.clone())
+                    })
+                    .unwrap_or_else(|| binding.action.clone());
+                pill = pill.child(
+                    div()
+                        .flex()
+                        .gap(px(10.))
+                        .child(
+                            div()
+                                .min_w(px(70.))
+                                .text_color(theme.primary)
+                                .child(keymap::display(&binding.keys[typed..])),
+                        )
+                        .child(title),
+                );
+            }
+        }
+        Some(pill.into_any_element())
+    }
+}
+
 impl Focusable for Workspace {
     fn focus_handle(&self, _: &App) -> FocusHandle {
         self.focus.clone()
@@ -1276,6 +1382,7 @@ impl Render for Workspace {
             .bg(theme.background)
             .text_color(theme.text)
             .font_family(theme.ui_font.clone())
+            .capture_key_down(cx.listener(Self::on_key_down))
             .on_mouse_move(cx.listener(Self::on_mouse_move))
             .on_mouse_up(MouseButton::Left, cx.listener(Self::on_mouse_up))
             .child(toolbar)
@@ -1288,5 +1395,6 @@ impl Render for Workspace {
                     .child(panes),
             )
             .children(notice)
+            .children(self.key_hint(&theme))
     }
 }
