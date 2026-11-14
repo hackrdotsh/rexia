@@ -101,6 +101,12 @@ when checked, and are built in this order; each moves to its section once it's d
 
 Working:
 
+- Braille (U+2800–28FF) and block elements (U+2580–259F) are drawn by rexia rather than
+  taken from a font, as Ghostty does: braille as square dots on a 2 × 4 grid sized to the
+  cell, blocks and shades as exact fills, on whole device pixels. Fonts such as
+  DepartureMono have no braille, and the fallback font's dots (some draw the unset ones
+  hollow) turned btop's graphs into hatching.
+
 - Pasting and dropping. A paste that would run as it's pasted (a line break when the
   program hasn't turned on bracketed paste, or anything that would end a bracketed paste)
   asks first, showing the text, with Cancel as the default. Files copied in a file manager
