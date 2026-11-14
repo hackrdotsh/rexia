@@ -229,7 +229,7 @@ impl Workspace {
             focused: None,
             expanded: HashSet::new(),
             notice: None,
-            keymap: Keymap::default(),
+            keymap: super::actions::fallback_keymap(),
             keymap_source: None,
             modes: Vec::new(),
             pending: Vec::new(),

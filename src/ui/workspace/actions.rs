@@ -44,7 +44,11 @@ impl Workspace {
             .keymap
             .clone();
         if value.as_ref() != self.keymap_source.as_ref() {
-            self.keymap = value.as_ref().map(Keymap::parse).unwrap_or_default();
+            // Until the server answers, rexia's own defaults apply, so early keys still work.
+            self.keymap = value
+                .as_ref()
+                .map(Keymap::parse)
+                .unwrap_or_else(actions::fallback_keymap);
             // A mode the new keymap no longer has can't stay active.
             self.modes.retain(|m| self.keymap.modes.contains_key(m));
             self.keymap_source = value;

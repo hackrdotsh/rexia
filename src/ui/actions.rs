@@ -708,10 +708,30 @@ pub fn keymap_request() -> Value {
     json!({"actions": actions, "defaults": [{"name": "rexia", "bindings": bindings}]})
 }
 
+/// rexia's default bindings alone, for before the server's keymap arrives.
+pub fn fallback_keymap() -> crate::keymap::Keymap {
+    let request = keymap_request();
+    crate::keymap::Keymap::parse(&json!({
+        "bindings": request["defaults"][0]["bindings"],
+        "actions": request["actions"],
+    }))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
     use std::collections::HashSet;
+
+    #[test]
+    fn fallback_keymap_binds_the_palette() {
+        let keymap = fallback_keymap();
+        assert!(
+            keymap
+                .bindings
+                .iter()
+                .any(|b| b.action == "client.palette.commands" || b.keys == ["ctrl+shift+p"])
+        );
+    }
 
     #[test]
     fn names_are_unique_and_default_keys_do_not_collide() {
