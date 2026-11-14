@@ -34,6 +34,8 @@ pub enum ListKind {
     MoveToTab,
     Hosts,
     RemoveHost,
+    /// Choose an action to give a new key.
+    Shortcuts,
     /// Browse directories: open a tab there, or (`insert`) type the path into the pane.
     Directory {
         insert: bool,
@@ -50,6 +52,7 @@ impl ListKind {
             Self::MoveToTab => "Move the pane to a tab",
             Self::Hosts => "Switch to a host",
             Self::RemoveHost => "Remove a host",
+            Self::Shortcuts => "Choose an action to give a new key",
             Self::Directory { .. } => "Path",
         }
     }
@@ -64,6 +67,7 @@ impl ListKind {
             Self::MoveToTab => "pane.move_to_tab",
             Self::Hosts => "client.host.switch",
             Self::RemoveHost => "client.host.remove",
+            Self::Shortcuts => "client.shortcuts.edit",
             Self::Directory { insert: false } => "pane.go_to_directory",
             Self::Directory { insert: true } => "pane.insert_path",
         }
@@ -101,6 +105,10 @@ pub enum Choice {
     RemoveHost {
         id: String,
         label: String,
+    },
+    Shortcut {
+        name: String,
+        title: String,
     },
     Path {
         path: String,
@@ -141,6 +149,7 @@ pub enum RenameTarget {
 pub enum Confirm {
     CloseSession { id: String },
     RemoveHost { id: String },
+    RestartServer,
 }
 
 pub enum Dialog {
@@ -165,6 +174,11 @@ pub enum Dialog {
     },
     Diagnostics {
         text: String,
+    },
+    /// Change Shortcut, waiting for the next key.
+    Shortcut {
+        action: String,
+        title: String,
     },
 }
 
@@ -396,6 +410,25 @@ fn host_items(ws: &Workspace) -> Vec<Item> {
         .collect()
 }
 
+fn shortcut_items(ws: &Workspace) -> Vec<Item> {
+    actions::ACTIONS
+        .iter()
+        .filter(|a| actions::rebindable(a) && a.name != "client.key.forward")
+        .map(|a| Item {
+            title: a.title.to_owned(),
+            detail: Some(a.category.to_owned()),
+            keys: ws.keymap.keys_for(a.name, None).map(keymap::display),
+            icon: "keyboard",
+            status: None,
+            current: false,
+            choice: Choice::Shortcut {
+                name: a.name.to_owned(),
+                title: a.title.to_owned(),
+            },
+        })
+        .collect()
+}
+
 fn removable_hosts(ws: &Workspace) -> Vec<Item> {
     ws.hosts
         .iter()
@@ -445,6 +478,14 @@ fn focus_input(input: &Entity<TextInput>, window: &mut Window, cx: &mut Context<
 }
 
 impl Workspace {
+    /// What's typed into an open list's field.
+    pub fn list_query(&self, cx: &gpui::App) -> Option<String> {
+        match &self.overlay {
+            Some(Overlay::List(list)) => Some(list.input.read(cx).text().to_owned()),
+            _ => None,
+        }
+    }
+
     /// The titles a list shows, in order.
     pub fn list_titles(&self) -> Vec<String> {
         match &self.overlay {
@@ -490,6 +531,7 @@ impl Workspace {
             ListKind::MoveToTab => move_items(self),
             ListKind::Hosts => host_items(self),
             ListKind::RemoveHost => removable_hosts(self),
+            ListKind::Shortcuts => shortcut_items(self),
             ListKind::Directory { .. } => Vec::new(),
         };
         let input = cx.new(|cx| TextInput::new(kind.placeholder(), cx));
@@ -755,6 +797,7 @@ impl Workspace {
                 }
             }
             Choice::Host(index) => self.switch_host(index, cx),
+            Choice::Shortcut { name, title } => self.record_shortcut(name, title, window, cx),
             Choice::RemoveHost { id, label } => self.open_confirm(
                 format!("Remove {label}?"),
                 "Every device that uses this home server stops listing it. Its sessions keep running.".into(),
@@ -864,6 +907,7 @@ impl Workspace {
         let action = action.clone();
         self.close_overlay(window, cx);
         match action {
+            Confirm::RestartServer => self.restart_server(cx),
             Confirm::CloseSession { id } => self
                 .host()
                 .handle
@@ -1412,6 +1456,29 @@ impl Workspace {
                         .on_click(cx.listener(|ws, _, window, cx| ws.submit_add_host(window, cx)))
                         .into_any_element(),
                 ]))
+                .into_any_element(),
+            Dialog::Shortcut { action, title } => div()
+                .flex()
+                .flex_col()
+                .gap(px(10.))
+                .child(heading("Change Shortcut".into()))
+                .child(
+                    div()
+                        .text_size(px(14.))
+                        .child(format!("Press the new key for {title}.")),
+                )
+                .child(
+                    div()
+                        .text_size(px(13.))
+                        .text_color(theme.text_muted)
+                        .child(format!("Now: {}", self.shortcut_of(action))),
+                )
+                .child(
+                    div()
+                        .text_size(px(12.))
+                        .text_color(theme.text_muted)
+                        .child("Esc keeps it · Backspace removes it"),
+                )
                 .into_any_element(),
             Dialog::Diagnostics { text } => {
                 let copy = text.clone();

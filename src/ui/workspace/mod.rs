@@ -2,6 +2,7 @@
 //! and the active tab's panes laid out exactly as the server arranges them.
 mod actions;
 mod attention;
+mod extras;
 mod filter;
 mod overlay;
 mod preferences;
@@ -57,6 +58,7 @@ fn spawn_host(
     identity: &Identity,
     preferred: Option<String>,
     visible: bool,
+    shortcuts: &super::actions::Shortcuts,
     window: &mut Window,
     cx: &mut Context<Workspace>,
 ) -> HostEntry {
@@ -65,7 +67,9 @@ fn spawn_host(
         Theme::get(cx).terminal_theme(),
     )));
     handle.send(HostCommand::Visible(visible));
-    handle.send(HostCommand::Keymap(super::actions::keymap_request()));
+    handle.send(HostCommand::Keymap(super::actions::keymap_request(
+        shortcuts,
+    )));
     let wake = handle.wake.clone();
     let task = cx.spawn_in(window, async move |this, cx| {
         while wake.recv_async().await.is_ok() {
@@ -131,6 +135,8 @@ pub struct Workspace {
     find: Option<overlay::FindBar>,
     filter: filter::TabFilter,
     identity: Identity,
+    /// How Toggle Visibility hides the window.
+    hide_window: std::rc::Rc<dyn Fn(&mut Window)>,
     /// The window this workspace fills, to tell it from rexia's other windows.
     window_handle: Option<gpui::AnyWindowHandle>,
     /// Preferences changed since other windows last heard.
@@ -208,6 +214,7 @@ impl Workspace {
                     &identity,
                     preferred,
                     index == active,
+                    &settings.shortcuts,
                     window,
                     cx,
                 );
@@ -248,6 +255,7 @@ impl Workspace {
         };
 
         let filter = filter::TabFilter::new(window, cx);
+        let fallback = super::actions::fallback_keymap(&settings.shortcuts);
         Self {
             font: terminal_font(&settings),
             settings,
@@ -263,7 +271,7 @@ impl Workspace {
             focused: None,
             expanded: HashSet::new(),
             notice: None,
-            keymap: super::actions::fallback_keymap(),
+            keymap: fallback,
             keymap_source: None,
             modes: Vec::new(),
             pending: Vec::new(),
@@ -271,6 +279,7 @@ impl Workspace {
             find: None,
             filter,
             identity,
+            hide_window: std::rc::Rc::new(|window: &mut Window| window.minimize_window()),
             window_handle: Some(window.window_handle()),
             settings_changed: std::cell::Cell::new(false),
             tracker: Default::default(),
@@ -316,7 +325,15 @@ impl Workspace {
                 label,
                 endpoint,
             };
-            let mut entry = spawn_host(config, &self.identity, None, false, window, cx);
+            let mut entry = spawn_host(
+                config,
+                &self.identity,
+                None,
+                false,
+                &self.settings.shortcuts,
+                window,
+                cx,
+            );
             entry.handle.send(HostCommand::DefaultCursor(Some(
                 self.settings.terminal.cursor_style,
             )));

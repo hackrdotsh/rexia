@@ -48,7 +48,7 @@ impl Workspace {
             self.keymap = value
                 .as_ref()
                 .map(Keymap::parse)
-                .unwrap_or_else(actions::fallback_keymap);
+                .unwrap_or_else(|| actions::fallback_keymap(&self.settings.shortcuts));
             // A mode the new keymap no longer has can't stay active.
             self.modes.retain(|m| self.keymap.modes.contains_key(m));
             self.keymap_source = value;
@@ -111,6 +111,11 @@ impl Workspace {
             } else if self.settings_key(&event.keystroke, window, cx) {
                 cx.stop_propagation();
             }
+            return;
+        }
+        if self.recording_shortcut().is_some() {
+            cx.stop_propagation();
+            self.shortcut_key(&event.keystroke, window, cx);
             return;
         }
         if self.overlay.is_some() {
@@ -865,6 +870,14 @@ impl Workspace {
             }
             "client.sidebar.toggle" => self.toggle_sidebar(cx),
             "client.sidebar.filter.focus" => self.focus_filter(window, cx),
+            "client.key.forward" => {
+                return Err(refused(
+                    "Send Key to Server works from the key it's bound to: it sends that key to the focused terminal for a script",
+                ));
+            }
+            "client.server.restart" => self.ask_restart_server(cx).map_err(refused)?,
+            "client.shortcuts.edit" => self.edit_shortcuts(window, cx),
+            "client.visibility.toggle" => return Ok(self.toggle_visibility(window)),
             "client.window.new" => self.open_new_window(cx),
             "client.window.close" => self.close_window(window),
             "client.tab.move_to_new_window" => self.move_tab_to_new_window(cx).map_err(refused)?,

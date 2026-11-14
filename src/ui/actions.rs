@@ -105,6 +105,34 @@ pub const ACTIONS: &[ActionDef] = &[
         [(&["ctrl+,"], None)]
     ),
     action!(
+        "client.key.forward",
+        "Send Key to Server",
+        "App",
+        "send key forward server script lua",
+        []
+    ),
+    action!(
+        "client.server.restart",
+        "Restart Server…",
+        "App",
+        "restart server stop start local rex",
+        []
+    ),
+    action!(
+        "client.shortcuts.edit",
+        "Change Shortcut…",
+        "App",
+        "change shortcut key binding rebind keyboard",
+        []
+    ),
+    action!(
+        "client.visibility.toggle",
+        "Toggle Visibility",
+        "Window",
+        "show hide visibility toggle front minimize",
+        []
+    ),
+    action!(
         "client.diagnostics",
         "Rex Diagnostics",
         "App",
@@ -755,7 +783,16 @@ pub fn find(name: &str) -> Option<&'static ActionDef> {
 
 /// The `client.keymap` request: rexia's actions and its default bindings as the bottom layer,
 /// beneath init.lua and client scripts.
-pub fn keymap_request() -> Value {
+/// Shortcuts the user gave actions: the keys of one binding each, by action name.
+pub type Shortcuts = std::collections::BTreeMap<String, Vec<String>>;
+
+/// Whether Change Shortcut can rebind `action`: actions whose default keys carry
+/// arguments, such as Go to Tab 1–9, keep them.
+pub fn rebindable(action: &ActionDef) -> bool {
+    action.keys.iter().all(|(_, args)| args.is_none())
+}
+
+pub fn keymap_request(shortcuts: &Shortcuts) -> Value {
     let actions: Vec<Value> = ACTIONS
         .iter()
         .map(|a| {
@@ -770,24 +807,37 @@ pub fn keymap_request() -> Value {
             action
         })
         .collect();
+    // A key the user gave one action leaves every other action's defaults.
+    let claimed: Vec<&Vec<String>> = shortcuts.values().filter(|k| !k.is_empty()).collect();
     let bindings: Vec<Value> = ACTIONS
         .iter()
-        .flat_map(|a| {
-            a.keys.iter().map(|(keys, args)| {
-                let mut binding = json!({"keys": keys, "action": a.name});
-                if let Some(args) = args {
-                    binding["args"] = serde_json::from_str(args).expect("valid args");
-                }
-                binding
-            })
+        .flat_map(|a| -> Vec<Value> {
+            if let Some(keys) = shortcuts.get(a.name).filter(|_| rebindable(a)) {
+                return if keys.is_empty() {
+                    Vec::new()
+                } else {
+                    vec![json!({"keys": keys, "action": a.name})]
+                };
+            }
+            a.keys
+                .iter()
+                .filter(|(keys, _)| !claimed.iter().any(|c| c.as_slice() == *keys))
+                .map(|(keys, args)| {
+                    let mut binding = json!({"keys": keys, "action": a.name});
+                    if let Some(args) = args {
+                        binding["args"] = serde_json::from_str(args).expect("valid args");
+                    }
+                    binding
+                })
+                .collect()
         })
         .collect();
     json!({"actions": actions, "defaults": [{"name": "rexia", "bindings": bindings}]})
 }
 
 /// rexia's default bindings alone, for before the server's keymap arrives.
-pub fn fallback_keymap() -> crate::keymap::Keymap {
-    let request = keymap_request();
+pub fn fallback_keymap(shortcuts: &Shortcuts) -> crate::keymap::Keymap {
+    let request = keymap_request(shortcuts);
     crate::keymap::Keymap::parse(&json!({
         "bindings": request["defaults"][0]["bindings"],
         "actions": request["actions"],
@@ -801,7 +851,7 @@ mod tests {
 
     #[test]
     fn fallback_keymap_binds_the_palette() {
-        let keymap = fallback_keymap();
+        let keymap = fallback_keymap(&Shortcuts::new());
         assert!(
             keymap
                 .bindings
@@ -834,8 +884,36 @@ mod tests {
     }
 
     #[test]
+    fn shortcuts_replace_defaults_and_take_their_keys() {
+        let mut shortcuts = Shortcuts::new();
+        // Split Right moves to ctrl+alt+k; Toggle Sidebar takes Split Right's old key.
+        shortcuts.insert("pane.split.right".into(), vec!["ctrl+alt+k".into()]);
+        let old = find("pane.split.right").unwrap().keys[0].0.to_vec();
+        shortcuts.insert(
+            "client.sidebar.toggle".into(),
+            old.iter().map(|k| k.to_string()).collect(),
+        );
+        // Find loses its key.
+        shortcuts.insert("client.find.open".into(), Vec::new());
+        let request = keymap_request(&shortcuts);
+        let bindings = request["defaults"][0]["bindings"].as_array().unwrap();
+        let keys_of = |action: &str| -> Vec<Value> {
+            bindings
+                .iter()
+                .filter(|b| b["action"] == action)
+                .map(|b| b["keys"].clone())
+                .collect()
+        };
+        assert_eq!(keys_of("pane.split.right"), vec![json!(["ctrl+alt+k"])]);
+        assert_eq!(keys_of("client.sidebar.toggle"), vec![json!(old)]);
+        assert!(keys_of("client.find.open").is_empty());
+        // Go to Tab keeps its numbered keys: they carry arguments.
+        assert!(!rebindable(find("client.tab.goto").unwrap()));
+    }
+
+    #[test]
     fn request_lists_actions_with_schemas_and_bindings() {
-        let request = keymap_request();
+        let request = keymap_request(&Shortcuts::new());
         let actions = request["actions"].as_array().unwrap();
         assert_eq!(actions.len(), ACTIONS.len());
         let goto = actions

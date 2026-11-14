@@ -374,6 +374,9 @@ pub struct Settings {
     /// The host and session shown last, restored at launch.
     pub last_host: Option<String>,
     pub last_session: Option<String>,
+    /// Keys the user gave rexia's actions with Change Shortcut, replacing their defaults.
+    /// An empty list leaves the action without a key.
+    pub shortcuts: std::collections::BTreeMap<String, Vec<String>>,
 }
 
 impl Default for Settings {
@@ -386,6 +389,7 @@ impl Default for Settings {
             notifications: NotificationSettings::default(),
             last_host: None,
             last_session: None,
+            shortcuts: Default::default(),
         }
     }
 }
