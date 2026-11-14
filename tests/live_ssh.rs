@@ -20,6 +20,14 @@ fn fake_ssh(dir: &std::path::Path, rex: &str) -> std::path::PathBuf {
         .to_string();
     let home = dir.join("home");
     std::fs::create_dir_all(&home).unwrap();
+    // The host without rex gets a PATH holding only sh, so a system-wide rex can't help it.
+    let bare = dir.join("bare-bin");
+    std::fs::create_dir_all(&bare).unwrap();
+    let sh = std::env::split_paths(&std::env::var_os("PATH").unwrap())
+        .map(|d| d.join("sh"))
+        .find(|p| p.exists())
+        .expect("sh on PATH");
+    std::os::unix::fs::symlink(sh, bare.join("sh")).unwrap();
     let script = dir.join("ssh");
     let log = dir.join("args.log");
     std::fs::write(
@@ -30,13 +38,14 @@ printf '%s\n' "$*" >> '{log}'
 for a; do dest=$last; last=$a; done
 export HOME='{home}'
 case "$dest" in
-  *norex) ;;
+  *norex) PATH='{bare}'; export PATH ;;
   *) PATH='{rex_dir}':"$PATH"; export PATH ;;
 esac
 exec sh -c "$last"
 "#,
             log = log.display(),
             home = home.display(),
+            bare = bare.display(),
         ),
     )
     .unwrap();
