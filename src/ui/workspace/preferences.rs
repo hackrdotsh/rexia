@@ -5,8 +5,8 @@ use crate::{
     rex::stream::CursorShape,
     rex::{activity::ProgramState, host::HostCommand},
     settings::{
-        BlinkSpeed, FadeInactive, NoticePosition, PaneHeaders, PaneStyle, Settings, StateActivity,
-        TextStyles, ToolbarBehavior, ToolbarLayout,
+        BlinkSpeed, FadeInactive, HighlightAnimation, HighlightColor, NoticePosition, PaneHeaders,
+        PaneStyle, Settings, StateActivity, TextStyles, ToolbarBehavior, ToolbarLayout,
     },
     sound::{self, Cue},
     ui::{
@@ -604,9 +604,40 @@ impl Workspace {
             self.toggle_row(
                 "highlight",
                 "Highlight active pane edges",
-                "Draw the focused pane's border in the primary color.",
+                "Draw the focused pane's border in the highlight color.",
                 |s| s.interface.highlight_active_pane,
                 |s, v| s.interface.highlight_active_pane = v,
+                theme,
+                cx,
+            ),
+            self.highlight_color_row(theme, cx),
+            self.stepper_row(
+                "highlight-opacity",
+                "Highlight opacity",
+                "How strongly the highlight draws.",
+                format!("{:.0}%", i.highlight_opacity * 100.),
+                |s| {
+                    let v = ((s.interface.highlight_opacity - 0.1) * 10.).round() / 10.;
+                    s.interface.highlight_opacity = v.max(0.2);
+                },
+                |s| {
+                    let v = ((s.interface.highlight_opacity + 0.1) * 10.).round() / 10.;
+                    s.interface.highlight_opacity = v.min(1.);
+                },
+                theme,
+                cx,
+            ),
+            self.choice_row(
+                "highlight-animation",
+                "Animate active pane highlight",
+                "Fade it in on the newly focused pane, move it there, or switch at once.",
+                &[
+                    (HighlightAnimation::Fade, "Fade"),
+                    (HighlightAnimation::Move, "Move"),
+                    (HighlightAnimation::Instant, "Instant"),
+                ],
+                i.highlight_animation,
+                |s, v| s.interface.highlight_animation = v,
                 theme,
                 cx,
             ),
@@ -622,6 +653,15 @@ impl Workspace {
                 ],
                 i.fade_inactive,
                 |s, v| s.interface.fade_inactive = v,
+                theme,
+                cx,
+            ),
+            self.toggle_row(
+                "fade-inactive-windows",
+                "Fade panes for inactive windows",
+                "While the window isn't focused, its panes fade as inactive panes do.",
+                |s| s.interface.fade_inactive_windows,
+                |s, v| s.interface.fade_inactive_windows = v,
                 theme,
                 cx,
             ),
@@ -830,6 +870,57 @@ impl Workspace {
             cx,
         ));
         rows
+    }
+
+    /// Accent, the terminal text color, or one of the 16 terminal colors, as swatches.
+    fn highlight_color_row(&self, theme: &Theme, cx: &mut Context<Self>) -> AnyElement {
+        let current = self.settings.interface.highlight_color;
+        let named = [
+            (HighlightColor::Accent, "Accent"),
+            (HighlightColor::Text, "Text"),
+        ];
+        let buttons = named.into_iter().map(|(value, label)| {
+            button(format!("highlight-{label}"), label, value == current, theme).on_click(
+                cx.listener(move |ws, _, _, cx| {
+                    ws.update_settings(|s| s.interface.highlight_color = value, cx)
+                }),
+            )
+        });
+        let swatches = (0..16u8).map(|index| {
+            let chosen = current == HighlightColor::Palette(index);
+            div()
+                .id(SharedString::from(format!("highlight-swatch-{index}")))
+                .size(px(14.))
+                .rounded(theme.radius_small())
+                .bg(crate::ui::theme::color(
+                    theme.terminal.ansi[usize::from(index)],
+                ))
+                .cursor_pointer()
+                .when(chosen, |d| d.border_2().border_color(theme.text))
+                .on_click(cx.listener(move |ws, _, _, cx| {
+                    ws.update_settings(
+                        |s| s.interface.highlight_color = HighlightColor::Palette(index),
+                        cx,
+                    )
+                }))
+        });
+        row(
+            "highlight-color",
+            "Highlight color",
+            "The accent, the terminal's text color, or one of its 16 colors.",
+            theme,
+        )
+        .child(
+            div()
+                .flex()
+                .flex_col()
+                .flex_none()
+                .items_end()
+                .gap(px(6.))
+                .child(div().flex().gap(px(4.)).children(buttons))
+                .child(div().grid().grid_cols(8).gap(px(3.)).children(swatches)),
+        )
+        .into_any_element()
     }
 
     /// A small picture of the window: click where notices should float.

@@ -51,6 +51,29 @@ impl ToolbarLayout {
     }
 }
 
+/// What color the active pane's highlight draws in.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum HighlightColor {
+    /// Noctalia's primary color.
+    #[default]
+    Accent,
+    /// One of the terminal's 16 colors.
+    Palette(u8),
+    /// The terminal's text color.
+    Text,
+}
+
+/// How the highlight reaches a newly focused pane.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum HighlightAnimation {
+    #[default]
+    Fade,
+    Move,
+    Instant,
+}
+
 /// When the toolbar shows: always, when the pointer reaches the top of the window, or only
 /// after Reveal Toolbar.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
@@ -202,7 +225,13 @@ pub struct InterfaceSettings {
     pub pane_style: PaneStyle,
     pub pane_headers: PaneHeaders,
     pub highlight_active_pane: bool,
+    pub highlight_color: HighlightColor,
+    /// How strongly the highlight draws, from 0.2 to 1.
+    pub highlight_opacity: f32,
+    pub highlight_animation: HighlightAnimation,
     pub fade_inactive: FadeInactive,
+    /// Fade the panes of a window that isn't focused, as inactive panes fade.
+    pub fade_inactive_windows: bool,
     pub focus_follows_mouse: bool,
     /// Show the activity filter in the sidebar instead of sessions.
     pub activity_view: bool,
@@ -221,7 +250,11 @@ impl Default for InterfaceSettings {
             pane_style: PaneStyle::Comfortable,
             pane_headers: PaneHeaders::Always,
             highlight_active_pane: true,
+            highlight_color: HighlightColor::Accent,
+            highlight_opacity: 1.0,
+            highlight_animation: HighlightAnimation::Fade,
             fade_inactive: FadeInactive::Off,
+            fade_inactive_windows: false,
             focus_follows_mouse: false,
             activity_view: false,
             activity_by_priority: false,

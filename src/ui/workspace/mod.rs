@@ -4,6 +4,7 @@ mod actions;
 mod attention;
 mod extras;
 mod filter;
+mod highlight;
 mod overlay;
 mod preferences;
 mod toolbar;
@@ -27,13 +28,16 @@ use crate::{
         host::{HostCommand, HostHandle, HostModel, shell_layout},
         view::{self, Rect},
     },
-    settings::{FadeInactive, HostConfig, PaneHeaders, PaneStyle, Settings, ToolbarLayout},
+    settings::{
+        FadeInactive, HighlightAnimation, HostConfig, PaneHeaders, PaneStyle, Settings,
+        ToolbarLayout,
+    },
 };
 pub use actions::{Outcome, Target};
 use gpui::{
-    AnyElement, App, Bounds, Context, Entity, FocusHandle, Focusable, Hsla, MouseButton,
-    MouseMoveEvent, MouseUpEvent, Pixels, Point, SharedString, Task, Window, canvas, div,
-    prelude::*, px, relative,
+    AnimationExt as _, AnyElement, App, Bounds, Context, Entity, FocusHandle, Focusable, Hsla,
+    MouseButton, MouseMoveEvent, MouseUpEvent, Pixels, Point, SharedString, Task, Window, canvas,
+    div, prelude::*, px, relative,
 };
 pub use overlay::{Confirm, ListKind, RenameTarget};
 pub use preferences::Section as SettingsSection;
@@ -118,6 +122,9 @@ pub struct Workspace {
     /// Where the notice was drawn, from the last paint.
     notice_area: Option<Bounds<Pixels>>,
     reveal: toolbar::Reveal,
+    highlight: highlight::Track,
+    /// Whether the window had the desktop's focus at the last draw.
+    window_active: bool,
     drag: Option<Drag>,
     /// The block this client last focused for the server's focused block.
     focused: Option<String>,
@@ -267,6 +274,8 @@ impl Workspace {
             area: Bounds::default(),
             notice_area: None,
             reveal: Default::default(),
+            highlight: Default::default(),
+            window_active: true,
             drag: None,
             focused: None,
             expanded: HashSet::new(),
@@ -1096,6 +1105,18 @@ impl Workspace {
             _ => None,
         };
 
+        let highlighting =
+            self.settings.interface.highlight_active_pane && window.panes().len() > 1;
+        let focused_rect = window
+            .panes()
+            .into_iter()
+            .find(|p| focused.as_deref() == Some(p.block_id.as_str()))
+            .map(|p| p.rect);
+        self.track_highlight(focused.clone().filter(|_| highlighting), focused_rect);
+        let animation = self.settings.interface.highlight_animation;
+        let tint = self.highlight_color(theme);
+        let moves = self.highlight.moves;
+        let window_fade = self.window_fade();
         let mut area = div().flex_1().relative().overflow_hidden().child(tracker);
         for pane in window.panes() {
             let Some(terminal) = self.panes.get(&pane.block_id).cloned() else {
@@ -1126,14 +1147,17 @@ impl Workspace {
                     cx,
                 )
             });
-            let border = if is_focused
-                && self.settings.interface.highlight_active_pane
-                && window.panes().len() > 1
-            {
-                theme.primary
+            let highlighted = is_focused && highlighting;
+            // A moving highlight is drawn over the panes instead of on one.
+            let border = if highlighted && animation != HighlightAnimation::Move {
+                tint
             } else {
                 theme.border
             };
+            let faded_header =
+                (fade_header && !is_focused) || window_fade.is_some_and(|(header, _)| header);
+            let faded_content =
+                (fade_content && !is_focused) || window_fade.is_some_and(|(_, content)| content);
             let card = div()
                 .size_full()
                 .flex()
@@ -1149,16 +1173,28 @@ impl Workspace {
                 .children(header.map(|header| {
                     div()
                         .flex_none()
-                        .when(fade_header && !is_focused, |d| d.opacity(0.55))
+                        .when(faded_header, |d| d.opacity(0.55))
                         .child(header)
                 }))
                 .child(
                     div()
                         .flex_1()
                         .min_h_0()
-                        .when(fade_content && !is_focused, |d| d.opacity(0.6))
+                        .when(faded_content, |d| d.opacity(0.6))
                         .child(terminal),
                 );
+            let bordered = theme.card_borders || floating.is_some();
+            // A fading highlight comes up on the newly focused pane.
+            let card = if highlighted && bordered && animation == HighlightAnimation::Fade {
+                card.with_animation(
+                    SharedString::from(format!("highlight-{}-{moves}", pane.block_id)),
+                    gpui::Animation::new(highlight::HIGHLIGHT_MOTION),
+                    move |card, t| card.border_color(tint.opacity(t)),
+                )
+                .into_any_element()
+            } else {
+                card.into_any_element()
+            };
             let hover_block = pane.block_id.clone();
             let hover_session = session.clone();
             let card = div()
@@ -1181,6 +1217,9 @@ impl Workspace {
         }
         for divider in window.dividers() {
             area = area.child(self.divider(&session, divider, theme, cx));
+        }
+        if highlighting {
+            area = area.children(self.render_moving_highlight(gap, theme));
         }
         if let Some(Drag::Divider { divider, .. }) = &self.drag {
             area = area.child(divider_guide(divider, theme));
@@ -1572,7 +1611,8 @@ impl Focusable for Workspace {
 }
 
 impl Render for Workspace {
-    fn render(&mut self, _: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+    fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+        self.window_active = window.is_window_active();
         if self.settings_changed.take() {
             self.share_settings(cx);
         }
