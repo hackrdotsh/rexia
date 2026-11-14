@@ -1,6 +1,7 @@
 //! The main window: a toolbar with the session's tabs, a sidebar of hosts and sessions,
 //! and the active tab's panes laid out exactly as the server arranges them.
 mod actions;
+mod attention;
 mod overlay;
 
 use super::{
@@ -121,6 +122,8 @@ pub struct Workspace {
     overlay: Option<overlay::Overlay>,
     find: Option<overlay::FindBar>,
     identity: Identity,
+    tracker: crate::ui::activity::Tracker,
+    notifier: Option<crate::notify::Notifier>,
     _tasks: Vec<Task<()>>,
     _watcher: Option<noctalia::Watcher>,
 }
@@ -236,6 +239,8 @@ impl Workspace {
             overlay: None,
             find: None,
             identity,
+            tracker: Default::default(),
+            notifier: None,
             _tasks: tasks,
             _watcher: watcher,
         }
@@ -319,6 +324,7 @@ impl Workspace {
         self.reconcile_hosts(window, cx);
         self.refresh_keymap();
         self.handle_performs(window, cx);
+        self.process_activity(window);
         let model = self.model();
         if let Some(message) = model.notices.last().cloned() {
             self.notice = Some(message);
@@ -652,7 +658,7 @@ impl Workspace {
                 let id = window.id().to_owned();
                 let active = active_window.as_deref() == Some(window.id());
                 let label = titles::tab_title(window, model);
-                let activity = titles::tab_activity(window, model).map(|r| (r.state, r.badge()));
+                let activity = self.tab_mark(self.active, window, model);
                 let focused_state = window
                     .focused_block_id
                     .as_ref()
@@ -807,8 +813,7 @@ impl Workspace {
                 let selected =
                     index == self.active && model.selected.as_ref() == Some(&session.session_id);
                 let id = session.session_id.clone();
-                let activity = titles::session_activity(&session.session_id, &model)
-                    .map(|r| (r.state, r.badge()));
+                let activity = self.session_mark(index, &session.session_id, &model);
                 let windows = model
                     .views
                     .get(&session.session_id)
@@ -1096,9 +1101,7 @@ impl Workspace {
         cx: &mut Context<Self>,
     ) -> AnyElement {
         let label = titles::pane_title(block, state);
-        let status = state
-            .and_then(|s| s.status())
-            .filter(|r| r.state != ProgramState::Idle);
+        let status = self.mark_for(self.active, block_id, state);
         let muted = if focused {
             theme.text
         } else {
@@ -1133,7 +1136,7 @@ impl Workspace {
                     .whitespace_nowrap()
                     .child(label),
             )
-            .children(status.map(|r| activity_mark(r.state, r.badge(), false, theme)));
+            .children(status.map(|(state, badge)| activity_mark(state, badge, false, theme)));
         if let Some(layer) = floating {
             let layer_id = layer.to_owned();
             let session = session.to_owned();
@@ -1425,11 +1428,13 @@ impl Render for Workspace {
         let theme = Theme::get(cx).clone();
         let model = self.model();
         let toolbar = self.render_toolbar(&model, &theme, cx);
-        let sidebar = self
-            .settings
-            .interface
-            .sidebar
-            .then(|| self.render_sidebar(&theme, cx));
+        let sidebar = self.settings.interface.sidebar.then(|| {
+            if self.settings.interface.activity_view {
+                self.render_activity_sidebar(&theme, cx)
+            } else {
+                self.render_sidebar(&theme, cx)
+            }
+        });
         let panes = self.render_panes(&model, &theme, cx);
         let notice = self.notice.clone().map(|message| {
             div()

@@ -227,8 +227,7 @@ fn session_items(ws: &Workspace) -> Vec<Item> {
     for (index, host) in ws.hosts.iter().enumerate() {
         let model = host.handle.snapshot();
         for session in &model.sessions {
-            let status =
-                titles::session_activity(&session.session_id, &model).map(|r| (r.state, r.badge()));
+            let status = ws.session_mark(index, &session.session_id, &model);
             items.push(Item {
                 title: session.label.clone(),
                 detail: Some(host.config.label.clone()),
@@ -258,7 +257,7 @@ fn go_to_items(ws: &Workspace) -> Vec<Item> {
                     detail: Some(format!("Tab in {session_label}")),
                     keys: None,
                     icon: "layout-sidebar",
-                    status: titles::tab_activity(window, &model).map(|r| (r.state, r.badge())),
+                    status: ws.tab_mark(index, window, &model),
                     current: false,
                     choice: Choice::Window {
                         host: index,

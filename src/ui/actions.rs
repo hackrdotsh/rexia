@@ -670,6 +670,27 @@ pub const ACTIONS: &[ActionDef] = &[
         "sidebar collapse expand hide show",
         [(&["ctrl+shift+b"], None)]
     ),
+    action!(
+        "client.sidebar.activity.toggle",
+        "Toggle Activity View",
+        "View",
+        "activity sidebar attention blocked done programs filter",
+        [(&["ctrl+shift+."], None)]
+    ),
+    action!(
+        "client.sidebar.activity.by_session",
+        "Group Activity by Session",
+        "View",
+        "activity sidebar group session",
+        []
+    ),
+    action!(
+        "client.sidebar.activity.by_priority",
+        "Sort Activity by Priority",
+        "View",
+        "activity sidebar sort priority urgency",
+        []
+    ),
 ];
 
 pub fn find(name: &str) -> Option<&'static ActionDef> {

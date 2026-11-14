@@ -832,6 +832,19 @@ impl Workspace {
                 self.save_settings();
             }
             "client.sidebar.toggle" => self.toggle_sidebar(cx),
+            "client.sidebar.activity.toggle" => {
+                let interface = &mut self.settings.interface;
+                interface.activity_view = !interface.activity_view;
+                interface.sidebar = true;
+                self.save_settings();
+            }
+            "client.sidebar.activity.by_session" | "client.sidebar.activity.by_priority" => {
+                let interface = &mut self.settings.interface;
+                interface.activity_view = true;
+                interface.sidebar = true;
+                interface.activity_by_priority = name == "client.sidebar.activity.by_priority";
+                self.save_settings();
+            }
             other => {
                 return Err((
                     "not_supported".into(),

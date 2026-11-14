@@ -1,6 +1,7 @@
 //! Start rexia: read settings and the Noctalia theme, then open the workspace window.
 use crate::{
     noctalia,
+    notify::Notifier,
     settings::{self, HostConfig, Settings},
     ui::{icons::Assets, theme::Theme, workspace::Workspace},
 };
@@ -85,7 +86,14 @@ pub fn run() -> anyhow::Result<()> {
                     window_min_size: Some(size(px(480.), px(320.))),
                     ..Default::default()
                 },
-                |window, cx| cx.new(|cx| Workspace::new(settings, save_path, true, window, cx)),
+                |window, cx| {
+                    cx.new(|cx| {
+                        let mut workspace = Workspace::new(settings, save_path, true, window, cx);
+                        let (notifier, clicks) = Notifier::spawn(None);
+                        workspace.set_notifier(notifier, clicks, window, cx);
+                        workspace
+                    })
+                },
             );
             if let Err(error) = opened {
                 eprintln!("rexia: couldn't open a window: {error:#}");

@@ -91,6 +91,7 @@
               rust-analyzer
               python3
               nixfmt
+              dbus
             ];
             inherit (package) GHOSTTY_SOURCE_DIR GHOSTTY_ZIG_SYSTEM_DIR;
             LD_LIBRARY_PATH = pkgs.lib.makeLibraryPath package.passthru.runtimeLibraries;
