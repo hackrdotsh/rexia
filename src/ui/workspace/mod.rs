@@ -22,7 +22,7 @@ use crate::{
         host::{HostCommand, HostHandle, HostModel, shell_layout},
         view::{self, Rect},
     },
-    settings::{HostConfig, PaneHeaders, PaneStyle, Settings},
+    settings::{FadeInactive, HostConfig, PaneHeaders, PaneStyle, Settings},
 };
 pub use actions::{Outcome, Target};
 use gpui::{
@@ -556,6 +556,31 @@ impl Workspace {
         );
     }
 
+    /// With focus follows mouse, the pane under the pointer takes focus.
+    fn focus_on_hover(&mut self, session: &str, block: &str) {
+        if !self.settings.interface.focus_follows_mouse
+            || self.drag.is_some()
+            || self.overlay.is_some()
+            || self.focused.as_deref() == Some(block)
+        {
+            return;
+        }
+        let focused = self
+            .model()
+            .view()
+            .and_then(view::View::active_window)
+            .and_then(|w| w.focused_block_id.clone());
+        if focused.as_deref() == Some(block) {
+            return;
+        }
+        // Only ask once per pane until the server answers.
+        self.focused = Some(block.to_owned());
+        self.call(
+            "session.focus_block",
+            json!({"session_id": session, "block_id": block}),
+        );
+    }
+
     pub fn toggle_sidebar(&mut self, cx: &mut Context<Self>) {
         self.settings.interface.sidebar = !self.settings.interface.sidebar;
         self.save_settings();
@@ -962,6 +987,14 @@ impl Workspace {
             PaneStyle::Compact => 2.,
         };
         let headers = self.settings.interface.pane_headers;
+        // Fading needs something to stand out against.
+        let fade = if window.panes().len() > 1 {
+            self.settings.interface.fade_inactive
+        } else {
+            FadeInactive::Off
+        };
+        let fade_header = matches!(fade, FadeInactive::Surface | FadeInactive::Both);
+        let fade_content = matches!(fade, FadeInactive::Content | FadeInactive::Both);
         let focused = window.focused_block_id.clone();
         let zoomed = window.zoomed_block_id.is_some();
         let dragged_layer = match &self.drag {
@@ -1024,8 +1057,28 @@ impl Workspace {
                 .when(floating.is_some() && theme.popup_shadows, |d| d.shadow_lg())
                 .bg(theme.background)
                 .group(SharedString::from(format!("pane-{}", pane.block_id)))
-                .children(header)
-                .child(div().flex_1().min_h_0().child(terminal));
+                .children(header.map(|header| {
+                    div()
+                        .flex_none()
+                        .when(fade_header && !is_focused, |d| d.opacity(0.55))
+                        .child(header)
+                }))
+                .child(
+                    div()
+                        .flex_1()
+                        .min_h_0()
+                        .when(fade_content && !is_focused, |d| d.opacity(0.6))
+                        .child(terminal),
+                );
+            let hover_block = pane.block_id.clone();
+            let hover_session = session.clone();
+            let card = div()
+                .id(SharedString::from(format!("card-{}", pane.block_id)))
+                .size_full()
+                .on_mouse_move(cx.listener(move |ws, _: &MouseMoveEvent, _, _| {
+                    ws.focus_on_hover(&hover_session, &hover_block)
+                }))
+                .child(card);
             area = area.child(
                 div()
                     .absolute()
