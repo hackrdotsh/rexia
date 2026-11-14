@@ -109,6 +109,8 @@ pub struct Workspace {
     focus: FocusHandle,
     /// The pane area in window coordinates, from the last paint.
     area: Bounds<Pixels>,
+    /// Where the notice was drawn, from the last paint.
+    notice_area: Option<Bounds<Pixels>>,
     drag: Option<Drag>,
     /// The block this client last focused for the server's focused block.
     focused: Option<String>,
@@ -237,6 +239,7 @@ impl Workspace {
             panes: HashMap::new(),
             focus: cx.focus_handle(),
             area: Bounds::default(),
+            notice_area: None,
             drag: None,
             focused: None,
             expanded: HashSet::new(),
@@ -1410,6 +1413,11 @@ fn activity_mark(
 }
 
 impl Workspace {
+    /// Where the last notice was drawn, in window coordinates.
+    pub fn notice_bounds(&self) -> Option<Bounds<Pixels>> {
+        self.notice_area
+    }
+
     /// The innermost active key mode.
     pub fn active_mode(&self) -> Option<String> {
         self.modes.last().cloned()
@@ -1513,14 +1521,31 @@ impl Render for Workspace {
             }
         });
         let panes = self.render_panes(&model, &theme, cx);
+        if self.notice.is_none() {
+            self.notice_area = None;
+        }
+        let position = self.settings.notifications.notice_position;
+        let entity = cx.entity();
         let notice = self.notice.clone().map(|message| {
+            let tracker = canvas(
+                move |bounds, _, cx| entity.update(cx, |ws, _| ws.notice_area = Some(bounds)),
+                |_, _, _, _| {},
+            )
+            .absolute()
+            .inset_0();
             div()
                 .id("notice")
                 .absolute()
-                .bottom(px(16.))
-                .left(relative(0.5))
-                .ml(px(-220.))
+                // Clear of the toolbar at the top, and of the window's edge.
+                .when(position.top(), |d| d.top(px(60.)))
+                .when(!position.top(), |d| d.bottom(px(16.)))
+                .map(|d| match position.column() {
+                    0 => d.left(px(16.)),
+                    2 => d.right(px(16.)),
+                    _ => d.left(relative(0.5)).ml(px(-220.)),
+                })
                 .w(px(440.))
+                .child(tracker)
                 .flex()
                 .items_center()
                 .gap(px(10.))

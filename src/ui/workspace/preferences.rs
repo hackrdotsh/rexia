@@ -4,7 +4,9 @@ use super::{Workspace, overlay::Overlay};
 use crate::{
     rex::stream::CursorShape,
     rex::{activity::ProgramState, host::HostCommand},
-    settings::{BlinkSpeed, FadeInactive, PaneHeaders, PaneStyle, Settings, StateActivity},
+    settings::{
+        BlinkSpeed, FadeInactive, NoticePosition, PaneHeaders, PaneStyle, Settings, StateActivity,
+    },
     sound::{self, Cue},
     ui::{
         components::list_row,
@@ -676,9 +678,72 @@ impl Workspace {
         rows
     }
 
+    /// A small picture of the window: click where notices should float.
+    fn notice_position_row(&self, theme: &Theme, cx: &mut Context<Self>) -> AnyElement {
+        let current = self.settings.notifications.notice_position;
+        let cell = |position: NoticePosition| {
+            let chosen = position == current;
+            div()
+                .id(SharedString::from(format!("notice-{}", position.label())))
+                .flex()
+                .flex_1()
+                .p(px(3.))
+                .cursor_pointer()
+                .when(position.top(), |d| d.items_start())
+                .when(!position.top(), |d| d.items_end())
+                .map(|d| match position.column() {
+                    0 => d.justify_start(),
+                    2 => d.justify_end(),
+                    _ => d.justify_center(),
+                })
+                .child(
+                    div()
+                        .w(px(26.))
+                        .h(px(8.))
+                        .rounded(theme.radius_small())
+                        .when(chosen, |d| d.bg(theme.primary))
+                        .when(!chosen, |d| {
+                            d.bg(theme.overlay(0.1)).hover(|d| d.bg(theme.overlay(0.2)))
+                        }),
+                )
+                .on_click(cx.listener(move |ws, _, _, cx| {
+                    ws.update_settings(|s| s.notifications.notice_position = position, cx)
+                }))
+        };
+        let half = |positions: &[NoticePosition]| {
+            div()
+                .flex()
+                .flex_1()
+                .children(positions.iter().map(|p| cell(*p)))
+        };
+        row(
+            "notice-position",
+            "Notification position",
+            current.label(),
+            theme,
+        )
+        .child(
+            div()
+                .flex()
+                .flex_col()
+                .flex_none()
+                .w(px(132.))
+                .h(px(80.))
+                .rounded(theme.radius_small())
+                .bg(theme.background)
+                .when(theme.card_borders, |d| {
+                    d.border(theme.border_width).border_color(theme.border)
+                })
+                .child(half(&NoticePosition::ALL[..3]))
+                .child(half(&NoticePosition::ALL[3..])),
+        )
+        .into_any_element()
+    }
+
     fn notifications_section(&self, theme: &Theme, cx: &mut Context<Self>) -> Vec<AnyElement> {
         let n = &self.settings.notifications;
         let mut rows = vec![
+            self.notice_position_row(theme, cx),
             self.toggle_row(
                 "activity-tabs",
                 "Show activity in tabs",

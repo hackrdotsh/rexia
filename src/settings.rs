@@ -184,9 +184,59 @@ impl Default for StateActivity {
     }
 }
 
+/// Where notices float in the window.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum NoticePosition {
+    TopLeft,
+    TopCenter,
+    TopRight,
+    BottomLeft,
+    #[default]
+    BottomCenter,
+    BottomRight,
+}
+
+impl NoticePosition {
+    pub const ALL: [NoticePosition; 6] = [
+        Self::TopLeft,
+        Self::TopCenter,
+        Self::TopRight,
+        Self::BottomLeft,
+        Self::BottomCenter,
+        Self::BottomRight,
+    ];
+
+    pub fn top(self) -> bool {
+        matches!(self, Self::TopLeft | Self::TopCenter | Self::TopRight)
+    }
+
+    /// 0 for left, 1 for center, 2 for right.
+    pub fn column(self) -> usize {
+        match self {
+            Self::TopLeft | Self::BottomLeft => 0,
+            Self::TopCenter | Self::BottomCenter => 1,
+            Self::TopRight | Self::BottomRight => 2,
+        }
+    }
+
+    pub fn label(self) -> &'static str {
+        match self {
+            Self::TopLeft => "Top left",
+            Self::TopCenter => "Top center",
+            Self::TopRight => "Top right",
+            Self::BottomLeft => "Bottom left",
+            Self::BottomCenter => "Bottom center",
+            Self::BottomRight => "Bottom right",
+        }
+    }
+}
+
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(default)]
 pub struct NotificationSettings {
+    /// Where in-app notices float in the window.
+    pub notice_position: NoticePosition,
     /// Show working dots and attention badges on tabs.
     pub activity_in_tabs: bool,
     /// Keep tabs whose programs report idle in the activity list.
@@ -218,6 +268,7 @@ impl Default for NotificationSettings {
             sounds: false,
             sound_volume: 1.0,
             terminal_notifications: true,
+            notice_position: NoticePosition::BottomCenter,
             working: StateActivity {
                 tabs: true,
                 notify: false,
