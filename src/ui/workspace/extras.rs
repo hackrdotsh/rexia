@@ -34,8 +34,8 @@ impl Workspace {
         let endpoint = self.host().handle.endpoint.clone();
         self.host().handle.call("server.stop", json!({}));
         let rex = std::env::var("REXIA_REX").unwrap_or_else(|_| "rex".into());
+        let args = self.restart_args();
         cx.spawn(async move |this, cx| {
-            let address = endpoint.to_string();
             let outcome = cx
                 .background_executor()
                 .spawn(async move {
@@ -48,7 +48,7 @@ impl Workspace {
                         }
                     }
                     std::process::Command::new(&rex)
-                        .args(["-S", &address, "server", "start"])
+                        .args(&args)
                         .output()
                         .map_err(|error| format!("Couldn't run {rex}: {error}"))
                 })

@@ -35,16 +35,18 @@ pub enum Section {
     Hosts,
     Server,
     Integrations,
+    Developer,
 }
 
 impl Section {
-    pub const ALL: [Section; 6] = [
+    pub const ALL: [Section; 7] = [
         Section::Interface,
         Section::Terminal,
         Section::Notifications,
         Section::Hosts,
         Section::Server,
         Section::Integrations,
+        Section::Developer,
     ];
 
     fn title(self) -> &'static str {
@@ -55,6 +57,7 @@ impl Section {
             Section::Hosts => "Client & Hosts",
             Section::Server => "Server",
             Section::Integrations => "Integrations",
+            Section::Developer => "Developer",
         }
     }
 
@@ -66,6 +69,7 @@ impl Section {
             Section::Hosts => "server",
             Section::Server => "power",
             Section::Integrations => "command",
+            Section::Developer => "file-code",
         }
     }
 }
@@ -83,7 +87,9 @@ pub struct SettingsPage {
     pub(super) ssh_socket: Entity<TextInput>,
     /// The startup command for new local terminals; Enter applies.
     pub(super) startup: Entity<TextInput>,
-    _subscriptions: [Subscription; 5],
+    /// A browser origin pattern to allow; Enter adds it.
+    pub(super) origin: Entity<TextInput>,
+    _subscriptions: [Subscription; 6],
 }
 
 fn state_mut(settings: &mut Settings, state: ProgramState) -> &mut StateActivity {
@@ -224,6 +230,7 @@ impl Workspace {
             let text = self.settings.terminal.startup_command.clone();
             startup.update(cx, |input, cx| input.set_text(text, cx));
         }
+        let origin = cx.new(|cx| TextInput::new("https://*.example.com", cx));
         let ssh_socket = cx.new(|cx| TextInput::new("/path/to/agent.sock", cx));
         if let Some(socket) = &self.settings.ssh_agent {
             let text = socket.display().to_string();
@@ -233,6 +240,23 @@ impl Workspace {
             cx.subscribe_in(&label, window, on_submit),
             cx.subscribe_in(&font, window, on_submit),
             cx.subscribe_in(&fallbacks, window, on_submit),
+            cx.subscribe_in(
+                &origin,
+                window,
+                |ws: &mut Workspace, input: &Entity<TextInput>, event: &InputEvent, _, cx| {
+                    if let InputEvent::Submit { .. } = event {
+                        let text = input.read(cx).text().to_owned();
+                        match ws.add_origin(&text, cx) {
+                            Ok(()) => {
+                                ws.origin_error = None;
+                                input.update(cx, |input, cx| input.set_text(String::new(), cx));
+                            }
+                            Err(why) => ws.origin_error = Some(why),
+                        }
+                        cx.notify();
+                    }
+                },
+            ),
             cx.subscribe_in(
                 &startup,
                 window,
@@ -266,6 +290,7 @@ impl Workspace {
             ts_control: cx.new(|cx| TextInput::new("Tailscale's own", cx)),
             ssh_socket,
             startup,
+            origin,
             _subscriptions: subscriptions,
         })));
         cx.notify();
@@ -1674,6 +1699,7 @@ impl Workspace {
             Section::Hosts => self.hosts_section(page, theme, cx),
             Section::Server => self.server_section(theme, cx),
             Section::Integrations => self.integrations_section(theme, cx),
+            Section::Developer => self.developer_section(page, theme, cx),
         };
         let nav: Vec<_> = Section::ALL
             .iter()

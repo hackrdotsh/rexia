@@ -4,6 +4,7 @@ mod actions;
 pub mod agents;
 mod attention;
 mod cursor_shaders;
+mod developer;
 mod extras;
 mod filter;
 pub mod gestures;
@@ -140,6 +141,8 @@ pub struct Workspace {
     reveal: toolbar::Reveal,
     highlight: highlight::Track,
     swipe: gestures::SwipeTracker,
+    /// Why the last origin pattern wasn't added.
+    origin_error: Option<String>,
     motion: motion::Motion,
     agents: agents::AgentsState,
     shader_preview: cursor_shaders::ShaderPreview,
@@ -311,6 +314,7 @@ impl Workspace {
             reveal: Default::default(),
             highlight: Default::default(),
             swipe: Default::default(),
+            origin_error: None,
             motion: Default::default(),
             agents: Default::default(),
             shader_preview: Default::default(),

@@ -619,6 +619,9 @@ pub struct Settings {
     /// Paths chosen in the path browser, newest first, by host ID: every session on a
     /// host shares them. Directories end in `/`.
     pub recent_paths: std::collections::BTreeMap<String, Vec<String>>,
+    /// Browser origins allowed to open Rex WebSocket streams, passed to the server when
+    /// rexia starts it.
+    pub web_origins: Vec<String>,
 }
 
 impl Default for Settings {
@@ -634,6 +637,7 @@ impl Default for Settings {
             shortcuts: Default::default(),
             ssh_agent: None,
             recent_paths: Default::default(),
+            web_origins: Vec::new(),
         }
     }
 }
