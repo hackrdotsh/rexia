@@ -67,6 +67,15 @@ Working:
 - Terminal rendering through libghostty-vt: colors, styles, wide characters, scrollback,
   selection, search, mouse reporting, bracketed paste, OSC 52 clipboard writes, and
   OSC 8 links opened with ctrl+click (web, mail and file links only).
+- Kitty graphics: images sent directly (RGB, RGBA, grayscale or PNG, compressed or not,
+  in chunks), and for servers on this machine through files, temporary files in `/tmp`
+  and shared memory; placements with cell sizes, offsets, source rectangles and z-index
+  in all three layers (below backgrounds, below text, above text); Unicode placeholders
+  (virtual placements, as tmux-friendly tools use); placements relative to other
+  placements; animations; deletion; and images already on screen when rexia attaches.
+  The Rex server answers programs' queries, so programs see support. Images scale from
+  the server's cell size to rexia's. For a remote server, files, temporary files and
+  shared memory name things on that machine, so only directly sent images show.
 - The server's keymap, including modes, sequences and init.lua bindings. rexia's
   defaults apply until the server answers.
 - Remote control: other clients' `client.perform` requests run in rexia and are answered
