@@ -441,6 +441,17 @@ impl Workspace {
                 let panes = view.as_ref().map_or(0, |v| {
                     v.windows.iter().map(|w| w.blocks().count()).sum::<usize>()
                 });
+                let blocks: Vec<String> = view
+                    .as_ref()
+                    .filter(|v| v.session_id.as_deref() == Some(id.as_str()))
+                    .map(|v| {
+                        v.windows
+                            .iter()
+                            .flat_map(|w| w.blocks().filter_map(|b| b.block_id.clone()))
+                            .collect()
+                    })
+                    .unwrap_or_default();
+                let busy = self.busy_in(&blocks);
                 self.open_confirm(
                     format!("Close {label}?"),
                     format!("The programs running in its {panes} panes across {tabs} tabs end."),
@@ -448,6 +459,12 @@ impl Workspace {
                     overlay::Confirm::CloseSession { id },
                     cx,
                 );
+                if let Some(overlay::Overlay::Dialog(overlay::Dialog::Confirm {
+                    programs, ..
+                })) = &mut self.overlay
+                {
+                    *programs = busy;
+                }
             }
             "client.notice.dismiss" => self.notice = None,
             "client.config.copy_path" => {
@@ -544,19 +561,14 @@ impl Workspace {
                     .as_ref()
                     .map(|w| w.id().to_owned())
                     .ok_or_else(|| refused("No tab is open"))?;
-                self.close_tab(id, cx);
+                self.request_close(super::close_guard::CloseTarget::Tab(id), cx);
             }
             "client.tab.close_others" => {
-                let view = view.as_ref().ok_or_else(|| refused("No session is open"))?;
-                let session = need_session()?;
-                let keep = view.active_window_id.clone();
-                for window in view.windows.iter().filter(|w| w.window_id != keep) {
-                    call(
-                        self,
-                        "session.close_window",
-                        json!({"session_id": session, "window_id": window.id()}),
-                    );
-                }
+                let keep = view
+                    .as_ref()
+                    .and_then(|v| v.active_window_id.clone())
+                    .ok_or_else(|| refused("No session is open"))?;
+                self.request_close(super::close_guard::CloseTarget::OtherTabs(keep), cx);
             }
             "client.tab.next" | "client.tab.previous"
                 if session
@@ -748,24 +760,13 @@ impl Workspace {
                 }
             }
             "pane.zoom" => self.toggle_zoom(need_block()?),
-            "pane.close" => self.close_pane(need_block()?),
+            "pane.close" => {
+                let block = need_block()?;
+                self.request_close(super::close_guard::CloseTarget::Pane(block), cx)
+            }
             "pane.close_others" => {
-                let window = window_view
-                    .as_ref()
-                    .ok_or_else(|| refused("No tab is open"))?;
                 let keep = need_block()?;
-                let session = need_session()?;
-                for other in window
-                    .blocks()
-                    .filter_map(|b| b.block_id.clone())
-                    .filter(|b| *b != keep)
-                {
-                    call(
-                        self,
-                        "block.close",
-                        json!({"session_id": session, "block_id": other}),
-                    );
-                }
+                self.request_close(super::close_guard::CloseTarget::OtherPanes(keep), cx);
             }
             "pane.balance" => {
                 let window = window_view

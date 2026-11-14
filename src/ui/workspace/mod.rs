@@ -4,6 +4,7 @@ mod actions;
 pub mod agents;
 mod attention;
 pub mod autobalance;
+pub mod close_guard;
 pub mod context_menu;
 mod cursor_shaders;
 mod developer;
@@ -947,7 +948,9 @@ impl Workspace {
                     .on_click(cx.listener(move |ws, _, _, cx| ws.select_tab(select_id.clone(), cx)))
                     .on_mouse_up(
                         MouseButton::Middle,
-                        cx.listener(move |ws, _, _, cx| ws.close_tab(close_id.clone(), cx)),
+                        cx.listener(move |ws, _, _, cx| {
+                            ws.request_close(close_guard::CloseTarget::Tab(close_id.clone()), cx)
+                        }),
                     )
                     .children(tab_icons::render_icons(
                         &self.tab_icon_list(&tab_id, false, model),
@@ -975,7 +978,9 @@ impl Workspace {
                             "x",
                             fg,
                             theme,
-                            cx.listener(move |ws, _, _, cx| ws.close_tab(id.clone(), cx)),
+                            cx.listener(move |ws, _, _, cx| {
+                                ws.request_close(close_guard::CloseTarget::Tab(id.clone()), cx)
+                            }),
                         ),
                     ))
                     .into_any_element()
@@ -1598,7 +1603,9 @@ impl Workspace {
                 "x",
                 muted,
                 theme,
-                cx.listener(move |ws, _, _, _| ws.close_pane(close_id.clone())),
+                cx.listener(move |ws, _, _, cx| {
+                    ws.request_close(close_guard::CloseTarget::Pane(close_id.clone()), cx)
+                }),
             ))
             .into_any_element()
     }

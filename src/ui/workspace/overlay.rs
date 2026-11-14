@@ -152,6 +152,8 @@ pub enum RenameTarget {
 
 #[derive(Clone, Debug, PartialEq)]
 pub enum Confirm {
+    /// Close a pane or tab with busy programs in it.
+    Close(super::close_guard::CloseTarget),
     /// Paste text that could run a command before it's read.
     Paste {
         block: String,
@@ -170,7 +172,7 @@ impl Confirm {
     /// The button that leaves things as they are.
     fn keep_label(&self) -> &'static str {
         match self {
-            Self::Paste { .. } => "Cancel",
+            Self::Paste { .. } | Self::Close(_) => "Cancel",
             Self::RemoveHost { .. } => "Keep Host",
             Self::CloseSession { .. } | Self::RestartServer => "Keep Running",
         }
@@ -195,6 +197,8 @@ pub enum Dialog {
         action: Confirm,
         /// Which button Enter presses: 0 keeps things as they are, 1 confirms.
         focused: usize,
+        /// Busy programs in what's closing; clicking one goes to its pane.
+        programs: Vec<super::close_guard::Busy>,
     },
     AddHost {
         label: Entity<TextInput>,
@@ -1081,8 +1085,54 @@ impl Workspace {
             confirm,
             action,
             focused: 0,
+            programs: Vec::new(),
         }));
         cx.notify();
+    }
+
+    /// A confirmation naming busy programs, where Enter goes ahead.
+    pub(super) fn open_confirm_busy(
+        &mut self,
+        title: String,
+        body: String,
+        confirm: String,
+        action: Confirm,
+        programs: Vec<super::close_guard::Busy>,
+        cx: &mut Context<Self>,
+    ) {
+        self.overlay = Some(Overlay::Dialog(Dialog::Confirm {
+            title,
+            body,
+            confirm,
+            action,
+            focused: 1,
+            programs,
+        }));
+        cx.notify();
+    }
+
+    /// The busy programs the open confirmation names, as "title (state)", for tests.
+    pub fn confirm_programs(&self) -> Option<Vec<String>> {
+        match &self.overlay {
+            Some(Overlay::Dialog(Dialog::Confirm { programs, .. })) => Some(
+                programs
+                    .iter()
+                    .map(|p| format!("{} ({})", p.title, p.state))
+                    .collect(),
+            ),
+            _ => None,
+        }
+    }
+
+    /// Leave the question and go to a busy program's pane.
+    pub fn go_to_busy(&mut self, block: String, window: &mut Window, cx: &mut Context<Self>) {
+        self.close_overlay(window, cx);
+        if let Some(session) = self.session_id() {
+            self.call(
+                "session.focus_block",
+                json!({"session_id": session, "block_id": block}),
+            );
+        }
     }
 
     pub fn confirm(&mut self, window: &mut Window, cx: &mut Context<Self>) {
@@ -1097,6 +1147,7 @@ impl Workspace {
                     pane.read(cx).paste_text(text);
                 }
             }
+            Confirm::Close(target) => self.close_now(target),
             Confirm::RestartServer => self.restart_server(cx),
             Confirm::CloseSession { id } => self
                 .host()
@@ -1631,6 +1682,7 @@ impl Workspace {
                 confirm,
                 focused,
                 action,
+                programs,
             } => div()
                 .flex()
                 .flex_col()
@@ -1642,6 +1694,31 @@ impl Workspace {
                         .text_color(theme.text_muted)
                         .child(body.clone()),
                 )
+                .children(programs.iter().map(|program| {
+                    let block = program.block.clone();
+                    div()
+                        .id(gpui::SharedString::from(format!("busy-{}", program.block)))
+                        .flex()
+                        .items_center()
+                        .justify_between()
+                        .gap(px(12.))
+                        .px(px(10.))
+                        .py(px(6.))
+                        .rounded(theme.radius_small())
+                        .bg(theme.overlay(0.05))
+                        .cursor_pointer()
+                        .hover(|d| d.bg(theme.overlay(0.1)))
+                        .on_click(cx.listener(move |ws, _, window, cx| {
+                            ws.go_to_busy(block.clone(), window, cx)
+                        }))
+                        .child(div().text_size(px(13.)).child(program.title.clone()))
+                        .child(
+                            div()
+                                .text_size(px(12.))
+                                .text_color(theme.primary)
+                                .child(program.state.clone()),
+                        )
+                }))
                 .child(actions_row(vec![
                     button(
                         "confirm-cancel",
