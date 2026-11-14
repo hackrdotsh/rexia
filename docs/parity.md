@@ -19,7 +19,9 @@ Implemented by area:
   select all, send key, go to anything, go to directory, insert path, view activity.
 - **Sessions (11):** new, close, rename, select, next and previous, switch, expand and
   collapse, refresh.
-- **Client (51):** windows (new, close, move a tab to its own, toggle visibility), send key to server, change shortcut, restart server, command palette, find, the sidebar's tab filter, toolbar layout and reveals, tabs (new, close, close others, go to, move,
+- **Client (51):** windows (new, close, move a tab to its own, toggle visibility), send
+  key to server, change shortcut, restart server, command palette, find, the sidebar's
+  tab filter, toolbar layout and reveals, tabs (new, close, close others, go to, move,
   rename, next and previous), modes, prompt jumps, page scrolling, font size, sidebar and
   activity view, hosts (add, remove, switch), settings, diagnostics, config path and
   reload, version and debug copy, notices, full screen.
@@ -50,7 +52,8 @@ Not implemented yet:
 | Terminal › Colors | Improve text contrast (text below a 3:1 contrast ratio against its background is lifted just enough) and force theme palette for text (program colors become the perceptually nearest theme color, then contrast is corrected). Display P3 doesn't apply on Linux. |
 | Terminal › Selection | Copy on select. |
 | Server › Client Info | Client label (`client.set_label`). Remote control is always on. |
-| Server › Rex Server, Remote Address, Tailscale | Not applicable: rexia doesn't manage servers. |
+| Server › Rex Server | Restart Server, from the palette. Server status and compatibility aren't shown; `rex server status` reports them. |
+| Server › Remote Address, Tailscale | Not built; set them up with `rex server` and `rex server tailscale`. |
 | Remote Hosts | HTTPS, WebSocket and `ssh://[USER@]HOST[:PORT][/SOCKET]` hosts, kept on the home server (`hosts.put`, `hosts.remove`) and shared with other clients. SSH hosts go through the system `ssh` (your keys, agent and `~/.ssh/config`) and `rex __internal dial-stdio` on the host, as the Rex CLI does; picking an SSH agent in rexia isn't built, so set `IdentityAgent` in `~/.ssh/config`. |
 | Integrations, Developer, App Icon, Launch | Not applicable or not built. |
 
