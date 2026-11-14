@@ -108,6 +108,8 @@ pub struct InterfaceSettings {
     pub focus_follows_mouse: bool,
     /// Show the activity filter in the sidebar instead of sessions.
     pub activity_view: bool,
+    /// Sort the activity filter by urgency instead of grouping it by session.
+    pub activity_by_priority: bool,
 }
 
 impl Default for InterfaceSettings {
@@ -121,6 +123,89 @@ impl Default for InterfaceSettings {
             fade_inactive: FadeInactive::Off,
             focus_follows_mouse: false,
             activity_view: false,
+            activity_by_priority: false,
+        }
+    }
+}
+
+/// What rexia does when a program reports one state.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct StateActivity {
+    pub tabs: bool,
+    pub notify: bool,
+    pub sound: bool,
+}
+
+impl Default for StateActivity {
+    fn default() -> Self {
+        Self {
+            tabs: true,
+            notify: true,
+            sound: true,
+        }
+    }
+}
+
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct NotificationSettings {
+    /// Show working dots and attention badges on tabs.
+    pub activity_in_tabs: bool,
+    /// Keep tabs whose programs report idle in the activity list.
+    pub include_idle: bool,
+    /// List each reporting pane of a tab on its own row.
+    pub each_process: bool,
+    /// Desktop notifications for program status while the pane isn't in view.
+    pub system_notifications: bool,
+    /// The count of unseen attention on rexia's launcher icon.
+    pub badge: bool,
+    pub sounds: bool,
+    pub sound_volume: f32,
+    /// Let programs send desktop notifications with OSC 9 and OSC 777.
+    pub terminal_notifications: bool,
+    pub working: StateActivity,
+    pub blocked: StateActivity,
+    pub error: StateActivity,
+    pub done: StateActivity,
+}
+
+impl Default for NotificationSettings {
+    fn default() -> Self {
+        Self {
+            activity_in_tabs: true,
+            include_idle: false,
+            each_process: false,
+            system_notifications: true,
+            badge: true,
+            sounds: false,
+            sound_volume: 1.0,
+            terminal_notifications: true,
+            working: StateActivity {
+                tabs: true,
+                notify: false,
+                sound: false,
+            },
+            blocked: StateActivity::default(),
+            error: StateActivity::default(),
+            done: StateActivity::default(),
+        }
+    }
+}
+
+impl NotificationSettings {
+    pub fn for_state(&self, state: crate::rex::activity::ProgramState) -> StateActivity {
+        use crate::rex::activity::ProgramState;
+        match state {
+            ProgramState::Working => self.working,
+            ProgramState::Blocked => self.blocked,
+            ProgramState::Error => self.error,
+            ProgramState::Done => self.done,
+            ProgramState::Idle => StateActivity {
+                tabs: self.include_idle,
+                notify: false,
+                sound: false,
+            },
         }
     }
 }
@@ -133,6 +218,7 @@ pub struct Settings {
     pub client_label: Option<String>,
     pub interface: InterfaceSettings,
     pub terminal: TerminalSettings,
+    pub notifications: NotificationSettings,
     /// The host and session shown last, restored at launch.
     pub last_host: Option<String>,
     pub last_session: Option<String>,
@@ -145,6 +231,7 @@ impl Default for Settings {
             client_label: None,
             interface: InterfaceSettings::default(),
             terminal: TerminalSettings::default(),
+            notifications: NotificationSettings::default(),
             last_host: None,
             last_session: None,
         }
@@ -212,5 +299,13 @@ mod tests {
         assert_eq!(partial.interface.pane_headers, PaneHeaders::Hidden);
         assert!(partial.interface.sidebar);
         assert_eq!(partial.hosts.len(), 1, "the local host is always there");
+        std::fs::write(&path, "[notifications.done]\nsound = false\n").unwrap();
+        let quiet = Settings::load(&path).unwrap();
+        assert!(!quiet.notifications.done.sound);
+        assert!(
+            quiet.notifications.done.notify,
+            "unset fields keep their defaults"
+        );
+        assert!(!quiet.notifications.working.notify);
     }
 }
