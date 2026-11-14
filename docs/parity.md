@@ -53,7 +53,7 @@ Not implemented yet:
 | Terminal › Colors | Improve text contrast (text below a 3:1 contrast ratio against its background is lifted just enough) and force theme palette for text (program colors become the perceptually nearest theme color, then contrast is corrected). Display P3 doesn't apply on Linux. |
 | Terminal › Selection | Copy on select. |
 | Server › Client Info | Client label (`client.set_label`). Remote control is always on. |
-| Server › Rex Server | Restart Server, from the palette. Server status and compatibility aren't shown; `rex server status` reports them. |
+| Server › Rex Server | Settings › Server shows whether the server is running, where, and for how long, with its version, build, platform, API revisions, process and session count. Compatibility compares the server's API revision with the revisions rexia speaks, and, for this computer's server, the installed `rex` with the running one: after an update it says the server is still the old version and offers Restart Server (also in the palette). |
 | Server › Remote Address, Tailscale | Not built; set them up with `rex server` and `rex server tailscale`. |
 | Remote Hosts | HTTPS, WebSocket and `ssh://[USER@]HOST[:PORT][/SOCKET]` hosts, kept on the home server (`hosts.put`, `hosts.remove`) and shared with other clients. SSH hosts go through the system `ssh` (your keys, agent and `~/.ssh/config`) and `rex __internal dial-stdio` on the host, as the Rex CLI does; picking an SSH agent in rexia isn't built, so set `IdentityAgent` in `~/.ssh/config`. |
 | Integrations, Developer, App Icon, Launch | Not applicable or not built. |
