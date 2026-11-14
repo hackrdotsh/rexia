@@ -89,7 +89,9 @@ pub struct SettingsPage {
     pub(super) startup: Entity<TextInput>,
     /// A browser origin pattern to allow; Enter adds it.
     pub(super) origin: Entity<TextInput>,
-    _subscriptions: [Subscription; 6],
+    /// Where a rex of your own is; Enter uses it.
+    pub(super) rex_source: Entity<TextInput>,
+    _subscriptions: [Subscription; 7],
 }
 
 fn state_mut(settings: &mut Settings, state: ProgramState) -> &mut StateActivity {
@@ -231,6 +233,11 @@ impl Workspace {
             startup.update(cx, |input, cx| input.set_text(text, cx));
         }
         let origin = cx.new(|cx| TextInput::new("https://*.example.com", cx));
+        let rex_source = cx.new(|cx| TextInput::new("~/src/rex", cx));
+        if let Some(location) = &self.settings.rex_location {
+            let text = location.display().to_string();
+            rex_source.update(cx, |input, cx| input.set_text(text, cx));
+        }
         let ssh_socket = cx.new(|cx| TextInput::new("/path/to/agent.sock", cx));
         if let Some(socket) = &self.settings.ssh_agent {
             let text = socket.display().to_string();
@@ -240,6 +247,17 @@ impl Workspace {
             cx.subscribe_in(&label, window, on_submit),
             cx.subscribe_in(&font, window, on_submit),
             cx.subscribe_in(&fallbacks, window, on_submit),
+            cx.subscribe_in(
+                &rex_source,
+                window,
+                |ws: &mut Workspace, _: &Entity<TextInput>, event: &InputEvent, _, cx| {
+                    if let InputEvent::Submit { .. } = event
+                        && let Some(text) = ws.rex_field_text(cx)
+                    {
+                        ws.choose_rex(Some(text.into()), cx);
+                    }
+                },
+            ),
             cx.subscribe_in(
                 &origin,
                 window,
@@ -291,6 +309,7 @@ impl Workspace {
             ssh_socket,
             startup,
             origin,
+            rex_source,
             _subscriptions: subscriptions,
         })));
         cx.notify();
@@ -324,6 +343,9 @@ impl Workspace {
         }
         if section == Section::Integrations {
             self.refresh_agents(cx);
+        }
+        if section == Section::Developer {
+            self.check_rex(cx);
         }
         let Some(Overlay::Settings(page)) = &mut self.overlay else {
             return;
@@ -482,6 +504,21 @@ impl Workspace {
                 pane.hold_size_until(std::time::Instant::now() + hold)
             });
         }
+    }
+
+    /// The Source directory field's text, with `~` expanded; `None` when it's empty.
+    pub fn rex_field_text(&self, cx: &gpui::App) -> Option<String> {
+        let Some(Overlay::Settings(page)) = &self.overlay else {
+            return None;
+        };
+        let text = page.rex_source.read(cx).text().trim().to_owned();
+        if text.is_empty() {
+            return None;
+        }
+        Some(match (text.strip_prefix("~/"), std::env::var("HOME")) {
+            (Some(rest), Ok(home)) => format!("{home}/{rest}"),
+            _ => text,
+        })
     }
 
     /// The pane showing `block`, for tests.

@@ -54,6 +54,7 @@ pub use preferences::Section as SettingsSection;
 
 /// Settings that apply to the whole process: the startup command and generated titles.
 fn apply_global_settings(settings: &Settings) {
+    crate::rex::install::choose(settings.rex_location.clone());
     let command = crate::rex::host::split_command(&settings.terminal.startup_command);
     crate::rex::host::set_startup_command(Some(command));
     crate::ui::titles::set_prefer_generated(settings.terminal.prefer_generated_titles);
@@ -143,6 +144,11 @@ pub struct Workspace {
     swipe: gestures::SwipeTracker,
     /// Why the last origin pattern wasn't added.
     origin_error: Option<String>,
+    /// The chosen rex's check: which location, and what was found.
+    rex_check: Option<(
+        Option<PathBuf>,
+        Result<crate::rex::install::Installation, String>,
+    )>,
     motion: motion::Motion,
     agents: agents::AgentsState,
     shader_preview: cursor_shaders::ShaderPreview,
@@ -315,6 +321,7 @@ impl Workspace {
             highlight: Default::default(),
             swipe: Default::default(),
             origin_error: None,
+            rex_check: None,
             motion: Default::default(),
             agents: Default::default(),
             shader_preview: Default::default(),

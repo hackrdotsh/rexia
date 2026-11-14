@@ -120,7 +120,7 @@ pub struct AgentsState {
 
 /// Run `rex skill ARGS --json` on this computer (`$REXIA_REX` names another rex).
 fn rex_skill(args: &[String]) -> Result<serde_json::Value, String> {
-    let rex = std::env::var("REXIA_REX").unwrap_or_else(|_| "rex".into());
+    let rex = crate::rex::install::program();
     let output = std::process::Command::new(&rex)
         .arg("skill")
         .args(args)

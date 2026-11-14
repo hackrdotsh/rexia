@@ -641,6 +641,9 @@ pub struct Settings {
     /// Browser origins allowed to open Rex WebSocket streams, passed to the server when
     /// rexia starts it.
     pub web_origins: Vec<String>,
+    /// The rex rexia runs for Restart Server and `rex skill`: an executable, or a source
+    /// checkout holding one; none runs the rex on PATH.
+    pub rex_location: Option<std::path::PathBuf>,
     /// The origins rexia last started each host's server with (by host ID), and which
     /// server process that was, so changes since show as pending.
     pub applied_origins: std::collections::BTreeMap<String, AppliedOrigins>,
@@ -671,6 +674,7 @@ impl Default for Settings {
             ssh_agent: None,
             recent_paths: Default::default(),
             web_origins: Vec::new(),
+            rex_location: None,
             applied_origins: Default::default(),
         }
     }

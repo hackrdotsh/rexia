@@ -45,6 +45,47 @@ pub fn server_start_args(address: &str, origins: &[String]) -> Vec<String> {
 }
 
 impl Workspace {
+    /// Run `rex` from `location` from now on (an executable, or a source checkout holding
+    /// one), or the one on PATH with `None`; then check it runs.
+    pub fn choose_rex(&mut self, location: Option<std::path::PathBuf>, cx: &mut Context<Self>) {
+        // The field shows the location in use.
+        if let (Some(location), Some(super::overlay::Overlay::Settings(page))) =
+            (&location, &self.overlay)
+        {
+            let text = location.display().to_string();
+            page.rex_source
+                .update(cx, |input, cx| input.set_text(text, cx));
+        }
+        self.update_settings(|s| s.rex_location = location, cx);
+        self.check_rex(cx);
+    }
+
+    /// Check that the chosen rex runs, in the background.
+    pub fn check_rex(&mut self, cx: &mut Context<Self>) {
+        let location = self.settings.rex_location.clone();
+        self.rex_check = None;
+        cx.spawn(async move |this, cx| {
+            let checked = location.clone();
+            let result = cx
+                .background_executor()
+                .spawn(async move { crate::rex::install::check(checked.as_deref()) })
+                .await;
+            let _ = this.update(cx, |ws, cx| {
+                ws.rex_check = Some((location, result));
+                cx.notify();
+            });
+        })
+        .detach();
+    }
+
+    /// The chosen rex's check, once it's done, for the UI and tests.
+    pub fn rex_check(&self) -> Option<&Result<crate::rex::install::Installation, String>> {
+        self.rex_check
+            .as_ref()
+            .filter(|(location, _)| *location == self.settings.rex_location)
+            .map(|(_, result)| result)
+    }
+
     /// The local server's API address, if rexia has a local host.
     pub fn local_api_url(&self) -> Option<String> {
         self.hosts
@@ -92,7 +133,109 @@ impl Workspace {
                 .child(text.to_owned())
                 .into_any_element()
         };
-        let mut rows = vec![heading("Local API")];
+        let mut rows = vec![heading("Rex Installation")];
+        let custom = self.settings.rex_location.is_some();
+        rows.push(
+            row(
+                "rex-location",
+                "Location",
+                "The rex that Restart Server and agent setup run: the one on PATH, or your own build, such as one in a source checkout.",
+                theme,
+            )
+            .child(
+                div()
+                    .flex()
+                    .gap(px(6.))
+                    .child(button("rex-on-path", "On PATH", !custom, theme).on_click(
+                        cx.listener(|ws, _, _, cx| ws.choose_rex(None, cx)),
+                    ))
+                    .child(button("rex-custom", "Custom", custom, theme).on_click(
+                        cx.listener(|ws, _, _, cx| {
+                            let text = ws.rex_field_text(cx);
+                            ws.choose_rex(Some(text.unwrap_or_else(|| format!("{}/src/rex", std::env::var("HOME").unwrap_or_default())).into()), cx)
+                        }),
+                    )),
+            )
+            .into_any_element(),
+        );
+        if custom {
+            rows.push(Self::field_row(
+                "rex-source",
+                "Source directory",
+                "A rex executable, or a checkout with one in bin, build, dist or out. Enter uses it.",
+                &page.rex_source,
+                theme,
+            ));
+        }
+        let (status, details) = match self.rex_check() {
+            None => ("Checking…".to_owned(), None),
+            Some(Err(why)) => (why.clone(), None),
+            Some(Ok(found)) => (
+                format!("Ready: rex {} at {}", found.version, found.path.display()),
+                Some(found.clone()),
+            ),
+        };
+        let ready = details.is_some();
+        rows.push(
+            div()
+                .id("rex-status")
+                .flex()
+                .flex_col()
+                .gap(px(2.))
+                .px(px(12.))
+                .py(px(8.))
+                .child(div().text_size(px(13.)).child("Installation status"))
+                .child(
+                    div()
+                        .text_size(px(12.))
+                        .text_color(if ready { theme.text_muted } else { theme.error })
+                        .child(status),
+                )
+                .into_any_element(),
+        );
+        if let Some(found) = details {
+            for (label, value) in [
+                ("Commit", found.commit.clone()),
+                ("Built", found.built.clone()),
+                ("SHA-256", Some(found.sha256.clone())),
+            ] {
+                let Some(value) = value else { continue };
+                let copy = value.clone();
+                rows.push(
+                    div()
+                        .flex()
+                        .items_center()
+                        .gap(px(12.))
+                        .px(px(12.))
+                        .pb(px(4.))
+                        .text_size(px(12.))
+                        .child(
+                            div()
+                                .w(px(80.))
+                                .flex_none()
+                                .text_color(theme.text_muted)
+                                .child(label),
+                        )
+                        .child(
+                            div()
+                                .flex_1()
+                                .min_w_0()
+                                .overflow_hidden()
+                                .text_ellipsis()
+                                .child(value),
+                        )
+                        .child(
+                            button(format!("rex-copy-{label}"), "Copy", false, theme).on_click(
+                                cx.listener(move |_, _, _, cx| {
+                                    cx.write_to_clipboard(ClipboardItem::new_string(copy.clone()))
+                                }),
+                            ),
+                        )
+                        .into_any_element(),
+                );
+            }
+        }
+        rows.push(heading("Local API"));
         let url = self.local_api_url();
         let mut local = row(
             "local-api",

@@ -33,7 +33,7 @@ impl Workspace {
     pub(super) fn restart_server(&mut self, cx: &mut Context<Self>) {
         let endpoint = self.host().handle.endpoint.clone();
         self.host().handle.call("server.stop", json!({}));
-        let rex = std::env::var("REXIA_REX").unwrap_or_else(|_| "rex".into());
+        let rex = crate::rex::install::program();
         let args = self.restart_args();
         let host = self.host().config.id.clone();
         let origins = self.settings.web_origins.clone();

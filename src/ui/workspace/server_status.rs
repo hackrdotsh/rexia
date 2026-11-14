@@ -220,7 +220,7 @@ fn now_unix() -> u64 {
 
 /// The version `rex version` reports, from its first line (`rex 0.1.0-preview.19`).
 fn installed_rex() -> Option<String> {
-    let rex = std::env::var("REXIA_REX").unwrap_or_else(|_| "rex".into());
+    let rex = crate::rex::install::program();
     let output = std::process::Command::new(rex)
         .arg("version")
         .output()
