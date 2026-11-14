@@ -1,6 +1,7 @@
 //! The main window: a toolbar with the session's tabs, a sidebar of hosts and sessions,
 //! and the active tab's panes laid out exactly as the server arranges them.
 mod actions;
+pub mod agents;
 mod attention;
 mod cursor_shaders;
 mod extras;
@@ -130,6 +131,7 @@ pub struct Workspace {
     reveal: toolbar::Reveal,
     highlight: highlight::Track,
     swipe: gestures::SwipeTracker,
+    agents: agents::AgentsState,
     shader_preview: cursor_shaders::ShaderPreview,
     /// The chosen SSH agent's status in words, and the socket it describes.
     ssh_agent_status: Option<(Option<PathBuf>, String)>,
@@ -296,6 +298,7 @@ impl Workspace {
             reveal: Default::default(),
             highlight: Default::default(),
             swipe: Default::default(),
+            agents: Default::default(),
             shader_preview: Default::default(),
             ssh_agent_status: None,
             server_report: Default::default(),

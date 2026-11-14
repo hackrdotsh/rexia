@@ -133,6 +133,13 @@ pub const ACTIONS: &[ActionDef] = &[
         []
     ),
     action!(
+        "client.agents.setup",
+        "Install Rex for Agents",
+        "App",
+        "rex skill install agent agents coding ai claude code codex opencode pi hook hooks setup",
+        []
+    ),
+    action!(
         "client.shortcuts.edit",
         "Change Shortcut…",
         "App",

@@ -31,15 +31,17 @@ pub enum Section {
     Notifications,
     Hosts,
     Server,
+    Integrations,
 }
 
 impl Section {
-    pub const ALL: [Section; 5] = [
+    pub const ALL: [Section; 6] = [
         Section::Interface,
         Section::Terminal,
         Section::Notifications,
         Section::Hosts,
         Section::Server,
+        Section::Integrations,
     ];
 
     fn title(self) -> &'static str {
@@ -49,6 +51,7 @@ impl Section {
             Section::Notifications => "Notifications",
             Section::Hosts => "Client & Hosts",
             Section::Server => "Server",
+            Section::Integrations => "Integrations",
         }
     }
 
@@ -59,6 +62,7 @@ impl Section {
             Section::Notifications => "bell",
             Section::Hosts => "server",
             Section::Server => "power",
+            Section::Integrations => "command",
         }
     }
 }
@@ -271,6 +275,9 @@ impl Workspace {
         }
         if section == Section::Hosts {
             self.refresh_ssh_agent_status(cx);
+        }
+        if section == Section::Integrations {
+            self.refresh_agents(cx);
         }
         let Some(Overlay::Settings(page)) = &mut self.overlay else {
             return;
@@ -1426,6 +1433,7 @@ impl Workspace {
             Section::Notifications => self.notifications_section(theme, cx),
             Section::Hosts => self.hosts_section(page, theme, cx),
             Section::Server => self.server_section(theme, cx),
+            Section::Integrations => self.integrations_section(theme, cx),
         };
         let nav: Vec<_> = Section::ALL
             .iter()
