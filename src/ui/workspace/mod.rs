@@ -8,6 +8,7 @@ pub mod gestures;
 mod highlight;
 mod overlay;
 mod preferences;
+pub mod server_status;
 pub mod tab_icons;
 mod toolbar;
 mod windows;
@@ -126,6 +127,7 @@ pub struct Workspace {
     reveal: toolbar::Reveal,
     highlight: highlight::Track,
     swipe: gestures::SwipeTracker,
+    server_report: server_status::ServerReportState,
     pinch: gestures::PinchTracker,
     swipes: usize,
     /// Whether the window had the desktop's focus at the last draw.
@@ -281,6 +283,7 @@ impl Workspace {
             reveal: Default::default(),
             highlight: Default::default(),
             swipe: Default::default(),
+            server_report: Default::default(),
             pinch: Default::default(),
             swipes: 0,
             window_active: true,

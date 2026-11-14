@@ -30,14 +30,16 @@ pub enum Section {
     Terminal,
     Notifications,
     Hosts,
+    Server,
 }
 
 impl Section {
-    pub const ALL: [Section; 4] = [
+    pub const ALL: [Section; 5] = [
         Section::Interface,
         Section::Terminal,
         Section::Notifications,
         Section::Hosts,
+        Section::Server,
     ];
 
     fn title(self) -> &'static str {
@@ -46,6 +48,7 @@ impl Section {
             Section::Terminal => "Terminal",
             Section::Notifications => "Notifications",
             Section::Hosts => "Client & Hosts",
+            Section::Server => "Server",
         }
     }
 
@@ -55,6 +58,7 @@ impl Section {
             Section::Terminal => "terminal-2",
             Section::Notifications => "bell",
             Section::Hosts => "server",
+            Section::Server => "power",
         }
     }
 }
@@ -104,7 +108,12 @@ fn switch(on: bool, theme: &Theme) -> Div {
         }))
 }
 
-fn row(id: impl Into<SharedString>, title: &str, detail: &str, theme: &Theme) -> Stateful<Div> {
+pub(super) fn row(
+    id: impl Into<SharedString>,
+    title: &str,
+    detail: &str,
+    theme: &Theme,
+) -> Stateful<Div> {
     div()
         .id(gpui::ElementId::Name(id.into()))
         .flex()
@@ -142,7 +151,12 @@ fn section_label(text: &'static str, theme: &Theme) -> AnyElement {
         .into_any_element()
 }
 
-fn button(id: impl Into<SharedString>, label: &str, filled: bool, theme: &Theme) -> Stateful<Div> {
+pub(super) fn button(
+    id: impl Into<SharedString>,
+    label: &str,
+    filled: bool,
+    theme: &Theme,
+) -> Stateful<Div> {
     div()
         .id(gpui::ElementId::Name(id.into()))
         .flex()
@@ -225,6 +239,13 @@ impl Workspace {
             return;
         };
         page.section = section;
+        // The Server section asks the server about itself each time it opens.
+        if section == Section::Server {
+            self.refresh_server_report(cx);
+        }
+        let Some(Overlay::Settings(page)) = &mut self.overlay else {
+            return;
+        };
         // A section with a field starts in it.
         let handle = match section {
             Section::Terminal => gpui::Focusable::focus_handle(page.font.read(cx), cx),
@@ -1370,6 +1391,7 @@ impl Workspace {
             Section::Terminal => self.terminal_section(page, theme, cx),
             Section::Notifications => self.notifications_section(theme, cx),
             Section::Hosts => self.hosts_section(page, theme, cx),
+            Section::Server => self.server_section(theme, cx),
         };
         let nav: Vec<_> = Section::ALL
             .iter()
