@@ -341,7 +341,7 @@ fn activity_items(ws: &Workspace) -> Vec<Item> {
             ));
         }
     }
-    items.sort_by(|a, b| b.0.cmp(&a.0));
+    items.sort_by_key(|i| std::cmp::Reverse(i.0));
     items.into_iter().map(|(_, item)| item).collect()
 }
 
@@ -893,7 +893,7 @@ impl Workspace {
                             &ws.overlay
                         {
                             let next = if field == 0 { address } else { label };
-                            focus_input(&next, window, cx);
+                            focus_input(next, window, cx);
                         }
                     }
                     InputEvent::Changed(_) => {

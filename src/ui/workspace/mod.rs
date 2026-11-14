@@ -591,12 +591,8 @@ impl Workspace {
 
     fn fraction(&self, at: Point<Pixels>) -> (f64, f64) {
         let size = self.area.size;
-        let x = f64::from(f32::from(
-            (at.x - self.area.origin.x) / size.width.max(px(1.)),
-        ));
-        let y = f64::from(f32::from(
-            (at.y - self.area.origin.y) / size.height.max(px(1.)),
-        ));
+        let x = f64::from((at.x - self.area.origin.x) / size.width.max(px(1.)));
+        let y = f64::from((at.y - self.area.origin.y) / size.height.max(px(1.)));
         (x, y)
     }
 

@@ -136,17 +136,19 @@ pub struct Harness {
 impl Harness {
     /// A workspace window attached to `address`, showing `session`.
     pub fn open(address: &str, session: &str, width: f32, height: f32) -> Self {
-        let mut settings = Settings::default();
-        settings.hosts = vec![HostConfig {
-            id: "test".into(),
-            label: "flareon".into(),
-            endpoint: address.into(),
-        }];
-        settings.last_session = Some(session.into());
+        let settings = Settings {
+            hosts: vec![HostConfig {
+                id: "test".into(),
+                label: "flareon".into(),
+                endpoint: address.into(),
+            }],
+            last_session: Some(session.into()),
+            ..Default::default()
+        };
         let mut cx = HeadlessAppContext::with_platform(
             Arc::new(gpui_wgpu::CosmicTextSystem::new("DM Sans")),
             Arc::new(Assets),
-            || gpui_platform::current_headless_renderer(),
+            gpui_platform::current_headless_renderer,
         );
         cx.update(|cx| cx.set_global(Theme::from_noctalia(&noctalia::load())));
         let window = cx

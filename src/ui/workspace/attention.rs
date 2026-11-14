@@ -18,6 +18,9 @@ use crate::{
 };
 use gpui::{AnyElement, Context, SharedString, Window, div, prelude::*, px};
 
+/// A tab mark: the state shown and its badge word.
+type Mark = (ProgramState, &'static str);
+
 /// A notification's key: the pane it's about, so a click can show it.
 fn note_key(host: usize, session: &str, block: &str) -> String {
     format!("{host}\u{1f}{session}\u{1f}{block}")
@@ -299,11 +302,7 @@ impl Workspace {
                     .map(|s| s.label.clone())
                     .unwrap_or_default();
                 for window in &view.windows {
-                    let mut panes: Vec<(
-                        String,
-                        Option<(ProgramState, &'static str)>,
-                        ProgramState,
-                    )> = window
+                    let mut panes: Vec<(String, Option<Mark>, ProgramState)> = window
                         .blocks()
                         .filter_map(|b| {
                             let id = b.block_id.clone()?;
@@ -318,7 +317,7 @@ impl Workspace {
                     if panes.is_empty() {
                         continue;
                     }
-                    panes.sort_by(|a, b| b.2.cmp(&a.2));
+                    panes.sort_by_key(|p| std::cmp::Reverse(p.2));
                     let chosen: Vec<_> = if settings.each_process {
                         panes
                     } else {

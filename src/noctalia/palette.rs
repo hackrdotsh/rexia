@@ -110,7 +110,7 @@ impl Palette {
         let dark = value
             .get("mode")
             .and_then(|m| m.as_str())
-            .map_or(true, |m| m != "light");
+            .is_none_or(|m| m != "light");
         Ok(Self::from_roles(&map, dark))
     }
 

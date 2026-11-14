@@ -42,7 +42,7 @@ fn headless() -> HeadlessAppContext {
     HeadlessAppContext::with_platform(
         Arc::new(gpui_wgpu::CosmicTextSystem::new("DM Sans")),
         Arc::new(Assets),
-        || gpui_platform::current_headless_renderer(),
+        gpui_platform::current_headless_renderer,
     )
 }
 
@@ -297,13 +297,15 @@ fn workspace_shows_sessions_tabs_splits_and_floating_panes() {
         &below,
         "sh -c 'printf \"\\033]7501;state=working:app=cargo\\033\\\\\\\\\"; sleep 120'",
     );
-    let mut settings = Settings::default();
-    settings.hosts = vec![HostConfig {
-        id: "test".into(),
-        label: "flareon".into(),
-        endpoint: address.clone(),
-    }];
-    settings.last_session = Some(session.clone());
+    let settings = Settings {
+        hosts: vec![HostConfig {
+            id: "test".into(),
+            label: "flareon".into(),
+            endpoint: address.clone(),
+        }],
+        last_session: Some(session.clone()),
+        ..Default::default()
+    };
     let mut cx = headless();
     cx.update(|cx| cx.set_global(theme.clone()));
     let window = cx
@@ -311,7 +313,7 @@ fn workspace_shows_sessions_tabs_splits_and_floating_panes() {
             cx.new(|cx| Workspace::new(settings, None, false, window, cx))
         })
         .unwrap();
-    let workspace = window.clone();
+    let workspace = window;
     let host = cx.update(|cx| workspace.read(cx).unwrap().host().handle.clone());
     // Wait until every pane of the shown tab streams and the program reports have arrived.
     let deadline = Instant::now() + Duration::from_secs(20);

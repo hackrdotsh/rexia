@@ -357,7 +357,7 @@ impl Workspace {
                             .and_then(|v| v["api_revision"].as_u64())
                             .unwrap_or(0),
                     );
-                    let _ = cx.update(|cx| cx.write_to_clipboard(ClipboardItem::new_string(text)));
+                    cx.update(|cx| cx.write_to_clipboard(ClipboardItem::new_string(text)));
                 })
                 .detach();
             }

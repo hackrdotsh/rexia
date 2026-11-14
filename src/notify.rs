@@ -235,9 +235,12 @@ mod tests {
         })
     }
 
+    /// A shown notification: its ID, summary, body and urgency.
+    type Shown = (u32, String, String, u8);
+
     #[derive(Clone, Default)]
     struct Fake {
-        shown: Arc<Mutex<Vec<(u32, String, String, u8)>>>,
+        shown: Arc<Mutex<Vec<Shown>>>,
         closed: Arc<Mutex<Vec<u32>>>,
     }
 

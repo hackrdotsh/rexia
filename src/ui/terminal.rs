@@ -225,7 +225,7 @@ impl TerminalPane {
             if let Some(Some(text)) = pane.ask(PaneCommand::Copy).await
                 && !text.is_empty()
             {
-                let _ = cx.update(|cx| cx.write_to_clipboard(ClipboardItem::new_string(text)));
+                cx.update(|cx| cx.write_to_clipboard(ClipboardItem::new_string(text)));
             }
         })
         .detach();
