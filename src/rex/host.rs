@@ -96,9 +96,41 @@ pub struct HostModel {
     pub hosts: Vec<Value>,
     /// Bumped on every reconnect, when activity is re-read from scratch.
     pub epoch: u64,
+    /// Tabs this client shows instead of the session's active one, by session. The server
+    /// keeps one active tab per session, so a window that split off a tab pins its own.
+    pub pins: HashMap<String, String>,
 }
 
 impl HostModel {
+    /// Show the pinned tab as the session's active one, while it still exists.
+    fn apply_pin(&mut self, session: &str) {
+        let Some(pinned) = self.pins.get(session).cloned() else {
+            return;
+        };
+        match self.views.get_mut(session) {
+            Some(view) if view.window(&pinned).is_some() => {
+                view.active_window_id = Some(pinned);
+            }
+            // The pinned tab closed: follow the session again.
+            Some(_) => {
+                self.pins.remove(session);
+            }
+            None => {}
+        }
+    }
+
+    pub fn pin(&mut self, session: String, window: Option<String>) {
+        match window {
+            Some(window) => {
+                self.pins.insert(session.clone(), window);
+                self.apply_pin(&session);
+            }
+            None => {
+                self.pins.remove(&session);
+            }
+        }
+    }
+
     pub fn view(&self) -> Option<&View> {
         self.views.get(self.selected.as_ref()?)
     }
@@ -291,6 +323,12 @@ pub enum HostCommand {
         result: Result<Value, (String, String)>,
     },
     SetLabel(Option<String>),
+    /// Show this tab of the session in this client whatever the session's active tab is,
+    /// or (None) follow the session again.
+    Pin {
+        session: String,
+        window: Option<String>,
+    },
     TerminalTheme(Option<TerminalTheme>),
     /// The cursor shape terminals use until their program picks one.
     DefaultCursor(Option<CursorShape>),
@@ -533,6 +571,9 @@ async fn run(
                     Ok(HostCommand::TerminalTheme(theme)) => host.set_theme(theme),
                     Ok(HostCommand::DefaultCursor(shape)) => host.set_cursor(shape),
                     Ok(HostCommand::SetLabel(label)) => host.identity.label = label,
+                    Ok(HostCommand::Pin { session, window }) => {
+                        host.shared.update(|m| m.pin(session, window));
+                    }
                     Ok(HostCommand::Resize { block_id, cols, rows, cell_width, cell_height, .. }) => {
                         if let Some(worker) = host.workers.get_mut(&block_id) {
                             worker.size = Some((cols, rows, cell_width, cell_height));
@@ -722,6 +763,10 @@ impl Host {
             m.server = server;
             m.sessions = sessions;
             m.views = views;
+            let pinned: Vec<String> = m.pins.keys().cloned().collect();
+            for session in pinned {
+                m.apply_pin(&session);
+            }
             m.selected = selected.clone();
             // Activity is re-read from scratch: reports made while away were missed.
             for block in m.blocks.values_mut() {
@@ -788,6 +833,7 @@ impl Host {
                 session.label = view.label.clone();
             }
             m.views.insert(id.into(), view);
+            m.apply_pin(id);
         });
         self.update_owners();
     }
@@ -1122,6 +1168,10 @@ impl Host {
             }
             HostCommand::TerminalTheme(theme) => self.set_theme(theme),
             HostCommand::DefaultCursor(shape) => self.set_cursor(shape),
+            HostCommand::Pin { session, window } => {
+                self.shared.update(|m| m.pin(session, window));
+                self.reconcile();
+            }
             HostCommand::Reconnect | HostCommand::Shutdown => unreachable!("handled by the loop"),
         }
         Ok(())
