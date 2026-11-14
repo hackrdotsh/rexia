@@ -244,7 +244,7 @@ impl Workspace {
         cx.notify();
     }
 
-    fn apply_settings(&mut self, cx: &mut Context<Self>) {
+    pub(super) fn apply_settings(&mut self, cx: &mut Context<Self>) {
         self.font = super::terminal_font(&self.settings);
         let font = self.font.clone();
         let terminal = &self.settings.terminal;

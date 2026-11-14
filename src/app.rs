@@ -73,32 +73,52 @@ pub fn run() -> anyhow::Result<()> {
         .with_assets(Assets)
         .run(move |cx: &mut App| {
             cx.set_global(Theme::from_noctalia(&noctalia::load()));
-            let bounds = Bounds::centered(None, size(px(1280.), px(800.)), cx);
-            let opened = cx.open_window(
-                WindowOptions {
-                    window_bounds: Some(WindowBounds::Windowed(bounds)),
-                    titlebar: Some(TitlebarOptions {
-                        title: Some("rexia".into()),
-                        ..Default::default()
-                    }),
-                    app_id: Some("dev.hackr.rexia".into()),
-                    window_decorations: Some(WindowDecorations::Server),
-                    window_min_size: Some(size(px(480.), px(320.))),
-                    ..Default::default()
-                },
-                |window, cx| {
-                    cx.new(|cx| {
-                        let mut workspace = Workspace::new(settings, save_path, true, window, cx);
-                        let (notifier, clicks) = Notifier::spawn(None);
-                        workspace.set_notifier(notifier, clicks, window, cx);
-                        workspace
-                    })
-                },
-            );
+            // rexia quits when its last window closes.
+            cx.on_window_closed(|cx, _| {
+                if cx.windows().is_empty() {
+                    cx.quit();
+                }
+            })
+            .detach();
+            let opened = open_workspace(settings, save_path, cx, |workspace, window, cx| {
+                // The first window sends desktop notifications for all of them.
+                let (notifier, clicks) = Notifier::spawn(None);
+                workspace.set_notifier(notifier, clicks, window, cx);
+            });
             if let Err(error) = opened {
                 eprintln!("rexia: couldn't open a window: {error:#}");
                 cx.quit();
             }
         });
     Ok(())
+}
+
+/// Open a workspace window, letting `setup` finish the workspace before it first draws.
+pub fn open_workspace(
+    settings: Settings,
+    save_path: Option<PathBuf>,
+    cx: &mut App,
+    setup: impl FnOnce(&mut Workspace, &mut gpui::Window, &mut gpui::Context<Workspace>) + 'static,
+) -> anyhow::Result<gpui::WindowHandle<Workspace>> {
+    let bounds = Bounds::centered(None, size(px(1280.), px(800.)), cx);
+    cx.open_window(
+        WindowOptions {
+            window_bounds: Some(WindowBounds::Windowed(bounds)),
+            titlebar: Some(TitlebarOptions {
+                title: Some("rexia".into()),
+                ..Default::default()
+            }),
+            app_id: Some("dev.hackr.rexia".into()),
+            window_decorations: Some(WindowDecorations::Server),
+            window_min_size: Some(size(px(480.), px(320.))),
+            ..Default::default()
+        },
+        |window, cx| {
+            cx.new(|cx| {
+                let mut workspace = Workspace::new(settings, save_path, true, window, cx);
+                setup(&mut workspace, window, cx);
+                workspace
+            })
+        },
+    )
 }

@@ -6,6 +6,7 @@ mod filter;
 mod overlay;
 mod preferences;
 mod toolbar;
+mod windows;
 
 use super::{
     components::{dot, heading, icon_button, list_row, small_icon_button, title},
@@ -130,6 +131,10 @@ pub struct Workspace {
     find: Option<overlay::FindBar>,
     filter: filter::TabFilter,
     identity: Identity,
+    /// The window this workspace fills, to tell it from rexia's other windows.
+    window_handle: Option<gpui::AnyWindowHandle>,
+    /// Preferences changed since other windows last heard.
+    settings_changed: std::cell::Cell<bool>,
     tracker: crate::ui::activity::Tracker,
     notifier: Option<crate::notify::Notifier>,
     _tasks: Vec<Task<()>>,
@@ -255,6 +260,8 @@ impl Workspace {
             find: None,
             filter,
             identity,
+            window_handle: Some(window.window_handle()),
+            settings_changed: std::cell::Cell::new(false),
             tracker: Default::default(),
             notifier: None,
             _tasks: tasks,
@@ -331,6 +338,7 @@ impl Workspace {
     }
 
     fn save_settings(&self) {
+        self.settings_changed.set(true);
         if let Some(path) = &self.settings_path
             && let Err(error) = self.settings.save(path)
         {
@@ -463,24 +471,35 @@ impl Workspace {
         cx.notify();
     }
 
-    pub fn new_tab(&mut self, _: &mut Context<Self>) {
+    pub fn new_tab(&mut self, cx: &mut Context<Self>) {
         let Some(session) = self.session_id() else {
             return;
         };
-        self.call(
-            "session.new_window",
-            json!({"session_id": session, "layout": shell_layout(), "focus": true}),
-        );
+        let payload = json!({"session_id": session, "layout": shell_layout(), "focus": true});
+        if !self.pinned(self.active, &session) {
+            self.call("session.new_window", payload);
+            return;
+        }
+        // A window showing its own tab shows the new one once it exists.
+        let host = self.host().handle.clone();
+        cx.spawn(async move |_, _| {
+            if let Ok(created) = host.request("session.new_window", payload).await
+                && let Some(window) = created["window_id"].as_str()
+            {
+                host.send(HostCommand::Pin {
+                    session,
+                    window: Some(window.to_owned()),
+                });
+            }
+        })
+        .detach();
     }
 
     pub fn select_tab(&mut self, window_id: String, _: &mut Context<Self>) {
         let Some(session) = self.session_id() else {
             return;
         };
-        self.call(
-            "session.focus_window",
-            json!({"session_id": session, "window_id": window_id}),
-        );
+        self.focus_tab(self.active, session, window_id);
     }
 
     pub fn close_tab(&mut self, window_id: String, _: &mut Context<Self>) {
@@ -1521,6 +1540,9 @@ impl Focusable for Workspace {
 
 impl Render for Workspace {
     fn render(&mut self, _: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+        if self.settings_changed.take() {
+            self.share_settings(cx);
+        }
         let theme = Theme::get(cx).clone();
         let model = self.model();
         let layout = self.settings.interface.toolbar_layout;

@@ -738,9 +738,7 @@ impl Workspace {
             }
             Choice::Window { host, session, window: id } => {
                 self.select_session(host, session.clone(), cx);
-                self.hosts[host]
-                    .handle
-                    .call("session.focus_window", json!({"session_id": session, "window_id": id}));
+                self.focus_tab(host, session, id);
             }
             Choice::Block { host, session, block } => {
                 self.select_session(host, session.clone(), cx);

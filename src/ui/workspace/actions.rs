@@ -545,6 +545,17 @@ impl Workspace {
                     );
                 }
             }
+            "client.tab.next" | "client.tab.previous"
+                if session
+                    .as_deref()
+                    .is_some_and(|s| self.pinned(self.active, s)) =>
+            {
+                let forward = name == "client.tab.next";
+                let tab = self
+                    .neighbour_tab(forward)
+                    .ok_or_else(|| refused("No tab is open"))?;
+                self.focus_tab(self.active, need_session()?, tab);
+            }
             "client.tab.next" | "client.tab.previous" => {
                 let method = if name == "client.tab.next" {
                     "session.focus_next_window"
@@ -854,6 +865,9 @@ impl Workspace {
             }
             "client.sidebar.toggle" => self.toggle_sidebar(cx),
             "client.sidebar.filter.focus" => self.focus_filter(window, cx),
+            "client.window.new" => self.open_new_window(cx),
+            "client.window.close" => self.close_window(window),
+            "client.tab.move_to_new_window" => self.move_tab_to_new_window(cx).map_err(refused)?,
             "client.toolbar.reveal" => self.reveal_toolbar(cx),
             "client.pane_header.reveal" => self.reveal_pane_header(cx),
             "client.tab_style.toggle" => self.toggle_tab_style(cx),

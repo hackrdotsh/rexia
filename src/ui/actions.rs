@@ -678,6 +678,27 @@ pub const ACTIONS: &[ActionDef] = &[
         [(&["ctrl+shift+b"], None)]
     ),
     action!(
+        "client.window.new",
+        "New Window",
+        "Window",
+        "new window open another workspace",
+        [(&["ctrl+shift+n"], None)]
+    ),
+    action!(
+        "client.window.close",
+        "Close Window",
+        "Window",
+        "close window workspace",
+        [(&["ctrl+alt+shift+w"], None)]
+    ),
+    action!(
+        "client.tab.move_to_new_window",
+        "Move Tab to New Window",
+        "Tab",
+        "move tab detach split off new window",
+        []
+    ),
+    action!(
         "client.toolbar.reveal",
         "Reveal Toolbar",
         "View",

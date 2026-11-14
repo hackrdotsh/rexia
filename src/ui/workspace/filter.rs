@@ -10,7 +10,6 @@ use crate::ui::{
     titles,
 };
 use gpui::{AnyElement, Context, Entity, SharedString, Subscription, Window, div, prelude::*, px};
-use serde_json::json;
 
 pub struct TabFilter {
     pub input: Entity<TextInput>,
@@ -152,10 +151,7 @@ impl Workspace {
     fn show_match(&mut self, chosen: FilterMatch, window: &mut Window, cx: &mut Context<Self>) {
         self.select_session(chosen.host, chosen.session.clone(), cx);
         if let Some(id) = chosen.window {
-            self.hosts[chosen.host].handle.call(
-                "session.focus_window",
-                json!({"session_id": chosen.session, "window_id": id}),
-            );
+            self.focus_tab(chosen.host, chosen.session.clone(), id);
         }
         self.clear_filter(window, cx);
     }
