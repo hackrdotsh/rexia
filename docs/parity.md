@@ -50,7 +50,8 @@ Not implemented yet:
 | Interface › Toolbar, Tab behavior, Tab icons, Window | Sidebar toggle only. Toolbar layouts, vertical tabs and tab icon options aren't built. |
 | Interface › Padding | Padding X and Y. Filling padding with program colors isn't built. |
 | Terminal › Typography | Font family, size and line height. Defaults come from Ghostty's config, then fontconfig. |
-| Terminal › Advanced Font, Colors, Cursor | Not built. Ligatures are off. |
+| Terminal › Cursor | Cursor style (block, bar, underline) for programs that don't choose one, force style, and blink speed (off, slow, normal, fast, or a custom interval). As in preview.30, a cursor blinks only when its program asks. When a pane attaches, a program's explicit steady block looks like the default, so it shows your style until the program sets the cursor again. Cursor shaders aren't built. |
+| Terminal › Advanced Font, Colors | Not built. Ligatures are off. |
 | Terminal › Selection | Copy on select. |
 | Server › Client Info | Client label (`client.set_label`). Remote control is always on. |
 | Server › Rex Server, Remote Address, Tailscale | Not applicable: rexia doesn't manage servers. |
