@@ -46,8 +46,6 @@ when checked, and are built in this order; each moves to its section once it's d
 
 | Gap | Source |
 | --- | --- |
-| Paste safety: a paste that could run commands asks first; copied files paste as shell-escaped paths; an image-only clipboard pastes as a read-only temp file | preview.7, 8 |
-| Drop files on a terminal: local paths typed, files for a remote host uploaded (`upload_begin`) with progress and Cancel | preview.14, 27 |
 | Autobalance splits: even out a tab's panes when one opens or closes, keeping dividers you drag | Interface › Splits & Focus; preview.10, 26 |
 | Ask before closing a tab, pane or session whose program is working, blocked, unread or just finished | preview.25 |
 | Tooltips on buttons, with their shortcuts | preview.9, 23 |
@@ -103,6 +101,17 @@ when checked, and are built in this order; each moves to its section once it's d
 ## Behavior
 
 Working:
+
+- Pasting and dropping. A paste that would run as it's pasted (a line break when the
+  program hasn't turned on bracketed paste, or anything that would end a bracketed paste)
+  asks first, showing the text, with Cancel as the default. Files copied in a file manager
+  paste as their paths, quoted for the shell; an image on the clipboard pastes as a file
+  only you can read (under `$XDG_RUNTIME_DIR/rexia-UID/pastes`). Files dragged onto a pane
+  type their paths, even straight after typing (GPUI's own drop handling misses that case).
+  For a terminal on another machine, dropped and pasted files are uploaded there
+  (`upload_begin` and a `rex.data.bytes.v1` stream per file, as one batch) and the terminal
+  types the paths of its copies; an upload that takes a moment shows its progress with
+  Cancel, and one the terminal refuses, such as a file over its 100 MiB limit, says why.
 
 - The terminal's context menu: right-click a pane, or Shift+right-click when its program
   uses the mouse. Copy (only with a selection), Paste and Select All; then what's under the
