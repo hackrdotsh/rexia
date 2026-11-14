@@ -124,6 +124,10 @@ impl Workspace {
         {
             return;
         }
+        // The tab filter's field edits; Esc, Enter and the arrows are its own.
+        if self.filter_focused(window, cx) {
+            return;
+        }
         let stroke = keys::stroke(&event.keystroke);
         let mode = self.modes.last().cloned();
         let mut typed = self.pending.clone();
@@ -849,6 +853,7 @@ impl Workspace {
                 self.save_settings();
             }
             "client.sidebar.toggle" => self.toggle_sidebar(cx),
+            "client.sidebar.filter.focus" => self.focus_filter(window, cx),
             "client.sidebar.activity.toggle" => {
                 let interface = &mut self.settings.interface;
                 interface.activity_view = !interface.activity_view;

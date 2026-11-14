@@ -2,6 +2,7 @@
 //! and the active tab's panes laid out exactly as the server arranges them.
 mod actions;
 mod attention;
+mod filter;
 mod overlay;
 mod preferences;
 
@@ -123,6 +124,7 @@ pub struct Workspace {
     pending: Vec<Vec<String>>,
     overlay: Option<overlay::Overlay>,
     find: Option<overlay::FindBar>,
+    filter: filter::TabFilter,
     identity: Identity,
     tracker: crate::ui::activity::Tracker,
     notifier: Option<crate::notify::Notifier>,
@@ -221,6 +223,7 @@ impl Workspace {
             None
         };
 
+        let filter = filter::TabFilter::new(window, cx);
         Self {
             font: terminal_font(&settings),
             settings,
@@ -240,6 +243,7 @@ impl Workspace {
             pending: Vec::new(),
             overlay: None,
             find: None,
+            filter,
             identity,
             tracker: Default::default(),
             notifier: None,
@@ -943,7 +947,14 @@ impl Workspace {
                     .child(icon("server").size(px(20.)).text_color(theme.primary))
                     .child(title("Sessions", theme)),
             )
-            .child(list)
+            .child(self.render_filter_field())
+            .map(|d| {
+                if self.filter.query.trim().is_empty() {
+                    d.child(list)
+                } else {
+                    d.child(self.render_filter_results(theme, cx))
+                }
+            })
             .into_any_element()
     }
 

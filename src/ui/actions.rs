@@ -678,6 +678,13 @@ pub const ACTIONS: &[ActionDef] = &[
         [(&["ctrl+shift+b"], None)]
     ),
     action!(
+        "client.sidebar.filter.focus",
+        "Focus Tab Filter",
+        "View",
+        "filter search find type query focus keyboard sidebar tabs sessions hosts",
+        []
+    ),
+    action!(
         "client.sidebar.activity.toggle",
         "Toggle Activity View",
         "View",
