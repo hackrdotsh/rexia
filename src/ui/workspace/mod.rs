@@ -3,6 +3,7 @@
 mod actions;
 pub mod agents;
 mod attention;
+pub mod context_menu;
 mod cursor_shaders;
 mod developer;
 mod extras;
@@ -145,6 +146,8 @@ pub struct Workspace {
     reveal: toolbar::Reveal,
     highlight: highlight::Track,
     swipe: gestures::SwipeTracker,
+    /// The terminal's right-click menu, while it's open.
+    context_menu: Option<Box<context_menu::ContextMenu>>,
     /// ssh's questions waiting for another dialog to close.
     ssh_questions: std::collections::VecDeque<crate::rex::askpass::Question>,
     ssh_open: Option<Box<ssh_questions::SshQuestion>>,
@@ -333,6 +336,7 @@ impl Workspace {
             reveal: Default::default(),
             highlight: Default::default(),
             swipe: Default::default(),
+            context_menu: None,
             ssh_questions: Default::default(),
             ssh_open: None,
             preview_bus: None,
@@ -550,8 +554,12 @@ impl Workspace {
                     pane.cursor_shader = cursor_shader;
                     pane
                 });
-                cx.subscribe(&pane, |ws, _, event: &PaneEvent, cx| match event {
+                let block = key.clone();
+                cx.subscribe(&pane, move |ws, _, event: &PaneEvent, cx| match event {
                     PaneEvent::OpenLink(link) => ws.open_link(link.clone(), cx),
+                    PaneEvent::ContextMenu { position, cell } => {
+                        ws.open_context_menu(block.clone(), *position, *cell, cx)
+                    }
                 })
                 .detach();
                 self.panes.insert(key, pane);
@@ -1972,6 +1980,7 @@ impl Render for Workspace {
             .children(self.key_hint(&theme))
             .children(self.render_find(&theme, cx))
             .children(self.render_overlay(&theme, cx))
+            .children(self.render_context_menu(&theme, cx))
             .children(self.render_ssh_question(&theme, cx))
     }
 }

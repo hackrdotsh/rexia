@@ -113,6 +113,10 @@ impl Workspace {
             }
             return;
         }
+        if self.context_menu_key(&event.keystroke.key, window, cx) {
+            cx.stop_propagation();
+            return;
+        }
         if self.ssh_key(&event.keystroke.key, window, cx) {
             cx.stop_propagation();
             return;

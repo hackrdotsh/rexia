@@ -13,17 +13,47 @@ trait Previewer {
     fn show_file(&self, uri: &str, window_handle: &str, close_if_shown: bool) -> zbus::Result<()>;
 }
 
+#[proxy(
+    interface = "org.freedesktop.FileManager1",
+    default_service = "org.freedesktop.FileManager1",
+    default_path = "/org/freedesktop/FileManager1"
+)]
+trait FileManager {
+    fn show_items(&self, uris: &[&str], startup_id: &str) -> zbus::Result<()>;
+}
+
+async fn bus(address: Option<&str>) -> anyhow::Result<zbus::Connection> {
+    Ok(match address {
+        Some(address) => zbus::connection::Builder::address(address)?.build().await?,
+        None => zbus::Connection::session().await?,
+    })
+}
+
+/// Show a file in the desktop's file manager (`org.freedesktop.FileManager1`), selected
+/// in its folder, on the session bus or the bus at `address`.
+pub fn show_in_files(address: Option<&str>, uri: &str) -> anyhow::Result<()> {
+    let runtime = tokio::runtime::Builder::new_current_thread()
+        .enable_all()
+        .build()?;
+    runtime.block_on(async {
+        let manager = FileManagerProxy::new(&bus(address).await?).await?;
+        tokio::time::timeout(
+            std::time::Duration::from_secs(5),
+            manager.show_items(&[uri], ""),
+        )
+        .await
+        .map_err(|_| anyhow::anyhow!("the file manager didn't answer"))??;
+        Ok(())
+    })
+}
+
 /// Show `uri` in GNOME's previewer, on the session bus or the bus at `address`.
 pub fn preview(address: Option<&str>, uri: &str) -> anyhow::Result<()> {
     let runtime = tokio::runtime::Builder::new_current_thread()
         .enable_all()
         .build()?;
     runtime.block_on(async {
-        let connection = match address {
-            Some(address) => zbus::connection::Builder::address(address)?.build().await?,
-            None => zbus::Connection::session().await?,
-        };
-        let previewer = PreviewerProxy::new(&connection).await?;
+        let previewer = PreviewerProxy::new(&bus(address).await?).await?;
         // Sushi may need starting; give it a moment, not forever.
         tokio::time::timeout(
             std::time::Duration::from_secs(5),

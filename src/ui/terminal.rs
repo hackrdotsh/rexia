@@ -33,6 +33,11 @@ pub fn openable(link: &str) -> bool {
 pub enum PaneEvent {
     /// A program's link was ctrl+clicked.
     OpenLink(String),
+    /// Right-click: the menu for the cell at `cell`, shown at `position` in the window.
+    ContextMenu {
+        position: gpui::Point<Pixels>,
+        cell: (u16, u16),
+    },
 }
 
 impl gpui::EventEmitter<PaneEvent> for TerminalPane {}
@@ -961,6 +966,7 @@ impl TerminalPane {
             json!({"session_id": self.session_id, "block_id": self.block_id}),
         );
         let at = self.cell_at(event.position);
+        self.pointer = Some(at);
         // Ctrl-click opens a program's OSC 8 link, as in Ghostty.
         if event.button == MouseButton::Left
             && event.modifiers.control
@@ -1014,6 +1020,11 @@ impl TerminalPane {
                 self.selecting = true;
             }
             MouseButton::Middle => self.paste(cx),
+            // A program using the mouse gets right-clicks; Shift always opens the menu.
+            MouseButton::Right => cx.emit(PaneEvent::ContextMenu {
+                position: event.position,
+                cell: at,
+            }),
             _ => {}
         }
         cx.notify();
