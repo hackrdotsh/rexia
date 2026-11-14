@@ -21,14 +21,44 @@ fn basename(path: &str) -> &str {
     trimmed.rsplit('/').next().unwrap_or(trimmed)
 }
 
+static PREFER_GENERATED: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+
+/// Prefer generated titles: name panes after their program and directory rather than
+/// the titles shells and programs set.
+pub fn set_prefer_generated(prefer: bool) {
+    PREFER_GENERATED.store(prefer, std::sync::atomic::Ordering::Relaxed);
+}
+
+/// The running program and its directory, such as `nvim · rexia`.
+fn generated_title(state: &BlockState) -> Option<String> {
+    let program = state.process.name.as_deref().filter(|p| !p.is_empty());
+    let dir = state
+        .pwd
+        .as_deref()
+        .or(state.process.cwd.as_deref())
+        .map(basename);
+    match (program, dir) {
+        (Some(program), Some(dir)) => Some(format!("{program} · {dir}")),
+        (Some(program), None) => Some(program.to_owned()),
+        (None, Some(dir)) => Some(dir.to_owned()),
+        (None, None) => None,
+    }
+}
+
 /// A pane's title: the label someone gave it, else its program's title, else the program,
-/// else its directory.
+/// else its directory. With generated titles preferred, the program and its directory
+/// come before the program's own title.
 pub fn pane_title(block: &Block, state: Option<&BlockState>) -> String {
     let id = block.block_id.as_deref().unwrap_or_default();
     if !is_default_label(&block.label, id) {
         return block.label.clone();
     }
     if let Some(state) = state {
+        if PREFER_GENERATED.load(std::sync::atomic::Ordering::Relaxed)
+            && let Some(title) = generated_title(state)
+        {
+            return title;
+        }
         if let Some(title) = state.current_title().filter(|t| !t.trim().is_empty()) {
             return title.trim().to_owned();
         }

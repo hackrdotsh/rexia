@@ -78,7 +78,9 @@ pub struct SettingsPage {
     pub(super) ts_control: Entity<TextInput>,
     /// A custom SSH agent socket; Enter uses it.
     pub(super) ssh_socket: Entity<TextInput>,
-    _subscriptions: [Subscription; 4],
+    /// The startup command for new local terminals; Enter applies.
+    pub(super) startup: Entity<TextInput>,
+    _subscriptions: [Subscription; 5],
 }
 
 fn state_mut(settings: &mut Settings, state: ProgramState) -> &mut StateActivity {
@@ -214,6 +216,11 @@ impl Workspace {
                 ws.commit_settings_fields(cx);
             }
         };
+        let startup = cx.new(|cx| TextInput::new("Default login shell", cx));
+        if !self.settings.terminal.startup_command.is_empty() {
+            let text = self.settings.terminal.startup_command.clone();
+            startup.update(cx, |input, cx| input.set_text(text, cx));
+        }
         let ssh_socket = cx.new(|cx| TextInput::new("/path/to/agent.sock", cx));
         if let Some(socket) = &self.settings.ssh_agent {
             let text = socket.display().to_string();
@@ -223,6 +230,16 @@ impl Workspace {
             cx.subscribe_in(&label, window, on_submit),
             cx.subscribe_in(&font, window, on_submit),
             cx.subscribe_in(&fallbacks, window, on_submit),
+            cx.subscribe_in(
+                &startup,
+                window,
+                |ws: &mut Workspace, input: &Entity<TextInput>, event: &InputEvent, _, cx| {
+                    if let InputEvent::Submit { .. } = event {
+                        let text = input.read(cx).text().trim().to_owned();
+                        ws.update_settings(|s| s.terminal.startup_command = text, cx);
+                    }
+                },
+            ),
             cx.subscribe_in(
                 &ssh_socket,
                 window,
@@ -236,7 +253,7 @@ impl Workspace {
         ];
         // Keys go to the page, not the terminal underneath.
         window.focus(&self.focus, cx);
-        self.overlay = Some(Overlay::Settings(SettingsPage {
+        self.overlay = Some(Overlay::Settings(Box::new(SettingsPage {
             section: Section::Interface,
             label,
             font,
@@ -245,8 +262,9 @@ impl Workspace {
             ts_tags: cx.new(|cx| TextInput::new("tag:rex", cx)),
             ts_control: cx.new(|cx| TextInput::new("Tailscale's own", cx)),
             ssh_socket,
+            startup,
             _subscriptions: subscriptions,
-        }));
+        })));
         cx.notify();
     }
 
@@ -324,6 +342,7 @@ impl Workspace {
 
     pub(super) fn apply_settings(&mut self, cx: &mut Context<Self>) {
         crate::rex::ssh_agent::choose(self.settings.ssh_agent.clone());
+        super::apply_global_settings(&self.settings);
         self.font = super::terminal_font(&self.settings);
         let font = self.font.clone();
         let terminal = &self.settings.terminal;
@@ -987,6 +1006,24 @@ impl Workspace {
             |s, v| s.terminal.copy_on_select = v,
             theme,
             cx,
+        ));
+        rows.push(section_label("Titles", theme));
+        rows.push(self.toggle_row(
+            "prefer-generated-titles",
+            "Prefer generated titles",
+            "Show the running program and its directory instead of titles that shells set.",
+            |s| s.terminal.prefer_generated_titles,
+            |s, v| s.terminal.prefer_generated_titles = v,
+            theme,
+            cx,
+        ));
+        rows.push(section_label("Shell", theme));
+        rows.push(Self::field_row(
+            "startup-command",
+            "Startup command",
+            "The program and arguments new terminals on this computer run, or empty for the login shell. Enter applies.",
+            &page.startup,
+            theme,
         ));
         rows.push(section_label("Advanced font", theme));
         rows.push(self.stepper_row(

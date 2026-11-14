@@ -1064,7 +1064,8 @@ impl Host {
                 self.shared.update(|m| m.selected = Some(id));
             }
             HostCommand::CreateSession { label, reply } => {
-                let mut payload = json!({"initial_windows": [{"layout": shell_layout()}]});
+                let layout = shell_layout_for(self.endpoint.is_local(), None);
+                let mut payload = json!({"initial_windows": [{"layout": layout}]});
                 if let Some(label) = label.filter(|l| !l.trim().is_empty()) {
                     payload["label"] = json!(label.trim());
                 }
@@ -1378,6 +1379,84 @@ pub fn shell_layout_in(cwd: &str) -> Value {
     json!({"block": {"flavor": data::SHELL_FLAVOR, "options": {"cwd": cwd}}})
 }
 
+/// The command new local terminals run instead of the login shell, chosen in Settings.
+static STARTUP: std::sync::RwLock<Option<Vec<String>>> = std::sync::RwLock::new(None);
+
+/// Run `command` (a program and its arguments) in new local terminals, or the default
+/// login shell with `None`.
+pub fn set_startup_command(command: Option<Vec<String>>) {
+    *STARTUP.write().expect("startup command") = command.filter(|c| !c.is_empty());
+}
+
+/// The terminal options for the startup command: a program alone starts as the shell,
+/// so a shell such as fish reads its startup files as a login shell; a program with
+/// arguments runs directly.
+pub fn startup_options(command: &[String]) -> Value {
+    match command {
+        [] => json!({}),
+        [program] => json!({"shell": program}),
+        [program, args @ ..] => {
+            let mut all = vec![program.clone()];
+            all.extend(args.iter().cloned());
+            json!({"shell": "none", "command": all})
+        }
+    }
+}
+
+/// A new shell for a host: on a local host, the startup command chosen in Settings.
+pub fn shell_layout_for(local: bool, cwd: Option<&str>) -> Value {
+    let mut options = match STARTUP.read().expect("startup command").as_deref() {
+        Some(command) if local => startup_options(command),
+        _ => json!({}),
+    };
+    if let Some(cwd) = cwd {
+        options["cwd"] = json!(cwd);
+    }
+    if options.as_object().is_some_and(|o| o.is_empty()) {
+        return shell_layout();
+    }
+    json!({"block": {"flavor": data::SHELL_FLAVOR, "options": options}})
+}
+
+/// A startup command as typed in Settings, split into a program and its arguments.
+/// Quotes group words, as a shell's do; a backslash escapes the next character.
+pub fn split_command(text: &str) -> Vec<String> {
+    let mut words = Vec::new();
+    let mut word = String::new();
+    let mut started = false;
+    let mut quote: Option<char> = None;
+    let mut chars = text.chars();
+    while let Some(c) = chars.next() {
+        match (quote, c) {
+            (Some(q), c) if c == q => quote = None,
+            (None, '\'' | '"') => {
+                quote = Some(c);
+                started = true;
+            }
+            (Some('"') | None, '\\') => {
+                if let Some(next) = chars.next() {
+                    word.push(next);
+                    started = true;
+                }
+            }
+            (None, c) if c.is_whitespace() => {
+                if started {
+                    words.push(std::mem::take(&mut word));
+                    started = false;
+                }
+            }
+            (_, c) => {
+                word.push(c);
+                started = true;
+            }
+        }
+    }
+    if started {
+        words.push(word);
+    }
+    words
+}
+
 async fn resize(
     control: &Control,
     session: &str,
@@ -1574,6 +1653,34 @@ async fn stream(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn startup_commands_split_and_become_terminal_options() {
+        assert_eq!(split_command("fish"), ["fish"]);
+        assert_eq!(
+            split_command(r#"nu --config "/home/me/my config.nu" -e 'ls'"#),
+            ["nu", "--config", "/home/me/my config.nu", "-e", "ls"]
+        );
+        assert_eq!(split_command(r"a\ b ''"), ["a b", ""]);
+        assert!(split_command("   ").is_empty());
+        assert_eq!(startup_options(&["fish".into()]), json!({"shell": "fish"}));
+        assert_eq!(
+            startup_options(&["htop".into(), "-d".into(), "5".into()]),
+            json!({"shell": "none", "command": ["htop", "-d", "5"]})
+        );
+        // Only local hosts get it; a remote host's new terminals keep their login shell.
+        set_startup_command(Some(vec!["fish".into()]));
+        assert_eq!(
+            shell_layout_for(false, Some("/tmp")),
+            shell_layout_in("/tmp")
+        );
+        assert_eq!(
+            shell_layout_for(true, Some("/tmp"))["block"]["options"],
+            json!({"shell": "fish", "cwd": "/tmp"})
+        );
+        set_startup_command(None);
+        assert_eq!(shell_layout_for(true, None), shell_layout());
+    }
 
     #[test]
     fn floors_skip_events_already_in_snapshots() {

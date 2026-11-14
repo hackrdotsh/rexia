@@ -6,7 +6,7 @@ use crate::{
         activity::ProgramState,
         data::TERMINAL_CREATOR,
         endpoint::Endpoint,
-        host::{HostCommand, shell_layout_in},
+        host::{HostCommand, shell_layout_for},
         view::View,
     },
     ui::{
@@ -190,7 +190,7 @@ pub enum Dialog {
 pub enum Overlay {
     List(ListOverlay),
     Dialog(Dialog),
-    Settings(super::preferences::SettingsPage),
+    Settings(Box<super::preferences::SettingsPage>),
 }
 
 pub struct FindBar {
@@ -841,7 +841,7 @@ impl Workspace {
                 } else {
                     self.host().handle.call(
                         "session.new_window",
-                        json!({"session_id": session, "layout": shell_layout_in(&path), "focus": true}),
+                        json!({"session_id": session, "layout": shell_layout_for(self.host().handle.endpoint.is_local(), Some(&path)), "focus": true}),
                     );
                 }
             }

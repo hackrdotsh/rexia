@@ -32,7 +32,7 @@ use crate::{
         activity::ProgramState,
         client::Identity,
         endpoint::Endpoint,
-        host::{HostCommand, HostHandle, HostModel, shell_layout},
+        host::{HostCommand, HostHandle, HostModel, shell_layout_for},
         view::{self, Rect},
     },
     settings::{
@@ -48,6 +48,13 @@ use gpui::{
 };
 pub use overlay::{Confirm, ListKind, RenameTarget};
 pub use preferences::Section as SettingsSection;
+
+/// Settings that apply to the whole process: the startup command and generated titles.
+fn apply_global_settings(settings: &Settings) {
+    let command = crate::rex::host::split_command(&settings.terminal.startup_command);
+    crate::rex::host::set_startup_command(Some(command));
+    crate::ui::titles::set_prefer_generated(settings.terminal.prefer_generated_titles);
+}
 use serde_json::{Value, json};
 use std::{
     collections::{HashMap, HashSet},
@@ -220,6 +227,7 @@ impl Workspace {
     ) -> Self {
         // ssh:// hosts below connect with the chosen agent.
         crate::rex::ssh_agent::choose(settings.ssh_agent.clone());
+        apply_global_settings(&settings);
         let identity = Identity {
             label: settings.client_label.clone(),
             ..Default::default()
@@ -557,7 +565,7 @@ impl Workspace {
         let Some(session) = self.session_id() else {
             return;
         };
-        let payload = json!({"session_id": session, "layout": shell_layout(), "focus": true});
+        let payload = json!({"session_id": session, "layout": shell_layout_for(self.host().handle.endpoint.is_local(), None), "focus": true});
         if !self.pinned(self.active, &session) {
             self.call("session.new_window", payload);
             return;
@@ -603,7 +611,7 @@ impl Workspace {
             "session_id": session,
             "direction": if horizontal { "horizontal" } else { "vertical" },
             "side": if after { "after" } else { "before" },
-            "layout": shell_layout(),
+            "layout": shell_layout_for(self.host().handle.endpoint.is_local(), None),
             "focus": true,
         });
         if let Some(anchor) = anchor {

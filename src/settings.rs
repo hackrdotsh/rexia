@@ -251,6 +251,10 @@ pub struct TerminalSettings {
     pub cursor_blink: BlinkSpeed,
     /// The time between blinks with a custom speed, in milliseconds.
     pub cursor_blink_ms: u32,
+    /// The program and arguments new local terminals run; empty runs the login shell.
+    pub startup_command: String,
+    /// Name panes after their program and directory, not titles shells set.
+    pub prefer_generated_titles: bool,
     /// Draw a trail behind the cursor when it jumps.
     pub cursor_shaders: bool,
     pub cursor_shader: CursorShader,
@@ -296,6 +300,8 @@ impl Default for TerminalSettings {
             force_cursor_style: false,
             cursor_blink: BlinkSpeed::Normal,
             cursor_blink_ms: 600,
+            startup_command: String::new(),
+            prefer_generated_titles: false,
             cursor_shaders: false,
             cursor_shader: CursorShader::Warp,
             character_spacing: 0.,

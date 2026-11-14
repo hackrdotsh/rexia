@@ -5,7 +5,7 @@ use super::{Workspace, overlay};
 use crate::{
     keymap::{Keymap, Lookup},
     rex::{
-        host::{HostCommand, PerformRequest, shell_layout},
+        host::{HostCommand, PerformRequest, shell_layout_for},
         view::{self, View},
     },
     ui::{actions, keys, terminal::TerminalPane, titles},
@@ -701,7 +701,7 @@ impl Workspace {
             "pane.new_floating" => call(
                 self,
                 "session.new_layer",
-                json!({"session_id": need_session()?, "bounds": [0.15, 0.12, 0.7, 0.72], "layout": shell_layout(), "focus": true}),
+                json!({"session_id": need_session()?, "bounds": [0.15, 0.12, 0.7, 0.72], "layout": shell_layout_for(self.host().handle.endpoint.is_local(), None), "focus": true}),
             ),
             "pane.minimize_floating" | "pane.minimize_all_floating" => {
                 let window = window_view
@@ -797,11 +797,12 @@ impl Workspace {
             "pane.move_to_new_tab" => {
                 let block = need_block()?;
                 let session = need_session()?;
+                let local = self.host().handle.endpoint.is_local();
                 let host = self.host().handle.clone();
                 // A new tab starts with a shell; the pane moves in beside it and the shell closes.
                 cx.spawn(async move |_, _| {
                     let Ok(created) = host
-                        .request("session.new_window", json!({"session_id": session, "layout": shell_layout(), "focus": true}))
+                        .request("session.new_window", json!({"session_id": session, "layout": shell_layout_for(local, None), "focus": true}))
                         .await
                     else {
                         return;
