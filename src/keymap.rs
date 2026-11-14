@@ -274,9 +274,13 @@ pub fn display(keys: &[String]) -> String {
                 }
             }
             let mut chars = rest.chars();
-            parts.push(match chars.next() {
-                Some(first) => first.to_uppercase().chain(chars).collect(),
-                None => String::new(),
+            parts.push(match rest {
+                "pageup" => "PageUp".to_owned(),
+                "pagedown" => "PageDown".to_owned(),
+                _ => match chars.next() {
+                    Some(first) => first.to_uppercase().chain(chars).collect(),
+                    None => String::new(),
+                },
             });
             parts.join("+")
         })
@@ -405,5 +409,6 @@ mod tests {
         assert_eq!(display(&["ctrl+shift+t".into()]), "Ctrl+Shift+T");
         assert_eq!(display(&["ctrl+a".into(), "c".into()]), "Ctrl+A C");
         assert_eq!(display(&["ctrl++".into()]), "Ctrl++");
+        assert_eq!(display(&["ctrl+shift+pageup".into()]), "Ctrl+Shift+PageUp");
     }
 }
