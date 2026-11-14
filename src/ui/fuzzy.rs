@@ -12,26 +12,38 @@ pub fn score(query: &str, candidate: &str) -> Option<(i64, Vec<usize>)> {
         return Some((0, Vec::new()));
     }
     let chars: Vec<char> = candidate.chars().collect();
+    // Jumping to word starts finds initials ("spr" for Split Pane Right) but can skip past
+    // letters a typed-out name needs ("split pane right"), so the plain match is tried too.
+    [true, false]
+        .into_iter()
+        .filter_map(|word_starts| matched(&query, &chars, word_starts))
+        .max_by_key(|(score, _)| *score)
+}
+
+fn matched(query: &[char], chars: &[char], word_starts: bool) -> Option<(i64, Vec<usize>)> {
     let lower: Vec<char> = chars
         .iter()
         .map(|c| c.to_lowercase().next().unwrap_or(*c))
         .collect();
+    let starts_word = |i: usize| i == 0 || !chars[i - 1].is_alphanumeric();
     let mut positions = Vec::with_capacity(query.len());
     let mut score = 0i64;
     let mut at = 0;
     let mut previous: Option<usize> = None;
-    for wanted in &query {
-        // Prefer an occurrence at a word start, as initials ("spr" for Split Pane Right).
+    for wanted in query {
         let rest = at..lower.len();
-        let word_start = rest
-            .clone()
-            .find(|&i| lower[i] == *wanted && (i == 0 || !chars[i - 1].is_alphanumeric()));
+        let word_start = word_starts
+            .then(|| {
+                rest.clone()
+                    .find(|&i| lower[i] == *wanted && starts_word(i))
+            })
+            .flatten();
         let index = match word_start {
             Some(start) => start,
             None => rest.clone().find(|&i| lower[i] == *wanted)?,
         };
         score += 1;
-        if index == 0 || !chars[index - 1].is_alphanumeric() {
+        if starts_word(index) {
             score += 8;
         }
         if previous.is_some_and(|p| index == p + 1) {
@@ -61,6 +73,15 @@ pub fn rank<'a>(query: &str, items: impl Iterator<Item = &'a str>) -> Vec<usize>
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn typed_out_names_match_as_well_as_initials() {
+        let titles = ["Split Pane Down", "Split Pane Right", "Select All"];
+        let rank_of = |q: &str| rank(q, titles.iter().copied());
+        assert_eq!(rank_of("split pane right").first(), Some(&1));
+        assert_eq!(rank_of("spr").first(), Some(&1));
+        assert!(score("split pane right", "Split Pane Right").is_some());
+    }
 
     #[test]
     fn subsequences_match_and_word_starts_rank_first() {
