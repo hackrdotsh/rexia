@@ -67,9 +67,23 @@ impl Fake {
     ) -> zbus::Result<()>;
 }
 
+/// A stand-in for GNOME's previewer (Sushi): it notes each file it's asked to show.
+#[derive(Clone, Default)]
+struct FakePreviewer {
+    shown: Arc<Mutex<Vec<String>>>,
+}
+
+#[zbus::interface(name = "org.gnome.NautilusPreviewer2")]
+impl FakePreviewer {
+    fn show_file(&self, uri: &str, _window_handle: &str, _close_if_shown: bool) {
+        self.shown.lock().unwrap().push(uri.to_owned());
+    }
+}
+
 pub struct Desktop {
     pub address: String,
     fake: Fake,
+    previewer: FakePreviewer,
     connection: Option<zbus::Connection>,
     runtime: tokio::runtime::Runtime,
     bus: Child,
@@ -78,6 +92,12 @@ pub struct Desktop {
 impl Desktop {
     /// Start the bus and the fake server, or `None` without dbus-daemon.
     pub fn start() -> Option<Self> {
+        Self::start_with(false)
+    }
+
+    /// Start the bus and the fake servers: notifications, and with `previewer`, GNOME's
+    /// previewer too.
+    pub fn start_with(previewer: bool) -> Option<Self> {
         let mut bus = Command::new("dbus-daemon")
             .args(["--session", "--nofork", "--nopidfile", "--print-address=1"])
             .stdout(Stdio::piped())
@@ -94,20 +114,25 @@ impl Desktop {
             .build()
             .ok()?;
         let fake = Fake::default();
-        let connection = runtime
-            .block_on(
-                zbus::connection::Builder::address(address.as_str())
-                    .ok()?
-                    .name("org.freedesktop.Notifications")
-                    .ok()?
-                    .serve_at("/org/freedesktop/Notifications", fake.clone())
-                    .ok()?
-                    .build(),
-            )
+        let fake_previewer = FakePreviewer::default();
+        let mut builder = zbus::connection::Builder::address(address.as_str())
+            .ok()?
+            .name("org.freedesktop.Notifications")
+            .ok()?
+            .serve_at("/org/freedesktop/Notifications", fake.clone())
             .ok()?;
+        if previewer {
+            builder = builder
+                .name("org.gnome.NautilusPreviewer")
+                .ok()?
+                .serve_at("/org/gnome/NautilusPreviewer", fake_previewer.clone())
+                .ok()?;
+        }
+        let connection = runtime.block_on(builder.build()).ok()?;
         Some(Self {
             address,
             fake,
+            previewer: fake_previewer,
             connection: Some(connection),
             runtime,
             bus,
@@ -116,6 +141,11 @@ impl Desktop {
 
     pub fn shown(&self) -> Vec<Shown> {
         self.fake.shown.lock().unwrap().clone()
+    }
+
+    /// The files the stand-in previewer was asked to show.
+    pub fn previewed(&self) -> Vec<String> {
+        self.previewer.shown.lock().unwrap().clone()
     }
 
     pub fn closed(&self) -> Vec<u32> {
