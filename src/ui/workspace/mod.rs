@@ -11,6 +11,7 @@ pub mod gestures;
 mod highlight;
 pub mod links;
 pub mod motion;
+pub mod onboarding;
 mod overlay;
 mod preferences;
 pub mod remote;
@@ -142,6 +143,10 @@ pub struct Workspace {
     reveal: toolbar::Reveal,
     highlight: highlight::Track,
     swipe: gestures::SwipeTracker,
+    /// Onboarding walkthroughs' steps as the server last answered rexia, by block, and
+    /// the blocks already asked.
+    onboarding: HashMap<String, (u64, String)>,
+    onboarding_asked: std::collections::HashSet<String>,
     /// Why the last origin pattern wasn't added.
     origin_error: Option<String>,
     /// The chosen rex's check: which location, and what was found.
@@ -320,6 +325,8 @@ impl Workspace {
             reveal: Default::default(),
             highlight: Default::default(),
             swipe: Default::default(),
+            onboarding: HashMap::new(),
+            onboarding_asked: Default::default(),
             origin_error: None,
             rex_check: None,
             motion: Default::default(),
@@ -458,16 +465,30 @@ impl Workspace {
                 .notices
                 .clear();
         }
+        // Onboarding walkthroughs are drawn by rexia, not streamed as terminals.
+        let session_id = model.selected.clone().unwrap_or_default();
+        let mut walkthroughs = Vec::new();
         let visible: Vec<(String, String)> = model
             .view()
             .and_then(view::View::active_window)
             .map(|w| {
                 w.panes()
                     .into_iter()
-                    .map(|p| (model.selected.clone().unwrap_or_default(), p.block_id))
+                    .filter(|p| {
+                        let walkthrough =
+                            w.block(&p.block_id).is_some_and(onboarding::is_onboarding);
+                        if walkthrough {
+                            walkthroughs.push(p.block_id.clone());
+                        }
+                        !walkthrough
+                    })
+                    .map(|p| (session_id.clone(), p.block_id))
                     .collect()
             })
             .unwrap_or_default();
+        for block in walkthroughs {
+            self.fetch_onboarding(&session_id, &block, cx);
+        }
         self.panes
             .retain(|block, _| visible.iter().any(|(_, id)| id == block));
         let copy_on_select = self.settings.terminal.copy_on_select;
@@ -1210,9 +1231,13 @@ impl Workspace {
         self.keep_pane_motion(&shown);
         let style = self.settings.interface.animation;
         for pane in window.panes() {
-            let Some(terminal) = self.panes.get(&pane.block_id).cloned() else {
+            let walkthrough = window
+                .block(&pane.block_id)
+                .is_some_and(onboarding::is_onboarding);
+            let terminal = self.panes.get(&pane.block_id).cloned();
+            if terminal.is_none() && !walkthrough {
                 continue;
-            };
+            }
             let mut rect = pane.rect;
             let mut dragging = false;
             if let (Some(layer), Some((dragged, origin, bounds))) = (&pane.floating, &dragged_layer)
@@ -1231,7 +1256,7 @@ impl Workspace {
                 .settings
                 .terminal
                 .padding_fill_header
-                .then(|| terminal.read(cx).header_fill())
+                .then(|| terminal.as_ref().and_then(|t| t.read(cx).header_fill()))
                 .flatten();
             let header = self.header_shown(&pane.block_id).then(|| {
                 self.pane_header(
@@ -1282,7 +1307,10 @@ impl Workspace {
                         .flex_1()
                         .min_h_0()
                         .when(faded_content, |d| d.opacity(0.6))
-                        .child(terminal),
+                        .child(match &terminal {
+                            Some(terminal) => terminal.clone().into_any_element(),
+                            None => self.render_onboarding(&session, &pane.block_id, theme, cx),
+                        }),
                 );
             let bordered = theme.card_borders || floating.is_some();
             // A fading highlight comes up on the newly focused pane.

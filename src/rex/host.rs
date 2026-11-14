@@ -99,6 +99,9 @@ pub struct HostModel {
     /// Tabs this client shows instead of the session's active one, by session. The server
     /// keeps one active tab per session, so a window that split off a tab pins its own.
     pub pins: HashMap<String, String>,
+    /// Onboarding walkthroughs' steps by block, from `step_changed` events:
+    /// (generation, step).
+    pub onboarding: HashMap<String, (u64, String)>,
     /// Bumped on every `tailscale_status_changed` event, which updates `server`.
     pub tailscale_revision: u64,
 }
@@ -985,6 +988,24 @@ impl Host {
                             && m.client_id.is_some();
                         if let Some(pane) = m.panes.get(block) {
                             pane.model.lock().expect("pane model").owner = owner;
+                        }
+                    });
+                }
+            }
+            "block_event"
+                if event.payload["creator_name"] == super::onboarding::CREATOR
+                    && event.payload["name"] == "step_changed" =>
+            {
+                if let Some(block) = event.payload["block_id"].as_str() {
+                    let inner = &event.payload["payload"];
+                    let state = (
+                        inner["generation"].as_u64().unwrap_or(0),
+                        inner["step"].as_str().unwrap_or_default().to_owned(),
+                    );
+                    self.shared.update(|m| {
+                        let known = m.onboarding.entry(block.to_owned()).or_default();
+                        if state.0 >= known.0 {
+                            *known = state.clone();
                         }
                     });
                 }

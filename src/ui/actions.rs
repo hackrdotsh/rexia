@@ -133,6 +133,13 @@ pub const ACTIONS: &[ActionDef] = &[
         []
     ),
     action!(
+        "client.onboarding",
+        "Open Onboarding Session…",
+        "App",
+        "onboarding welcome setup get started tour walkthrough migrate keybindings theme appearance tmux zellij ghostty agent",
+        []
+    ),
+    action!(
         "client.agents.setup",
         "Install Rex for Agents",
         "App",

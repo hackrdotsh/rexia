@@ -6,6 +6,7 @@ pub mod endpoint;
 pub mod host;
 pub mod images;
 pub mod install;
+pub mod onboarding;
 pub mod ssh_agent;
 pub mod stream;
 pub mod view;
