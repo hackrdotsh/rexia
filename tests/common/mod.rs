@@ -229,6 +229,18 @@ impl Harness {
         }
     }
 
+    /// Send a raw input event to the window, as the platform would.
+    #[allow(dead_code)]
+    pub fn input(&mut self, event: gpui::PlatformInput) {
+        let handle: AnyWindowHandle = self.window.into();
+        self.cx
+            .update_window(handle, |_, window, cx| {
+                window.dispatch_event(event, cx);
+            })
+            .unwrap();
+        self.pump();
+    }
+
     fn dispatch(&mut self, keystroke: Keystroke) {
         let handle: AnyWindowHandle = self.window.into();
         self.cx
