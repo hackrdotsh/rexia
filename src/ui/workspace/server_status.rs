@@ -65,6 +65,11 @@ pub enum Finding {
     /// The rex installed here is another version than the server running: the server
     /// started before an update, and a restart runs the new one.
     Outdated { running: String, installed: String },
+    /// Web client origins changed since rexia started the server, or the server running
+    /// wasn't started by rexia, so they may not apply.
+    PendingOrigins { started_by_rexia: bool },
+    /// The key bindings rexia has came from an older configuration or server process.
+    StaleKeymap,
 }
 
 impl Finding {
@@ -89,12 +94,51 @@ impl Finding {
                 "The server speaks API revision {server}, newer than rexia's {API_REVISION}. \
                  rexia works with what it knows; update rexia for the rest."
             ),
+            Finding::PendingOrigins {
+                started_by_rexia: true,
+            } => "Web client origins changed since rexia started the server. Restart the \
+                 server to apply them."
+                .into(),
+            Finding::PendingOrigins {
+                started_by_rexia: false,
+            } => "This server wasn't started by rexia, so the web client origins in \
+                 Settings › Developer may not apply. Restart the server to apply them."
+                .into(),
+            Finding::StaleKeymap => {
+                "The key bindings rexia has are from an older configuration or server. \
+                 Reload them to use the current ones."
+                    .into()
+            }
             Finding::Outdated { running, installed } => format!(
                 "Rex {installed} is installed, but the server running is {running}. \
                  Restart the server to run the installed version."
             ),
         }
     }
+}
+
+/// Whether `keymap` came from the configuration and server process `status` describes.
+pub fn keymap_current(keymap: &Value, status: &Value) -> bool {
+    let config = &keymap["config"];
+    config["hash"] == status["config"]["hash"] && config["instance_id"] == status["instance_id"]
+}
+
+/// Whether the origins rexia applied differ from those in Settings, or never reached the
+/// server process running now. `None` when nothing is pending.
+pub fn origins_pending(
+    wanted: &[String],
+    applied: Option<&crate::settings::AppliedOrigins>,
+    instance: Option<&str>,
+) -> Option<Finding> {
+    let started_by_rexia =
+        applied.is_some_and(|a| a.instance.as_deref() == instance && instance.is_some());
+    let applied_origins = applied
+        .filter(|_| started_by_rexia)
+        .map_or(&[][..], |a| a.origins.as_slice());
+    if wanted == applied_origins {
+        return None;
+    }
+    Some(Finding::PendingOrigins { started_by_rexia })
 }
 
 /// What the report says about rexia and the server together.
@@ -187,6 +231,62 @@ fn installed_rex() -> Option<String> {
 }
 
 impl Workspace {
+    /// Settings changes the server hasn't taken up: origins, and the key bindings.
+    pub fn pending_findings(&self, report: &ServerReport) -> Vec<Finding> {
+        let mut found = Vec::new();
+        let Ok(status) = &report.status else {
+            return found;
+        };
+        let applied = self.settings.applied_origins.get(&self.host().config.id);
+        if report.local
+            && let Some(pending) = origins_pending(
+                &self.settings.web_origins,
+                applied,
+                status["instance_id"].as_str(),
+            )
+        {
+            found.push(pending);
+        }
+        if let Some(keymap) = &self.model().keymap
+            && !keymap_current(keymap, status)
+        {
+            found.push(Finding::StaleKeymap);
+        }
+        found
+    }
+
+    /// Once the server rexia restarted is running, note which process it is.
+    fn note_server_instance(&mut self, report: &ServerReport, cx: &mut Context<Self>) {
+        let Ok(status) = &report.status else { return };
+        let Some(instance) = status["instance_id"].as_str().map(str::to_owned) else {
+            return;
+        };
+        let host = self.host().config.id.clone();
+        let Some(applied) = self.settings.applied_origins.get(&host) else {
+            return;
+        };
+        if applied.instance.is_none() && applied.before.as_deref() != Some(instance.as_str()) {
+            self.update_settings(
+                move |s| {
+                    if let Some(applied) = s.applied_origins.get_mut(&host) {
+                        applied.instance = Some(instance);
+                    }
+                },
+                cx,
+            );
+        }
+    }
+
+    /// Ask the server for the key bindings again.
+    pub fn reload_keymap(&mut self, cx: &mut Context<Self>) {
+        self.host()
+            .handle
+            .send(crate::rex::host::HostCommand::Keymap(
+                crate::ui::actions::keymap_request(&self.settings.shortcuts),
+            ));
+        self.refresh_server_report(cx);
+    }
+
     /// Ask the server about itself again, for the Server section.
     pub fn refresh_server_report(&mut self, cx: &mut Context<Self>) {
         let host = self.active;
@@ -215,6 +315,7 @@ impl Workspace {
                 tailscale_revision,
             };
             let _ = this.update(cx, |ws, cx| {
+                ws.note_server_instance(&report, cx);
                 ws.server_report = ServerReportState::Ready(report);
                 cx.notify();
             });
@@ -344,8 +445,12 @@ impl Workspace {
                     .children(details)
                     .into_any_element(),
             );
-            let found = findings(report);
-            let outdated = found.iter().any(|f| matches!(f, Finding::Outdated { .. }));
+            let mut found = findings(report);
+            found.extend(self.pending_findings(report));
+            let outdated = found
+                .iter()
+                .any(|f| matches!(f, Finding::Outdated { .. } | Finding::PendingOrigins { .. }));
+            let stale = found.contains(&Finding::StaleKeymap);
             let lines = found.iter().map(|finding| {
                 div()
                     .text_size(px(12.))
@@ -363,6 +468,17 @@ impl Workspace {
                     "How this server and rexia fit together.",
                     theme,
                 )
+                .when(stale, |r| {
+                    r.child(
+                        button(
+                            "server-reload-keys",
+                            "Reload Key Bindings",
+                            !outdated,
+                            theme,
+                        )
+                        .on_click(cx.listener(|ws, _, _, cx| ws.reload_keymap(cx))),
+                    )
+                })
                 .when(outdated && report.local, |r| {
                     r.child(
                         button("server-restart", "Restart Server", true, theme).on_click(
@@ -415,6 +531,61 @@ mod tests {
         assert_eq!(uptime(4 * 3600 + 12 * 60), "4 h 12 min");
         assert_eq!(uptime(86_400 + 3 * 3600), "1 day 3 h");
         assert_eq!(uptime(5 * 86_400), "5 days 0 h");
+    }
+
+    #[test]
+    fn pending_settings_show_until_the_server_takes_them() {
+        use crate::settings::AppliedOrigins;
+        let status = json!({"instance_id": "b", "config": {"hash": "h2"}});
+        // Key bindings from the same file and process are current; others are stale.
+        assert!(keymap_current(
+            &json!({"config": {"hash": "h2", "instance_id": "b"}}),
+            &status
+        ));
+        assert!(!keymap_current(
+            &json!({"config": {"hash": "h1", "instance_id": "b"}}),
+            &status
+        ));
+        assert!(!keymap_current(
+            &json!({"config": {"hash": "h2", "instance_id": "a"}}),
+            &status
+        ));
+        // No origins wanted, none applied: nothing pending.
+        assert_eq!(origins_pending(&[], None, Some("b")), None);
+        let wanted = vec!["https://*.a.dev".to_owned()];
+        // Wanted, but this server wasn't started by rexia.
+        assert_eq!(
+            origins_pending(&wanted, None, Some("b")),
+            Some(Finding::PendingOrigins {
+                started_by_rexia: false
+            })
+        );
+        let applied = AppliedOrigins {
+            origins: wanted.clone(),
+            before: Some("a".into()),
+            instance: Some("b".into()),
+        };
+        assert_eq!(origins_pending(&wanted, Some(&applied), Some("b")), None);
+        // Changed since, or the server restarted some other way.
+        assert_eq!(
+            origins_pending(&[], Some(&applied), Some("b")),
+            Some(Finding::PendingOrigins {
+                started_by_rexia: true
+            })
+        );
+        assert_eq!(
+            origins_pending(&wanted, Some(&applied), Some("c")),
+            Some(Finding::PendingOrigins {
+                started_by_rexia: false
+            })
+        );
+        assert!(
+            Finding::StaleKeymap.warns()
+                && Finding::PendingOrigins {
+                    started_by_rexia: true
+                }
+                .warns()
+        );
     }
 
     #[test]

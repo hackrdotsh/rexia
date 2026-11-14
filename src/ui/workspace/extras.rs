@@ -35,6 +35,11 @@ impl Workspace {
         self.host().handle.call("server.stop", json!({}));
         let rex = std::env::var("REXIA_REX").unwrap_or_else(|_| "rex".into());
         let args = self.restart_args();
+        let host = self.host().config.id.clone();
+        let origins = self.settings.web_origins.clone();
+        let before = self.model().server["instance_id"]
+            .as_str()
+            .map(str::to_owned);
         cx.spawn(async move |this, cx| {
             let outcome = cx
                 .background_executor()
@@ -66,6 +71,23 @@ impl Workspace {
                 Err(message) => Some(message),
             };
             let _ = this.update(cx, |ws, cx| {
+                // The new server has these origins; which process it is shows once rexia
+                // reconnects.
+                if problem.is_none() {
+                    ws.update_settings(
+                        move |s| {
+                            s.applied_origins.insert(
+                                host,
+                                crate::settings::AppliedOrigins {
+                                    origins,
+                                    before,
+                                    instance: None,
+                                },
+                            );
+                        },
+                        cx,
+                    );
+                }
                 ws.notice = problem;
                 cx.notify();
             });
