@@ -63,8 +63,8 @@ Not implemented yet:
 | Interface › Animation | Not built: animation style (snappy, natural, off) for pane motion and the sidebar. |
 | Terminal › Keyboard | Key sequence hints always show; turning them off isn't built. The Option key setting is macOS-only (Alt always sends Alt). |
 | Terminal › Scrolling, Resizing | Not built: smooth (pixel) scrolling, and reflowing text locally while a pane resizes. |
-| Terminal › Selection | Copy on select only. Not built: the copy animation, selection colors and rounded selection corners. |
-| Terminal › Links | Not built: asking before links that open other apps, and trusted links. Ctrl+click opens only web, mail and file links. |
+| Terminal › Selection | Copy on select; selection foreground (the theme's, the accent, the program's own colors, or one of the 16 terminal colors) and background (the theme's, the accent, or a terminal color); rounded corners, which round only the selection's outer corners so touching rows stay joined; and a shine that sweeps across the selection to confirm each copy. |
+| Terminal › Links | Ctrl+click opens web, mail and file links at once. Links that open other apps, such as ssh://, ask first (Cancel, Always Open, Open), always open, or never open; Always Open remembers the link's app and host (`ssh://build`), and Trusted links lists them with Remove. Links that carry code, such as `javascript:` and `data:`, never open. |
 | Terminal › Integrated Path Browser | Not built: recently used paths first in Insert Path. |
 | Terminal › Titles, Shell | Prefer generated titles names panes and tabs after the running program and its directory (`nvim · rexia`) instead of titles programs set. Startup command: a program alone starts as the shell (so a shell such as fish starts as a login shell); with arguments it runs directly. It applies to new terminals on local hosts only, so remote hosts keep their own shells. Empty runs the login shell. |
 | Developer › Local API, Web Client Origins, Rex Installation | Not built: showing the local API URL, managing web client origins, and choosing the server installation. Developer Mode, App Version and update experiments are macOS app options. |
