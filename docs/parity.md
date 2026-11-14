@@ -55,7 +55,7 @@ Not implemented yet:
 | Terminal › Selection | Copy on select. |
 | Server › Client Info | Client label (`client.set_label`). Remote control is always on. |
 | Server › Rex Server, Remote Address, Tailscale | Not applicable: rexia doesn't manage servers. |
-| Remote Hosts | HTTPS and WebSocket hosts, kept on the home server (`hosts.put`, `hosts.remove`) and shared with other clients. SSH hosts aren't supported yet. |
+| Remote Hosts | HTTPS, WebSocket and `ssh://[USER@]HOST[:PORT][/SOCKET]` hosts, kept on the home server (`hosts.put`, `hosts.remove`) and shared with other clients. SSH hosts go through the system `ssh` (your keys, agent and `~/.ssh/config`) and `rex __internal dial-stdio` on the host, as the Rex CLI does; picking an SSH agent in rexia isn't built, so set `IdentityAgent` in `~/.ssh/config`. |
 | Integrations, Developer, App Icon, Launch | Not applicable or not built. |
 
 ## Behavior
@@ -75,6 +75,8 @@ Working:
   desktop notifications for panes out of view that open the pane when clicked; sounds
   from the desktop's sound theme.
 - Several hosts in one sidebar, streaming only the host on screen, with reconnects.
+- Servers that only speak API revisions below 8 are refused, with a message to update the
+  server.
 
 Known gaps:
 
