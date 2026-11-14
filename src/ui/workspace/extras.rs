@@ -178,6 +178,23 @@ impl Workspace {
             .map(|keys| keys.join(" "))
     }
 
+    /// A button's tooltip: `label`, or the action's own title, with the action's keys.
+    pub(super) fn tip(
+        &self,
+        action: &str,
+        label: Option<&str>,
+    ) -> impl Fn(&mut gpui::Window, &mut gpui::App) -> gpui::AnyView + 'static {
+        let label = label
+            .or_else(|| actions::find(action).map(|a| a.title))
+            .unwrap_or(action)
+            .trim_end_matches('…')
+            .to_owned();
+        crate::ui::components::tooltip(
+            label,
+            self.keymap.keys_for(action, None).map(keymap::display),
+        )
+    }
+
     /// The keys an action has now, for the shortcut dialog.
     pub(super) fn shortcut_of(&self, action: &str) -> String {
         self.keymap

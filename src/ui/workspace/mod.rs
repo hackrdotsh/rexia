@@ -972,17 +972,20 @@ impl Workspace {
                     .children(
                         activity.map(|(state, badge)| activity_mark(state, badge, active, theme)),
                     )
-                    .child(div().invisible().group_hover("tab", |d| d.visible()).child(
-                        small_icon_button(
-                            SharedString::from(format!("tab-close-{index}")),
-                            "x",
-                            fg,
-                            theme,
-                            cx.listener(move |ws, _, _, cx| {
-                                ws.request_close(close_guard::CloseTarget::Tab(id.clone()), cx)
-                            }),
+                    .child(
+                        div().invisible().group_hover("tab", |d| d.visible()).child(
+                            small_icon_button(
+                                SharedString::from(format!("tab-close-{index}")),
+                                "x",
+                                fg,
+                                theme,
+                                cx.listener(move |ws, _, _, cx| {
+                                    ws.request_close(close_guard::CloseTarget::Tab(id.clone()), cx)
+                                }),
+                            )
+                            .tooltip(self.tip("client.tab.close", None)),
                         ),
-                    ))
+                    )
                     .into_any_element()
             })
             .collect();
@@ -998,12 +1001,15 @@ impl Workspace {
             .bg(theme.background)
             .border_b(theme.border_width)
             .border_color(theme.border)
-            .child(icon_button(
-                "toggle-sidebar",
-                "layout-sidebar",
-                theme,
-                cx.listener(|ws, _, _, cx| ws.toggle_sidebar(cx)),
-            ))
+            .child(
+                icon_button(
+                    "toggle-sidebar",
+                    "layout-sidebar",
+                    theme,
+                    cx.listener(|ws, _, _, cx| ws.toggle_sidebar(cx)),
+                )
+                .tooltip(self.tip("client.sidebar.toggle", None)),
+            )
             .child(
                 div()
                     .flex_none()
@@ -1019,25 +1025,34 @@ impl Workspace {
                     .gap(px(6.))
                     .overflow_x_scroll()
                     .children(tabs)
-                    .child(icon_button(
-                        "new-tab",
-                        "plus",
-                        theme,
-                        cx.listener(|ws, _, _, cx| ws.new_tab(cx)),
-                    )),
+                    .child(
+                        icon_button(
+                            "new-tab",
+                            "plus",
+                            theme,
+                            cx.listener(|ws, _, _, cx| ws.new_tab(cx)),
+                        )
+                        .tooltip(self.tip("client.tab.new", None)),
+                    ),
             )
-            .child(icon_button(
-                "split-right",
-                "layout-columns",
-                theme,
-                cx.listener(|ws, _, _, _| ws.split(None, true, true)),
-            ))
-            .child(icon_button(
-                "split-down",
-                "layout-rows",
-                theme,
-                cx.listener(|ws, _, _, _| ws.split(None, false, true)),
-            ))
+            .child(
+                icon_button(
+                    "split-right",
+                    "layout-columns",
+                    theme,
+                    cx.listener(|ws, _, _, _| ws.split(None, true, true)),
+                )
+                .tooltip(self.tip("pane.split.right", None)),
+            )
+            .child(
+                icon_button(
+                    "split-down",
+                    "layout-rows",
+                    theme,
+                    cx.listener(|ws, _, _, _| ws.split(None, false, true)),
+                )
+                .tooltip(self.tip("pane.split.down", None)),
+            )
             .into_any_element()
     }
 
@@ -1058,13 +1073,16 @@ impl Workspace {
                     .items_center()
                     .justify_between()
                     .child(heading(host.config.label.clone(), theme))
-                    .child(small_icon_button(
-                        SharedString::from(format!("host-new-{index}")),
-                        "plus",
-                        theme.text_muted,
-                        theme,
-                        cx.listener(move |ws, _, _, cx| ws.new_session(index, cx)),
-                    )),
+                    .child(
+                        small_icon_button(
+                            SharedString::from(format!("host-new-{index}")),
+                            "plus",
+                            theme.text_muted,
+                            theme,
+                            cx.listener(move |ws, _, _, cx| ws.new_session(index, cx)),
+                        )
+                        .tooltip(self.tip("session.new", None)),
+                    ),
             );
             if let Some(status) = status {
                 list = list.child(
@@ -1558,55 +1576,80 @@ impl Workspace {
                 }),
             );
             let minimize = layer.to_owned();
-            header = header.child(small_icon_button(
-                SharedString::from(format!("minimize-{block_id}")),
-                "minus",
-                muted,
-                theme,
-                cx.listener(move |ws, _, _, _| ws.minimize_layer(minimize.clone())),
-            ));
+            header = header.child(
+                small_icon_button(
+                    SharedString::from(format!("minimize-{block_id}")),
+                    "minus",
+                    muted,
+                    theme,
+                    cx.listener(move |ws, _, _, _| ws.minimize_layer(minimize.clone())),
+                )
+                .tooltip(self.tip("pane.minimize_floating", Some("Minimize"))),
+            );
         }
         let (zoom_id, float_id, close_id, split_id) =
             (id.clone(), id.clone(), id.clone(), id.clone());
         header
-            .child(small_icon_button(
-                SharedString::from(format!("split-{block_id}")),
-                "layout-columns",
-                muted,
-                theme,
-                cx.listener(move |ws, _, _, _| ws.split(Some(split_id.clone()), true, true)),
-            ))
-            .child(small_icon_button(
-                SharedString::from(format!("zoom-{block_id}")),
-                if zoomed {
-                    "arrows-minimize"
-                } else {
-                    "arrows-maximize"
-                },
-                muted,
-                theme,
-                cx.listener(move |ws, _, _, _| ws.toggle_zoom(zoom_id.clone())),
-            ))
-            .child(small_icon_button(
-                SharedString::from(format!("float-{block_id}")),
-                if floating.is_some() {
-                    "picture-in-picture-off"
-                } else {
-                    "picture-in-picture"
-                },
-                muted,
-                theme,
-                cx.listener(move |ws, _, _, _| ws.toggle_float(float_id.clone())),
-            ))
-            .child(small_icon_button(
-                SharedString::from(format!("close-{block_id}")),
-                "x",
-                muted,
-                theme,
-                cx.listener(move |ws, _, _, cx| {
-                    ws.request_close(close_guard::CloseTarget::Pane(close_id.clone()), cx)
-                }),
-            ))
+            .child(
+                small_icon_button(
+                    SharedString::from(format!("split-{block_id}")),
+                    "layout-columns",
+                    muted,
+                    theme,
+                    cx.listener(move |ws, _, _, _| ws.split(Some(split_id.clone()), true, true)),
+                )
+                .tooltip(self.tip("pane.split.right", None)),
+            )
+            .child(
+                small_icon_button(
+                    SharedString::from(format!("zoom-{block_id}")),
+                    if zoomed {
+                        "arrows-minimize"
+                    } else {
+                        "arrows-maximize"
+                    },
+                    muted,
+                    theme,
+                    cx.listener(move |ws, _, _, _| ws.toggle_zoom(zoom_id.clone())),
+                )
+                .tooltip(self.tip(
+                    "pane.zoom",
+                    Some(if zoomed { "Unzoom Pane" } else { "Zoom Pane" }),
+                )),
+            )
+            .child(
+                small_icon_button(
+                    SharedString::from(format!("float-{block_id}")),
+                    if floating.is_some() {
+                        "picture-in-picture-off"
+                    } else {
+                        "picture-in-picture"
+                    },
+                    muted,
+                    theme,
+                    cx.listener(move |ws, _, _, _| ws.toggle_float(float_id.clone())),
+                )
+                .tooltip(self.tip(
+                    "pane.float",
+                    Some(if floating.is_some() {
+                        "Dock Pane"
+                    } else {
+                        "Float Pane"
+                    }),
+                )),
+            )
+            .child(
+                small_icon_button(
+                    SharedString::from(format!("close-{block_id}")),
+                    "x",
+                    muted,
+                    theme,
+                    cx.listener(move |ws, _, _, cx| {
+                        ws.request_close(close_guard::CloseTarget::Pane(close_id.clone()), cx)
+                    }),
+                )
+                .tooltip(self.tip("pane.close", None)),
+            )
             .into_any_element()
     }
 
@@ -1972,16 +2015,19 @@ impl Render for Workspace {
                 .when(theme.popup_shadows, |d| d.shadow_lg())
                 .child(icon("alert-triangle").size(px(16.)).text_color(theme.error))
                 .child(div().flex_1().text_size(px(13.)).child(message))
-                .child(small_icon_button(
-                    "dismiss-notice",
-                    "x",
-                    theme.text_muted,
-                    &theme,
-                    cx.listener(|ws, _, _, cx| {
-                        ws.notice = None;
-                        cx.notify();
-                    }),
-                ))
+                .child(
+                    small_icon_button(
+                        "dismiss-notice",
+                        "x",
+                        theme.text_muted,
+                        &theme,
+                        cx.listener(|ws, _, _, cx| {
+                            ws.notice = None;
+                            cx.notify();
+                        }),
+                    )
+                    .tooltip(self.tip("client.notice.dismiss", None)),
+                )
         });
         div()
             .id("workspace")

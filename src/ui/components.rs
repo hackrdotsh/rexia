@@ -118,3 +118,65 @@ pub fn card(theme: &Theme) -> Div {
 pub fn into_any(element: impl IntoElement) -> AnyElement {
     element.into_any_element()
 }
+
+/// The tooltip shown last, as "Label" or "Label  Keys", so tests can see what appeared.
+#[derive(Default)]
+pub struct ShownTooltip(pub Option<String>);
+
+impl gpui::Global for ShownTooltip {}
+
+/// A button's tooltip in Noctalia's popup style: its name, then its shortcut when it has one.
+pub struct Tooltip {
+    label: SharedString,
+    keys: Option<SharedString>,
+}
+
+impl Render for Tooltip {
+    fn render(&mut self, _: &mut Window, cx: &mut gpui::Context<Self>) -> impl IntoElement {
+        let theme = cx.global::<Theme>().clone();
+        div().pl(px(8.)).pt(px(6.)).child(
+            div()
+                .flex()
+                .items_center()
+                .gap(px(8.))
+                .px(px(8.))
+                .py(px(4.))
+                .font_family(theme.ui_font.clone())
+                .text_size(px(12.))
+                .text_color(theme.text)
+                .bg(theme.surface_high)
+                .rounded(theme.radius_small())
+                .when(theme.popup_borders, |d| {
+                    d.border(theme.border_width).border_color(theme.border)
+                })
+                .when(theme.popup_shadows, |d| d.shadow_md())
+                .child(self.label.clone())
+                .children(
+                    self.keys
+                        .clone()
+                        .map(|keys| div().text_color(theme.text_muted).child(keys)),
+                ),
+        )
+    }
+}
+
+/// Builds a tooltip for `.tooltip(...)`, recording it as the one shown.
+pub fn tooltip(
+    label: impl Into<SharedString>,
+    keys: Option<String>,
+) -> impl Fn(&mut Window, &mut App) -> gpui::AnyView + 'static {
+    let label = label.into();
+    let keys: Option<SharedString> = keys.map(Into::into);
+    move |_, cx| {
+        let shown = match &keys {
+            Some(keys) => format!("{label}  {keys}"),
+            None => label.to_string(),
+        };
+        cx.set_global(ShownTooltip(Some(shown)));
+        cx.new(|_| Tooltip {
+            label: label.clone(),
+            keys: keys.clone(),
+        })
+        .into()
+    }
+}

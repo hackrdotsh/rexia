@@ -494,33 +494,46 @@ impl Workspace {
                     .pb(px(4.))
                     .child(icon("bell").size(px(20.)).text_color(theme.primary))
                     .child(div().flex_1().child(title("Activity", theme)))
-                    .child(small_icon_button(
-                        "activity-grouping",
-                        if by_priority {
-                            "layout-columns"
-                        } else {
-                            "alert-triangle"
-                        },
-                        theme.text_muted,
-                        theme,
-                        cx.listener(|ws, _, _, cx| {
-                            ws.settings.interface.activity_by_priority =
-                                !ws.settings.interface.activity_by_priority;
-                            ws.save_settings();
-                            cx.notify();
-                        }),
-                    ))
-                    .child(small_icon_button(
-                        "activity-close",
-                        "server",
-                        theme.text_muted,
-                        theme,
-                        cx.listener(|ws, _, _, cx| {
-                            ws.settings.interface.activity_view = false;
-                            ws.save_settings();
-                            cx.notify();
-                        }),
-                    )),
+                    .child(
+                        small_icon_button(
+                            "activity-grouping",
+                            if by_priority {
+                                "layout-columns"
+                            } else {
+                                "alert-triangle"
+                            },
+                            theme.text_muted,
+                            theme,
+                            cx.listener(|ws, _, _, cx| {
+                                ws.settings.interface.activity_by_priority =
+                                    !ws.settings.interface.activity_by_priority;
+                                ws.save_settings();
+                                cx.notify();
+                            }),
+                        )
+                        .tooltip(self.tip(
+                            if by_priority {
+                                "client.sidebar.activity.by_session"
+                            } else {
+                                "client.sidebar.activity.by_priority"
+                            },
+                            None,
+                        )),
+                    )
+                    .child(
+                        small_icon_button(
+                            "activity-close",
+                            "server",
+                            theme.text_muted,
+                            theme,
+                            cx.listener(|ws, _, _, cx| {
+                                ws.settings.interface.activity_view = false;
+                                ws.save_settings();
+                                cx.notify();
+                            }),
+                        )
+                        .tooltip(self.tip("client.sidebar.activity.toggle", Some("Hide Activity"))),
+                    ),
             )
             .child(list)
             .into_any_element()

@@ -1874,18 +1874,27 @@ impl Workspace {
                         .text_color(theme.text_muted)
                         .child(c)
                 }))
-                .child(icon_button(
-                    "find-newer",
-                    "chevron-down",
-                    theme,
-                    cx.listener(|ws, _, window, cx| ws.find_step(false, window, cx)),
-                ))
-                .child(icon_button(
-                    "find-close",
-                    "x",
-                    theme,
-                    cx.listener(|ws, _, window, cx| ws.close_find(window, cx)),
-                ))
+                .child(
+                    icon_button(
+                        "find-newer",
+                        "chevron-down",
+                        theme,
+                        cx.listener(|ws, _, window, cx| ws.find_step(false, window, cx)),
+                    )
+                    .tooltip(self.tip("client.find.previous", None)),
+                )
+                .child(
+                    icon_button(
+                        "find-close",
+                        "x",
+                        theme,
+                        cx.listener(|ws, _, window, cx| ws.close_find(window, cx)),
+                    )
+                    .tooltip(crate::ui::components::tooltip(
+                        "Close Find",
+                        Some("Escape".into()),
+                    )),
+                )
                 .into_any_element(),
         )
     }
