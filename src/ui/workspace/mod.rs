@@ -12,6 +12,7 @@ mod extras;
 mod filter;
 pub mod gestures;
 mod highlight;
+pub mod hover_card;
 pub mod links;
 pub mod motion;
 pub mod onboarding;
@@ -146,6 +147,9 @@ pub struct Workspace {
     area: Bounds<Pixels>,
     /// Where the notice was drawn, from the last paint.
     notice_area: Option<Bounds<Pixels>>,
+    /// Where tabs and pane headers were last drawn, by `tab:ID`, `side-tab:ID` and
+    /// `header:BLOCK`.
+    element_bounds: HashMap<String, Bounds<Pixels>>,
     reveal: toolbar::Reveal,
     highlight: highlight::Track,
     swipe: gestures::SwipeTracker,
@@ -343,6 +347,7 @@ impl Workspace {
             focus: cx.focus_handle(),
             area: Bounds::default(),
             notice_area: None,
+            element_bounds: HashMap::new(),
             reveal: Default::default(),
             highlight: Default::default(),
             swipe: Default::default(),
@@ -945,6 +950,9 @@ impl Workspace {
                     })
                     .when(!active, |d| d.hover(|d| d.bg(theme.overlay(0.06))))
                     .cursor_pointer()
+                    .hoverable_tooltip(self.hover_card(hover_card::CardTarget::Tab(id.clone()), cx))
+                    .relative()
+                    .child(self.track_bounds(format!("tab:{id}"), cx))
                     .on_click(cx.listener(move |ws, _, _, cx| ws.select_tab(select_id.clone(), cx)))
                     .on_mouse_up(
                         MouseButton::Middle,
@@ -1180,6 +1188,14 @@ impl Workspace {
                                 .children(self.tab_mark(index, window, &model).map(
                                     |(state, badge)| activity_mark(state, badge, false, theme),
                                 ))
+                                .hoverable_tooltip(
+                                    self.hover_card(
+                                        hover_card::CardTarget::Tab(window_id.clone()),
+                                        cx,
+                                    ),
+                                )
+                                .relative()
+                                .child(self.track_bounds(format!("side-tab:{window_id}"), cx))
                                 .on_click(cx.listener(move |ws, _, _, cx| {
                                     ws.select_tab(window_id.clone(), cx)
                                 })),
@@ -1548,17 +1564,35 @@ impl Workspace {
             .when(hover_only, |d| {
                 d.invisible().group_hover(group.clone(), |d| d.visible())
             })
-            .child(icon(titles::program_icon(state)).size(px(14.)))
+            // The title and its activity: resting on them shows the pane's hover card.
             .child(
                 div()
+                    .id(SharedString::from(format!("header-title-{block_id}")))
+                    .flex()
                     .flex_1()
                     .min_w_0()
-                    .overflow_hidden()
-                    .text_ellipsis()
-                    .whitespace_nowrap()
-                    .child(label),
-            )
-            .children(status.map(|(state, badge)| activity_mark(state, badge, false, theme)));
+                    .h_full()
+                    .items_center()
+                    .gap(px(6.))
+                    .hoverable_tooltip(
+                        self.hover_card(hover_card::CardTarget::Pane(block_id.to_owned()), cx),
+                    )
+                    .relative()
+                    .child(self.track_bounds(format!("header:{block_id}"), cx))
+                    .child(icon(titles::program_icon(state)).size(px(14.)))
+                    .child(
+                        div()
+                            .flex_1()
+                            .min_w_0()
+                            .overflow_hidden()
+                            .text_ellipsis()
+                            .whitespace_nowrap()
+                            .child(label),
+                    )
+                    .children(
+                        status.map(|(state, badge)| activity_mark(state, badge, false, theme)),
+                    ),
+            );
         if let Some(layer) = floating {
             let layer_id = layer.to_owned();
             let session = session.to_owned();
@@ -1744,7 +1778,7 @@ fn divider_guide(divider: &view::Divider, theme: &Theme) -> AnyElement {
     }
 }
 
-fn state_color(state: ProgramState, theme: &Theme) -> Hsla {
+pub(super) fn state_color(state: ProgramState, theme: &Theme) -> Hsla {
     match state {
         ProgramState::Blocked => theme.secondary,
         ProgramState::Error => theme.error,
@@ -1782,6 +1816,27 @@ fn activity_mark(
 }
 
 impl Workspace {
+    /// Where a tab (`tab:ID`, or `side-tab:ID` in the sidebar) or a pane header's title
+    /// (`header:BLOCK`) was last drawn, in window coordinates.
+    pub fn element_bounds(&self, key: &str) -> Option<Bounds<Pixels>> {
+        self.element_bounds.get(key).copied()
+    }
+
+    /// Records where its parent is drawn under `key`; the parent must be `relative`.
+    fn track_bounds(&self, key: String, cx: &mut Context<Self>) -> impl IntoElement + use<> {
+        let entity = cx.entity();
+        canvas(
+            move |bounds, _, cx| {
+                entity.update(cx, |ws, _| {
+                    ws.element_bounds.insert(key.clone(), bounds);
+                })
+            },
+            |_, _, _, _| {},
+        )
+        .absolute()
+        .size_full()
+    }
+
     /// Where the last notice was drawn, in window coordinates.
     pub fn notice_bounds(&self) -> Option<Bounds<Pixels>> {
         self.notice_area
