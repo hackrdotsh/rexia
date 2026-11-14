@@ -9,7 +9,8 @@ use rexia::{
         endpoint::Endpoint,
         host::{Connection, HostCommand, HostHandle, HostModel},
     },
-    ui::{fonts, terminal::TerminalPane, theme::Theme},
+    settings::{HostConfig, Settings},
+    ui::{fonts, icons::Assets, terminal::TerminalPane, theme::Theme, workspace::Workspace},
 };
 use serde_json::json;
 use std::{
@@ -40,7 +41,7 @@ fn shot_dir() -> PathBuf {
 fn headless() -> HeadlessAppContext {
     HeadlessAppContext::with_platform(
         Arc::new(gpui_wgpu::CosmicTextSystem::new("DM Sans")),
-        Arc::new(()),
+        Arc::new(Assets),
         || gpui_platform::current_headless_renderer(),
     )
 }
@@ -161,4 +162,221 @@ fn terminal_pane_renders_a_live_session() {
     wait_for(&host, "cleanup", |m| {
         m.session(&session).is_none().then_some(())
     });
+}
+
+fn paste_and_run(host: &HostHandle, session: &str, block: &str, line: &str) {
+    host.send(HostCommand::Input {
+        session_id: session.into(),
+        block_id: block.into(),
+        method: "block.event",
+        payload: json!({"session_id": session, "block_id": block,
+            "event": {"type": "paste", "payload": {"text": line}}}),
+        claim: true,
+    });
+    host.send(HostCommand::Input {
+        session_id: session.into(),
+        block_id: block.into(),
+        method: "client.key",
+        payload: json!({"session_id": session, "block_id": block,
+            "key": {"key": "enter", "mods": "", "text": "\r", "unshifted_codepoint": 13, "action": "press"}}),
+        claim: true,
+    });
+}
+
+fn request(host: &HostHandle, method: &str, payload: serde_json::Value) -> serde_json::Value {
+    let (reply, answer) = tokio::sync::oneshot::channel();
+    host.send(HostCommand::Call {
+        method: method.into(),
+        payload,
+        reply: Some(reply),
+    });
+    answer.blocking_recv().unwrap().unwrap()
+}
+
+#[test]
+fn workspace_shows_sessions_tabs_splits_and_floating_panes() {
+    let Ok(address) = std::env::var("REXIA_TEST_SERVER") else {
+        eprintln!("skipped: set REXIA_TEST_SERVER to a disposable Rex server");
+        return;
+    };
+    let theme = Theme::from_noctalia(&noctalia::load());
+    // Build the scene with a separate connection, as another client would.
+    let setup = HostHandle::spawn(
+        Endpoint::parse(&address).unwrap(),
+        Identity::default(),
+        None,
+    );
+    wait_for(&setup, "connection", |m| {
+        (m.connection == Connection::Connected).then_some(())
+    });
+    let mut sessions = Vec::new();
+    for label in ["rexia-notes", "rexia-build"] {
+        let (reply, answer) = tokio::sync::oneshot::channel();
+        setup.send(HostCommand::CreateSession {
+            label: Some(label.into()),
+            reply: Some(reply),
+        });
+        sessions.push(
+            answer.blocking_recv().unwrap().unwrap()["session_id"]
+                .as_str()
+                .unwrap()
+                .to_owned(),
+        );
+    }
+    let _cleanup: Vec<Cleanup> = sessions
+        .iter()
+        .map(|s| Cleanup {
+            host: setup.clone(),
+            session: s.clone(),
+        })
+        .collect();
+    let session = sessions[1].clone();
+    let first = wait_for(&setup, "terminal", |m| {
+        (m.selected.as_deref() == Some(&session)).then_some(())?;
+        m.view()?
+            .active_window()?
+            .panes()
+            .first()
+            .map(|p| p.block_id.clone())
+    });
+    request(
+        &setup,
+        "session.new_window",
+        json!({"session_id": session, "window_label": "logs",
+        "layout": rexia::rex::host::shell_layout(), "focus": false}),
+    );
+    let right = request(
+        &setup,
+        "session.new_split",
+        json!({"session_id": session, "anchor_id": first,
+        "direction": "horizontal", "side": "after", "ratio": 0.55, "layout": rexia::rex::host::shell_layout()}),
+    );
+    let right = right["block_ids"][0].as_str().unwrap().to_owned();
+    let below = request(
+        &setup,
+        "session.new_split",
+        json!({"session_id": session, "anchor_id": right,
+        "direction": "vertical", "side": "after", "layout": rexia::rex::host::shell_layout()}),
+    );
+    let below = below["block_ids"][0].as_str().unwrap().to_owned();
+    request(
+        &setup,
+        "session.new_layer",
+        json!({"session_id": session, "bounds": [0.56, 0.08, 0.38, 0.36],
+        "layout": rexia::rex::host::shell_layout()}),
+    );
+    request(
+        &setup,
+        "session.focus_block",
+        json!({"session_id": session, "block_id": first}),
+    );
+    for block in [&first, &right, &below] {
+        wait_for(&setup, "a shell prompt", |m| {
+            let frame = m.panes.get(block)?.snapshot().frame?;
+            (0..frame.rows as usize)
+                .any(|r| !frame.line_text(r).trim().is_empty())
+                .then_some(())
+        });
+    }
+    paste_and_run(
+        &setup,
+        &session,
+        &first,
+        "printf '\\033[1;32mrexia\\033[0m · a Rex client for Linux\\n'",
+    );
+    // Status records belong to the process that reported them, so the reporters stay alive.
+    paste_and_run(
+        &setup,
+        &session,
+        &right,
+        "sh -c 'printf \"\\033]7501;state=blocked:kind=question:app=claude\\033\\\\\\\\\"; sleep 120'",
+    );
+    paste_and_run(
+        &setup,
+        &session,
+        &below,
+        "sh -c 'printf \"\\033]7501;state=working:app=cargo\\033\\\\\\\\\"; sleep 120'",
+    );
+    let mut settings = Settings::default();
+    settings.hosts = vec![HostConfig {
+        id: "test".into(),
+        label: "flareon".into(),
+        endpoint: address.clone(),
+    }];
+    settings.last_session = Some(session.clone());
+    let mut cx = headless();
+    cx.update(|cx| cx.set_global(theme.clone()));
+    let window = cx
+        .open_window(size(px(1440.), px(860.)), |window, cx| {
+            cx.new(|cx| Workspace::new(settings, None, false, window, cx))
+        })
+        .unwrap();
+    let workspace = window.clone();
+    let host = cx.update(|cx| workspace.read(cx).unwrap().host().handle.clone());
+    // Wait until every pane of the shown tab streams and the program reports have arrived.
+    let deadline = Instant::now() + Duration::from_secs(20);
+    loop {
+        cx.update(|cx| {
+            workspace
+                .update(cx, |ws, window, cx| {
+                    ws.sync(window, cx);
+                    window.refresh();
+                })
+                .unwrap()
+        });
+        cx.run_until_parked();
+        let model = host.snapshot();
+        let ready = model
+            .view()
+            .and_then(|v| v.active_window())
+            .is_some_and(|w| {
+                let panes = w.panes();
+                panes.len() == 4
+                    && panes.iter().all(|p| {
+                        model
+                            .panes
+                            .get(&p.block_id)
+                            .is_some_and(|h| h.snapshot().frame.is_some())
+                    })
+            })
+            && model.blocks.get(&right).and_then(|b| b.status()).is_some()
+            && model.blocks.get(&below).and_then(|b| b.status()).is_some();
+        if ready {
+            break;
+        }
+        if Instant::now() >= deadline {
+            let window = model.view().and_then(|v| v.active_window());
+            panic!(
+                "the workspace never showed all panes: selected={:?} wanted={session} connection={:?} panes={:?} streaming={:?} right={:?} below={:?}",
+                model.selected,
+                model.connection,
+                window.map(|w| w.panes().len()),
+                window.map(|w| w
+                    .panes()
+                    .iter()
+                    .map(|p| model
+                        .panes
+                        .get(&p.block_id)
+                        .map(|h| (h.snapshot().status, h.snapshot().frame.is_some())))
+                    .collect::<Vec<_>>()),
+                model.blocks.get(&right).map(|b| b.records.clone()),
+                model.blocks.get(&below).map(|b| b.records.clone()),
+            );
+        }
+        std::thread::sleep(Duration::from_millis(100));
+    }
+    std::thread::sleep(Duration::from_millis(400));
+    cx.update(|cx| {
+        workspace
+            .update(cx, |ws, window, cx| {
+                ws.sync(window, cx);
+                window.refresh();
+            })
+            .unwrap()
+    });
+    cx.run_until_parked();
+    let image = cx.capture_screenshot(window.into()).unwrap();
+    let path = shot_dir().join("workspace.png");
+    image.save(&path).unwrap();
+    println!("saved {}", path.display());
 }
