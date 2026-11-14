@@ -318,6 +318,8 @@ pub struct TerminalPane {
     font: TerminalFont,
     pub padding: Point<Pixels>,
     cell: Option<CellSize>,
+    /// The display scale the cell was measured for: cells are whole device pixels.
+    cell_scale: f32,
     /// The grid's top-left corner in window coordinates, from the last paint.
     origin: Point<Pixels>,
     /// The size last requested from the server.
@@ -390,6 +392,7 @@ impl TerminalPane {
             font,
             padding: point(px(8.), px(6.)),
             cell: None,
+            cell_scale: 0.,
             origin: Point::default(),
             requested: None,
             reporting: None,
@@ -716,7 +719,10 @@ impl TerminalPane {
     }
 
     fn measure(&mut self, window: &mut Window) -> CellSize {
-        if let Some(cell) = self.cell {
+        let scale = window.scale_factor();
+        if let Some(cell) = self.cell
+            && self.cell_scale == scale
+        {
             return cell;
         }
         let text = window.text_system();
@@ -728,12 +734,16 @@ impl TerminalPane {
             .unwrap_or(font_size * 0.6);
         // Fonts report descent as negative; the cell spans ascent plus its magnitude.
         let natural = text.ascent(font_id, font_size) + text.descent(font_id, font_size).abs();
-        let height = (natural * self.font.line_height).ceil().max(px(1.));
+        // Whole device pixels, as Ghostty sizes cells: every glyph then starts on a pixel
+        // boundary, which keeps pixel fonts such as DepartureMono crisp.
+        let device =
+            |v: Pixels, round: fn(f32) -> f32| px(round(f32::from(v) * scale).max(1.) / scale);
         let cell = CellSize {
-            width: (width + px(self.font.spacing)).max(px(1.)),
-            height,
+            width: device(width + px(self.font.spacing), f32::round),
+            height: device(natural * self.font.line_height, f32::ceil),
         };
         self.cell = Some(cell);
+        self.cell_scale = scale;
         cell
     }
 
@@ -1432,12 +1442,16 @@ impl Render for TerminalPane {
         let grid = canvas(
             {
                 let entity = entity.clone();
-                move |bounds, _window, cx| {
+                move |bounds, window, cx| {
+                    let scale = window.scale_factor();
                     entity.update(cx, |pane, _| {
                         let rows = pane.frame().map(|f| f.rows);
-                        pane.origin = bounds.origin
+                        let at = bounds.origin
                             + padding
                             + point(px(0.), anchor_shift(anchor, bounds, padding, cell, rows));
+                        // Where paint puts the grid: on a device pixel.
+                        let snap = |v: Pixels| px((f32::from(v) * scale).round() / scale);
+                        pane.origin = point(snap(at.x), snap(at.y));
                         pane.fit(bounds, cell);
                     });
                 }
@@ -1451,7 +1465,11 @@ impl Render for TerminalPane {
                 window.paint_quad(fill(bounds, background));
                 let Some(frame) = frame else { return };
                 let shift = anchor_shift(anchor, bounds, padding, cell, Some(frame.rows));
+                // The grid starts on a device pixel, so its cells do too.
+                let scale = window.scale_factor();
+                let snap = |v: Pixels| px((f32::from(v) * scale).round() / scale);
                 let origin = bounds.origin + padding + point(px(0.), scroll_shift + shift);
+                let origin = point(snap(origin.x), snap(origin.y));
                 for (area, rgb) in padding_fills(&frame, padding_fill, bounds, origin, cell) {
                     window.paint_quad(fill(area, color(rgb)));
                 }
