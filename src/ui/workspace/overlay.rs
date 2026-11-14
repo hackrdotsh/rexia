@@ -708,6 +708,53 @@ impl Workspace {
         cx.notify();
     }
 
+    /// The paths chosen last on this host, as list items: directories for Go to Directory,
+    /// files too for Insert Path.
+    fn recent_path_items(&self, files: bool) -> Vec<Item> {
+        let host = &self.host().config.id;
+        self.settings
+            .recent_paths
+            .get(host)
+            .into_iter()
+            .flatten()
+            .filter_map(|entry| {
+                let directory = entry.ends_with('/');
+                (directory || files).then(|| {
+                    let path = entry.trim_end_matches('/').to_owned();
+                    Item {
+                        title: entry.clone(),
+                        detail: Some("Recent".into()),
+                        keys: None,
+                        icon: "arrow-back-up",
+                        status: None,
+                        current: false,
+                        choice: Choice::Path { path, directory },
+                    }
+                })
+            })
+            .take(8)
+            .collect()
+    }
+
+    /// Put `path` first among this host's recent paths.
+    fn remember_path(&mut self, path: &str, directory: bool, cx: &mut Context<Self>) {
+        let host = self.host().config.id.clone();
+        let entry = if directory {
+            format!("{}/", path.trim_end_matches('/'))
+        } else {
+            path.to_owned()
+        };
+        self.update_settings(
+            move |s| {
+                let recent = s.recent_paths.entry(host).or_default();
+                recent.retain(|p| *p != entry);
+                recent.insert(0, entry);
+                recent.truncate(20);
+            },
+            cx,
+        );
+    }
+
     fn list_directory(&mut self, typed: String, cx: &mut Context<Self>) {
         let Some(Overlay::List(list)) = &mut self.overlay else {
             return;
@@ -738,6 +785,12 @@ impl Workspace {
                 )
                 .await;
             let _ = this.update(cx, |ws, cx| {
+                // With nothing typed yet, the paths chosen last on this host come first.
+                let recent = if typed.is_empty() && ws.settings.terminal.recent_paths {
+                    ws.recent_path_items(insert)
+                } else {
+                    Vec::new()
+                };
                 let Some(Overlay::List(list)) = &mut ws.overlay else { return };
                 if list.generation != generation {
                     return;
@@ -758,7 +811,8 @@ impl Workspace {
                     .filter(|(_, name)| !name.starts_with('.') || prefix.starts_with('.'))
                     .collect();
                 entries.sort_by(|a, b| b.0.cmp(&a.0).then(a.1.to_lowercase().cmp(&b.1.to_lowercase())));
-                list.items = entries
+                list.items = recent;
+                list.items.extend(entries
                     .into_iter()
                     .map(|(directory, name)| {
                         let path = format!("{base}/{name}");
@@ -775,8 +829,7 @@ impl Workspace {
                             current: false,
                             choice: Choice::Path { path: shown, directory },
                         }
-                    })
-                    .collect();
+                    }));
                 list.shown = (0..list.items.len()).collect();
                 list.selected = 0;
                 cx.notify();
@@ -833,7 +886,8 @@ impl Workspace {
                 Confirm::RemoveHost { id },
                 cx,
             ),
-            Choice::Path { path, .. } => {
+            Choice::Path { path, directory } => {
+                self.remember_path(&path, directory, cx);
                 let model = self.model();
                 let Some(session) = model.selected.clone() else { return };
                 if kind == (ListKind::Directory { insert: true }) {

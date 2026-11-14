@@ -1055,6 +1055,26 @@ impl Workspace {
             theme,
             cx,
         ));
+        rows.push(section_label("Keyboard", theme));
+        rows.push(self.toggle_row(
+            "key-hints",
+            "Show key sequence hints",
+            "Show the keys that can come next after the first key of a sequence, such as a tmux-style prefix.",
+            |s| s.terminal.key_hints,
+            |s, v| s.terminal.key_hints = v,
+            theme,
+            cx,
+        ));
+        rows.push(section_label("Integrated path browser", theme));
+        rows.push(self.toggle_row(
+            "recent-paths",
+            "Show recently used paths",
+            "List the paths you chose most recently first, shared by every session on a host.",
+            |s| s.terminal.recent_paths,
+            |s, v| s.terminal.recent_paths = v,
+            theme,
+            cx,
+        ));
         rows.push(section_label("Links", theme));
         rows.push(self.choice_row(
             "app-links",

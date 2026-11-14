@@ -288,6 +288,10 @@ pub struct TerminalSettings {
     pub padding_y: f32,
     pub copy_on_select: bool,
     pub selection: SelectionLook,
+    /// Show the keys that can come next after the first key of a sequence.
+    pub key_hints: bool,
+    /// List recently chosen paths first in the path browser.
+    pub recent_paths: bool,
     pub app_links: AppLinks,
     /// App links chosen to always open, by scheme and host (`ssh://build`).
     pub trusted_links: Vec<String>,
@@ -345,6 +349,8 @@ impl Default for TerminalSettings {
             padding_y: 6.,
             copy_on_select: false,
             selection: SelectionLook::default(),
+            key_hints: true,
+            recent_paths: true,
             app_links: AppLinks::Ask,
             trusted_links: Vec::new(),
             padding_fill: PaddingFill::Off,
@@ -581,6 +587,9 @@ pub struct Settings {
     pub shortcuts: std::collections::BTreeMap<String, Vec<String>>,
     /// The SSH agent socket ssh asks for keys for ssh:// hosts; none leaves it to ssh.
     pub ssh_agent: Option<std::path::PathBuf>,
+    /// Paths chosen in the path browser, newest first, by host ID: every session on a
+    /// host shares them. Directories end in `/`.
+    pub recent_paths: std::collections::BTreeMap<String, Vec<String>>,
 }
 
 impl Default for Settings {
@@ -595,6 +604,7 @@ impl Default for Settings {
             last_session: None,
             shortcuts: Default::default(),
             ssh_agent: None,
+            recent_paths: Default::default(),
         }
     }
 }

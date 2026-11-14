@@ -1619,9 +1619,15 @@ impl Workspace {
     }
 
     /// The active mode, and the keys that can follow a started sequence.
+    /// Whether the next keys of a sequence are listed now, for tests.
+    pub fn showing_key_hints(&self) -> bool {
+        self.settings.terminal.key_hints && !self.pending.is_empty()
+    }
+
     fn key_hint(&self, theme: &Theme) -> Option<AnyElement> {
         let mode = self.modes.last();
-        if mode.is_none() && self.pending.is_empty() {
+        let hints = self.settings.terminal.key_hints && !self.pending.is_empty();
+        if mode.is_none() && !hints {
             return None;
         }
         let mut pill = div()
@@ -1656,7 +1662,7 @@ impl Workspace {
                     .child(div().text_color(theme.text_muted).child("Esc leaves")),
             );
         }
-        if !self.pending.is_empty() {
+        if hints {
             let typed = self.pending.len();
             for binding in self
                 .keymap
