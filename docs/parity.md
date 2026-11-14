@@ -6,7 +6,7 @@ preview.19 server.
 
 ## Actions
 
-Rex for Mac lists 116 actions. rexia implements 94 of them under the same names, so
+Rex for Mac lists 116 actions. rexia implements 97 of them under the same names, so
 init.lua bindings, `rex do` and `client.perform` reach rexia the same way. It also adds
 three of its own: `client.sidebar.activity.toggle`, `.by_session` and `.by_priority`.
 Keys follow Linux conventions: where Mac uses `cmd`, rexia uses `ctrl+shift` (Ghostty's
@@ -19,7 +19,7 @@ Implemented by area:
   select all, send key, go to anything, go to directory, insert path, view activity.
 - **Sessions (11):** new, close, rename, select, next and previous, switch, expand and
   collapse, refresh.
-- **Client (44):** command palette, find, the sidebar's tab filter, toolbar layout and reveals, tabs (new, close, close others, go to, move,
+- **Client (47):** windows (new, close, move a tab to its own), command palette, find, the sidebar's tab filter, toolbar layout and reveals, tabs (new, close, close others, go to, move,
   rename, next and previous), modes, prompt jumps, page scrolling, font size, sidebar and
   activity view, hosts (add, remove, switch), settings, diagnostics, config path and
   reload, version and debug copy, notices, full screen.
@@ -28,7 +28,6 @@ Not implemented yet:
 
 | Action | Notes |
 | --- | --- |
-| `client.window.new`, `client.window.close`, `client.tab.move_to_new_window` | rexia has one window. |
 | `client.key.forward` as a palette entry | Works as a binding (keys reach Lua scripts), but isn't listed. |
 | `client.shortcuts.edit` | Rebind keys in init.lua instead. |
 | `client.server.restart` | rexia never starts or stops a server. |
@@ -77,10 +76,11 @@ Working:
 - Input methods (IBus, Fcitx and others through Wayland or XIM): composing text shows
   underlined at the cursor, the candidate window opens there, and committed text goes to
   the program as typed text.
+- Several windows, each its own Rex client. New Window opens one with a new session;
+  Move Tab to New Window shows a tab in a window of its own. The server keeps one active
+  tab per session, so windows sharing a session each keep the tab they show. Preferences
+  changed in one window reach the others. Only the first window sends desktop
+  notifications, so they aren't doubled.
 - Several hosts in one sidebar, streaming only the host on screen, with reconnects.
 - Servers that only speak API revisions below 8 are refused, with a message to update the
   server.
-
-Known gaps:
-
-- One window per process.
