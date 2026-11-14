@@ -622,6 +622,8 @@ impl NotificationSettings {
 #[serde(default)]
 pub struct Settings {
     pub hosts: Vec<HostConfig>,
+    /// The order hosts are listed in, by ID, once someone moves one.
+    pub host_order: Vec<String>,
     /// The label this client shows in `rex client ls`.
     pub client_label: Option<String>,
     pub interface: InterfaceSettings,
@@ -664,6 +666,7 @@ impl Default for Settings {
     fn default() -> Self {
         Self {
             hosts: vec![HostConfig::local()],
+            host_order: Vec::new(),
             client_label: None,
             interface: InterfaceSettings::default(),
             terminal: TerminalSettings::default(),

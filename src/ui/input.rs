@@ -25,6 +25,8 @@ pub struct TextInput {
     cursor: usize,
     anchor: Option<usize>,
     placeholder: SharedString,
+    /// Shown as dots and never copied: passwords.
+    secret: bool,
 }
 
 impl EventEmitter<InputEvent> for TextInput {}
@@ -75,6 +77,23 @@ impl TextInput {
             cursor: 0,
             anchor: None,
             placeholder: placeholder.into(),
+            secret: false,
+        }
+    }
+
+    /// A field for a password: dots on screen, and nothing copied from it.
+    pub fn secret(mut self) -> Self {
+        self.secret = true;
+        self
+    }
+
+    /// The text from `start` to `end` as it's drawn.
+    fn shown(&self, start: usize, end: usize) -> String {
+        let text = &self.text[start..end];
+        if self.secret {
+            "•".repeat(text.chars().count())
+        } else {
+            text.to_owned()
         }
     }
 
@@ -222,6 +241,7 @@ impl TextInput {
                 self.cursor = start;
                 true
             }
+            "c" | "x" if ctrl && self.secret => true,
             "c" | "x" if ctrl => {
                 if let Some((start, end)) = self.selection() {
                     cx.write_to_clipboard(ClipboardItem::new_string(
@@ -276,18 +296,18 @@ impl Render for TextInput {
                     .child(self.placeholder.clone()),
             );
         } else if let Some((start, end)) = self.selection() {
-            line = line.child(self.text[..start].to_owned()).child(
+            line = line.child(self.shown(0, start)).child(
                 div()
                     .bg(theme.primary)
                     .text_color(theme.on_primary)
-                    .child(self.text[start..end].to_owned()),
+                    .child(self.shown(start, end)),
             );
-            line = line.child(self.text[end..].to_owned());
+            line = line.child(self.shown(end, self.text.len()));
         } else {
             line = line
-                .child(self.text[..self.cursor].to_owned())
+                .child(self.shown(0, self.cursor))
                 .when(focused, |d| d.child(cursor()))
-                .child(self.text[self.cursor..].to_owned());
+                .child(self.shown(self.cursor, self.text.len()));
         }
         div()
             .id("text-input")

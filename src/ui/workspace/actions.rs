@@ -113,6 +113,10 @@ impl Workspace {
             }
             return;
         }
+        if self.ssh_key(&event.keystroke.key, window, cx) {
+            cx.stop_propagation();
+            return;
+        }
         if self.recording_shortcut().is_some() {
             cx.stop_propagation();
             self.shortcut_key(&event.keystroke, window, cx);

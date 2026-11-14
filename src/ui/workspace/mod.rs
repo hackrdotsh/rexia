@@ -18,6 +18,7 @@ pub mod quick_look;
 pub mod remote;
 pub mod server_status;
 mod ssh;
+pub mod ssh_questions;
 pub mod tab_icons;
 mod toolbar;
 mod windows;
@@ -144,6 +145,9 @@ pub struct Workspace {
     reveal: toolbar::Reveal,
     highlight: highlight::Track,
     swipe: gestures::SwipeTracker,
+    /// ssh's questions waiting for another dialog to close.
+    ssh_questions: std::collections::VecDeque<crate::rex::askpass::Question>,
+    ssh_open: Option<Box<ssh_questions::SshQuestion>>,
     /// The bus GNOME's previewer is on, if not the session bus, and what Quick Look showed.
     preview_bus: Option<String>,
     quick_looks: Vec<quick_look::Shown>,
@@ -260,7 +264,7 @@ impl Workspace {
             .as_ref()
             .and_then(|id| settings.hosts.iter().position(|h| &h.id == id))
             .unwrap_or(0);
-        let mut tasks = Vec::new();
+        let mut tasks = vec![Self::listen_for_ssh_questions(window, cx)];
         let hosts: Vec<HostEntry> = settings
             .hosts
             .iter()
@@ -329,6 +333,8 @@ impl Workspace {
             reveal: Default::default(),
             highlight: Default::default(),
             swipe: Default::default(),
+            ssh_questions: Default::default(),
+            ssh_open: None,
             preview_bus: None,
             quick_looks: Vec::new(),
             onboarding: HashMap::new(),
@@ -420,6 +426,7 @@ impl Workspace {
             entry.server_id = Some(id);
             self.hosts.push(entry);
         }
+        self.order_hosts();
         if self.hosts.len() != before
             || self
                 .hosts
@@ -1965,5 +1972,6 @@ impl Render for Workspace {
             .children(self.key_hint(&theme))
             .children(self.render_find(&theme, cx))
             .children(self.render_overlay(&theme, cx))
+            .children(self.render_ssh_question(&theme, cx))
     }
 }

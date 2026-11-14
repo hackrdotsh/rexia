@@ -75,8 +75,9 @@ impl SshTarget {
         format!("sh -c 'PATH=\"$HOME/.local/bin:$PATH\"; exec rex{server} __internal dial-stdio'")
     }
 
-    /// The arguments for ssh: no prompts (there's no terminal to answer them), keepalives
-    /// so a dead link is noticed, then the host and the command.
+    /// The arguments for ssh: keepalives so a dead link is noticed, one shared connection
+    /// per host (so the panes' streams don't each ask for a password), then the host and
+    /// the command. ssh's questions come to rexia through `SSH_ASKPASS`.
     pub fn ssh_args(&self) -> Vec<String> {
         self.ssh_args_with(super::ssh_agent::chosen().as_deref())
     }
@@ -86,7 +87,7 @@ impl SshTarget {
         let mut args: Vec<String> = [
             "-T",
             "-o",
-            "BatchMode=yes",
+            "ConnectTimeout=15",
             "-o",
             "ServerAliveInterval=15",
             "-o",
@@ -94,6 +95,16 @@ impl SshTarget {
         ]
         .map(String::from)
         .to_vec();
+        if let Ok(dir) = super::askpass::runtime_dir() {
+            args.extend([
+                "-o".into(),
+                "ControlMaster=auto".into(),
+                "-o".into(),
+                format!("ControlPath={}/ssh-%C", dir.display()),
+                "-o".into(),
+                "ControlPersist=60".into(),
+            ]);
+        }
         if let Some(agent) = agent {
             let path = agent.display().to_string();
             // ssh splits option values at spaces unless they're quoted.
@@ -184,6 +195,7 @@ fn spawn_ssh(target: &SshTarget) -> Result<(SshStream, Stderr)> {
     if let Some(agent) = &agent {
         command.env("SSH_AUTH_SOCK", agent);
     }
+    command.envs(super::askpass::ssh_env(&target.to_string()));
     let mut child = command
         .args(target.ssh_args_with(agent.as_deref()))
         .stdin(Stdio::piped())
@@ -319,8 +331,14 @@ async fn io(endpoint: &Endpoint) -> Result<Box<dyn Io>> {
 
 /// Open a WebSocket at `path` (such as `/api/control`) that speaks `protocol`.
 pub async fn connect(endpoint: &Endpoint, path: &str, protocol: &str) -> Result<Socket> {
+    // Over ssh, someone may be typing a password or checking a host key.
+    let patience = if matches!(endpoint, Endpoint::Ssh(_)) {
+        200
+    } else {
+        10
+    };
     tokio::time::timeout(
-        std::time::Duration::from_secs(10),
+        std::time::Duration::from_secs(patience),
         open(endpoint, path, protocol),
     )
     .await
@@ -409,6 +427,9 @@ mod tests {
         assert_eq!(target.to_string(), "ssh://alice@build.example.com:2222");
         let args = target.ssh_args_with(None);
         assert!(args.windows(2).any(|w| w == ["-p", "2222"]));
+        // ssh may ask questions now (rexia answers them), and shares one connection.
+        assert!(!args.iter().any(|a| a.contains("BatchMode")));
+        assert!(args.windows(2).any(|w| w == ["-o", "ControlMaster=auto"]));
         assert!(!args.iter().any(|a| a.starts_with("IdentityAgent")));
         // A chosen agent goes to ssh as IdentityAgent, quoted when its path has spaces.
         let with = target.ssh_args_with(Some(std::path::Path::new("/run/user/1000/gcr/ssh")));

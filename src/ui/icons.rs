@@ -20,6 +20,7 @@ icons![
     "brand-git",
     "chevron-down",
     "chevron-right",
+    "chevron-up",
     "circle-check",
     "clipboard",
     "command",

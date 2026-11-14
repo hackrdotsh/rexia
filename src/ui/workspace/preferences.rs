@@ -1725,9 +1725,53 @@ impl Workspace {
             } else {
                 host.config.endpoint.clone()
             };
-            let detail = format!("{endpoint} · {status}");
+            let declined = crate::rex::endpoint::Endpoint::parse(&host.config.endpoint)
+                .is_ok_and(|e| crate::rex::askpass::is_declined(&e.to_string()));
+            let detail = if declined {
+                format!("{endpoint} · {status} · You declined ssh's question; Retry asks again.")
+            } else {
+                format!("{endpoint} · {status}")
+            };
+            let count = self.hosts.len();
+            let arrow = |id: String, name: &'static str, by: isize, enabled: bool| {
+                div()
+                    .id(SharedString::from(id))
+                    .p(px(4.))
+                    .rounded(theme.radius_small())
+                    .when(enabled, |d| {
+                        d.cursor_pointer()
+                            .hover(|d| d.bg(theme.overlay(0.08)))
+                            .on_click(cx.listener(move |ws, _, _, cx| ws.move_host(index, by, cx)))
+                    })
+                    .child(icon(name).size(px(14.)).text_color(if enabled {
+                        theme.text_muted
+                    } else {
+                        theme.overlay(0.2)
+                    }))
+            };
             let mut line = row(format!("host-{index}"), &host.config.label, &detail, theme)
-                .child(icon("server").size(px(16.)).text_color(theme.text_muted));
+                .child(icon("server").size(px(16.)).text_color(theme.text_muted))
+                .child(arrow(
+                    format!("host-up-{index}"),
+                    "chevron-up",
+                    -1,
+                    index > 0,
+                ))
+                .child(arrow(
+                    format!("host-down-{index}"),
+                    "chevron-down",
+                    1,
+                    index + 1 < count,
+                ));
+            if matches!(
+                model.connection,
+                crate::rex::host::Connection::Disconnected(_)
+            ) {
+                line = line.child(
+                    button(format!("host-retry-{index}"), "Retry", false, theme)
+                        .on_click(cx.listener(move |ws, _, _, cx| ws.retry_host(index, cx))),
+                );
+            }
             if let Some(id) = host.server_id.clone() {
                 let label = host.config.label.clone();
                 line = line.child(
