@@ -89,6 +89,27 @@ pub enum FadeInactive {
     Both,
 }
 
+/// Which of bold and italic text draws in its style; the rest draws plain.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum TextStyles {
+    #[default]
+    Both,
+    BoldOnly,
+    ItalicOnly,
+    Neither,
+}
+
+impl TextStyles {
+    pub fn bold(self) -> bool {
+        matches!(self, Self::Both | Self::BoldOnly)
+    }
+
+    pub fn italic(self) -> bool {
+        matches!(self, Self::Both | Self::ItalicOnly)
+    }
+}
+
 /// How fast cursors blink when their program asks for a blinking cursor.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
@@ -118,6 +139,17 @@ pub struct TerminalSettings {
     pub cursor_blink: BlinkSpeed,
     /// The time between blinks with a custom speed, in milliseconds.
     pub cursor_blink_ms: u32,
+    /// Pixels added to (or, negative, taken from) each character's width.
+    pub character_spacing: f32,
+    /// Join characters like -> and != into single symbols.
+    pub ligatures: bool,
+    pub text_styles: TextStyles,
+    /// Fonts, in order, for characters the terminal font doesn't have.
+    pub fallback_fonts: Vec<String>,
+    /// Lift text that's too faint to read against its background.
+    pub improve_contrast: bool,
+    /// Map program colors to the nearest theme color (and improve contrast).
+    pub theme_palette: bool,
 }
 
 impl TerminalSettings {
@@ -147,6 +179,12 @@ impl Default for TerminalSettings {
             force_cursor_style: false,
             cursor_blink: BlinkSpeed::Normal,
             cursor_blink_ms: 600,
+            character_spacing: 0.,
+            ligatures: false,
+            text_styles: TextStyles::Both,
+            fallback_fonts: Vec::new(),
+            improve_contrast: false,
+            theme_palette: false,
         }
     }
 }

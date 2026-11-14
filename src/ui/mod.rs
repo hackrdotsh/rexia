@@ -8,6 +8,7 @@ pub mod icons;
 pub mod input;
 pub mod keys;
 pub mod terminal;
+pub mod text_color;
 pub mod theme;
 pub mod titles;
 pub mod workspace;

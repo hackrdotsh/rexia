@@ -6,7 +6,7 @@ use crate::{
     rex::{activity::ProgramState, host::HostCommand},
     settings::{
         BlinkSpeed, FadeInactive, NoticePosition, PaneHeaders, PaneStyle, Settings, StateActivity,
-        ToolbarBehavior, ToolbarLayout,
+        TextStyles, ToolbarBehavior, ToolbarLayout,
     },
     sound::{self, Cue},
     ui::{
@@ -61,7 +61,8 @@ pub struct SettingsPage {
     pub section: Section,
     label: Entity<TextInput>,
     font: Entity<TextInput>,
-    _subscriptions: [Subscription; 2],
+    fallbacks: Entity<TextInput>,
+    _subscriptions: [Subscription; 3],
 }
 
 fn state_mut(settings: &mut Settings, state: ProgramState) -> &mut StateActivity {
@@ -128,6 +129,17 @@ fn row(id: impl Into<SharedString>, title: &str, detail: &str, theme: &Theme) ->
         )
 }
 
+/// A muted heading between groups of rows.
+fn section_label(text: &'static str, theme: &Theme) -> AnyElement {
+    div()
+        .pt(px(16.))
+        .pb(px(4.))
+        .text_size(px(12.))
+        .text_color(theme.text_muted)
+        .child(text)
+        .into_any_element()
+}
+
 fn button(id: impl Into<SharedString>, label: &str, filled: bool, theme: &Theme) -> Stateful<Div> {
     div()
         .id(gpui::ElementId::Name(id.into()))
@@ -162,6 +174,11 @@ impl Workspace {
         if let Some(text) = self.settings.terminal.font_family.clone() {
             font.update(cx, |input, cx| input.set_text(text, cx));
         }
+        let fallbacks = cx.new(|cx| TextInput::new("Symbols Nerd Font, Noto Color Emoji", cx));
+        if !self.settings.terminal.fallback_fonts.is_empty() {
+            let text = self.settings.terminal.fallback_fonts.join(", ");
+            fallbacks.update(cx, |input, cx| input.set_text(text, cx));
+        }
         let on_submit = |ws: &mut Workspace,
                          _: &Entity<TextInput>,
                          event: &InputEvent,
@@ -174,6 +191,7 @@ impl Workspace {
         let subscriptions = [
             cx.subscribe_in(&label, window, on_submit),
             cx.subscribe_in(&font, window, on_submit),
+            cx.subscribe_in(&fallbacks, window, on_submit),
         ];
         // Keys go to the page, not the terminal underneath.
         window.focus(&self.focus, cx);
@@ -181,6 +199,7 @@ impl Workspace {
             section: Section::Interface,
             label,
             font,
+            fallbacks,
             _subscriptions: subscriptions,
         }));
         cx.notify();
@@ -253,6 +272,10 @@ impl Workspace {
         let force_cursor = terminal.force_cursor_style.then_some(terminal.cursor_style);
         let blink = terminal.blink_interval();
         let cursor = terminal.cursor_style;
+        let colors = crate::ui::terminal::TextColors {
+            improve_contrast: terminal.improve_contrast,
+            theme_palette: terminal.theme_palette,
+        };
         for pane in self.panes.values() {
             pane.update(cx, |pane, cx| {
                 pane.set_font(font.clone(), cx);
@@ -260,6 +283,7 @@ impl Workspace {
                 pane.copy_on_select = copy_on_select;
                 pane.force_cursor = force_cursor;
                 pane.blink = blink;
+                pane.colors = colors;
                 cx.notify();
             });
         }
@@ -309,6 +333,19 @@ impl Workspace {
         self.panes.get(block)?.read(cx).preedit().map(str::to_owned)
     }
 
+    /// The color the focused pane draws a cell's text in.
+    pub fn focused_text_color(&self, row: usize, col: usize, cx: &gpui::App) -> Option<u32> {
+        let block = self.focused.as_ref()?;
+        self.panes.get(block)?.read(cx).drawn_text_color(row, col)
+    }
+
+    /// The focused pane's character cell width, in pixels.
+    pub fn focused_cell_width(&self, cx: &gpui::App) -> Option<f32> {
+        let block = self.focused.as_ref()?;
+        let cell = self.panes.get(block)?.read(cx).cell_size()?;
+        Some(f32::from(cell.width))
+    }
+
     /// Step the focused pane's cursor blink, as its timer would.
     pub fn blink_focused(&mut self, cx: &mut Context<Self>) {
         if let Some(pane) = self.focused.as_ref().and_then(|b| self.panes.get(b)) {
@@ -327,19 +364,31 @@ impl Workspace {
         };
         let label = text(&page.label);
         let font = text(&page.font);
+        let fallbacks: Vec<String> = page
+            .fallbacks
+            .read(cx)
+            .text()
+            .split(',')
+            .map(|f| f.trim().to_owned())
+            .filter(|f| !f.is_empty())
+            .collect();
         if label != self.settings.client_label {
             for host in &self.hosts {
                 host.handle.send(HostCommand::SetLabel(label.clone()));
             }
             self.identity.label = label.clone();
         }
-        if label == self.settings.client_label && font == self.settings.terminal.font_family {
+        if label == self.settings.client_label
+            && font == self.settings.terminal.font_family
+            && fallbacks == self.settings.terminal.fallback_fonts
+        {
             return;
         }
         self.update_settings(
             move |s| {
                 s.client_label = label;
                 s.terminal.font_family = font;
+                s.terminal.fallback_fonts = fallbacks;
             },
             cx,
         );
@@ -716,6 +765,67 @@ impl Workspace {
             "Copy selected text to the clipboard as soon as it's selected.",
             |s| s.terminal.copy_on_select,
             |s, v| s.terminal.copy_on_select = v,
+            theme,
+            cx,
+        ));
+        rows.push(section_label("Advanced font", theme));
+        rows.push(self.stepper_row(
+            "character-spacing",
+            "Character spacing",
+            "Widen or tighten each character's cell.",
+            format!("{:+.0} px", t.character_spacing),
+            |s| s.terminal.character_spacing = (s.terminal.character_spacing - 1.).max(-4.),
+            |s| s.terminal.character_spacing = (s.terminal.character_spacing + 1.).min(16.),
+            theme,
+            cx,
+        ));
+        rows.push(self.toggle_row(
+            "ligatures",
+            "Ligatures",
+            "Join characters like -> and != into single symbols.",
+            |s| s.terminal.ligatures,
+            |s, v| s.terminal.ligatures = v,
+            theme,
+            cx,
+        ));
+        rows.push(self.choice_row(
+            "text-styles",
+            "Render bold and italic",
+            "Which styled text draws in its style; the rest draws plain.",
+            &[
+                (TextStyles::Both, "Both"),
+                (TextStyles::BoldOnly, "Bold"),
+                (TextStyles::ItalicOnly, "Italic"),
+                (TextStyles::Neither, "Neither"),
+            ],
+            t.text_styles,
+            |s, v| s.terminal.text_styles = v,
+            theme,
+            cx,
+        ));
+        rows.push(Self::field_row(
+            "fallback-fonts",
+            "Fallback fonts",
+            "For characters the terminal font lacks, in order, separated by commas. Enter applies.",
+            &page.fallbacks,
+            theme,
+        ));
+        rows.push(section_label("Colors", theme));
+        rows.push(self.toggle_row(
+            "improve-contrast",
+            "Improve text contrast",
+            "Lift text that's too faint to read against its background.",
+            |s| s.terminal.improve_contrast,
+            |s, v| s.terminal.improve_contrast = v,
+            theme,
+            cx,
+        ));
+        rows.push(self.toggle_row(
+            "theme-palette",
+            "Force theme palette for text",
+            "Draw program colors as the nearest theme color, readable on its background.",
+            |s| s.terminal.theme_palette,
+            |s, v| s.terminal.theme_palette = v,
             theme,
             cx,
         ));

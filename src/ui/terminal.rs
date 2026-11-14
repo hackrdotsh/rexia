@@ -48,6 +48,8 @@ pub struct TerminalPane {
     reporting: Option<&'static str>,
     selecting: bool,
     pub copy_on_select: bool,
+    /// Corrections to program colors.
+    pub colors: TextColors,
     /// The pane model revision last drawn.
     pub revision: u64,
     /// A shape to draw whatever the program asks for.
@@ -88,6 +90,7 @@ impl TerminalPane {
             reporting: None,
             selecting: false,
             copy_on_select: false,
+            colors: TextColors::default(),
             revision: 0,
             force_cursor: None,
             blink: None,
@@ -123,6 +126,33 @@ impl TerminalPane {
             self.blink_on = next;
             cx.notify();
         }
+    }
+
+    /// The size of one character cell, once measured.
+    pub fn cell_size(&self) -> Option<CellSize> {
+        self.cell
+    }
+
+    /// The color a cell's text draws in, after the color settings.
+    pub fn drawn_text_color(&self, row: usize, col: usize) -> Option<u32> {
+        let frame = self.frame()?;
+        let cell = frame.lines.get(row)?.get(col)?;
+        let look = Look {
+            palette: Palette {
+                selection_bg: Hsla::default(),
+                selection_fg: Hsla::default(),
+                match_bg: Hsla::default(),
+                current_bg: Hsla::default(),
+                current_fg: Hsla::default(),
+            },
+            bold: self.font.bold,
+            italic: self.font.italic,
+            colors: self.colors,
+            default_fg: frame.fg,
+            default_bg: frame.bg,
+            ansi: frame.ansi,
+        };
+        Some(look.text_color(cell.fg, cell.bg))
     }
 
     /// Text an input method is composing here.
@@ -191,7 +221,12 @@ impl TerminalPane {
 
     fn terminal_font(&self) -> Font {
         let mut font = font(SharedString::from(self.font.family.clone()));
-        font.features = gpui::FontFeatures::disable_ligatures();
+        if !self.font.ligatures {
+            font.features = gpui::FontFeatures::disable_ligatures();
+        }
+        if !self.font.fallbacks.is_empty() {
+            font.fallbacks = Some(gpui::FontFallbacks::from_fonts(self.font.fallbacks.clone()));
+        }
         font
     }
 
@@ -210,7 +245,7 @@ impl TerminalPane {
         let natural = text.ascent(font_id, font_size) + text.descent(font_id, font_size).abs();
         let height = (natural * self.font.line_height).ceil().max(px(1.));
         let cell = CellSize {
-            width: width.max(px(1.)),
+            width: (width + px(self.font.spacing)).max(px(1.)),
             height,
         };
         self.cell = Some(cell);
@@ -544,6 +579,7 @@ struct Segment {
     forced: Option<u16>,
 }
 
+#[derive(Clone, Copy)]
 struct Palette {
     selection_bg: Hsla,
     selection_fg: Hsla,
@@ -552,15 +588,55 @@ struct Palette {
     current_fg: Hsla,
 }
 
+/// How program colors are corrected before they're drawn.
+#[derive(Clone, Copy, Debug, Default, PartialEq)]
+pub struct TextColors {
+    pub improve_contrast: bool,
+    pub theme_palette: bool,
+}
+
+/// What a frame's text draws with: its styles, and colors corrected as chosen.
+struct Look {
+    palette: Palette,
+    bold: bool,
+    italic: bool,
+    colors: TextColors,
+    default_fg: u32,
+    default_bg: u32,
+    ansi: [u32; 16],
+}
+
+impl Look {
+    /// A cell's text color, mapped to the theme's palette and lifted off its background
+    /// as the settings ask.
+    fn text_color(&self, fg: u32, bg: Option<u32>) -> u32 {
+        let mut fg = fg;
+        if self.colors.theme_palette {
+            let mut themed = self.ansi.to_vec();
+            themed.push(self.default_fg);
+            fg = super::text_color::nearest(fg, &themed);
+        }
+        if self.colors.improve_contrast || self.colors.theme_palette {
+            fg = super::text_color::ensure_contrast(
+                fg,
+                bg.unwrap_or(self.default_bg),
+                super::text_color::MIN_CONTRAST,
+            );
+        }
+        fg
+    }
+}
+
 fn segments(
     cells: &[crate::rex::stream::Cell],
-    palette: &Palette,
+    look: &Look,
 ) -> (Vec<Segment>, Vec<(u16, u16, Hsla)>) {
+    let palette = &look.palette;
     let mut segments: Vec<Segment> = Vec::new();
     let mut backgrounds: Vec<(u16, u16, Hsla)> = Vec::new();
     for (col, cell) in cells.iter().enumerate() {
         let col = col as u16;
-        let mut fg = color(cell.fg);
+        let mut fg = color(look.text_color(cell.fg, cell.bg));
         let mut bg = cell.bg.map(color);
         if cell.has(flags::CURRENT_MATCH) {
             bg = Some(palette.current_bg);
@@ -585,8 +661,8 @@ fn segments(
         }
         let style = Style {
             fg,
-            bold: cell.has(flags::BOLD),
-            italic: cell.has(flags::ITALIC),
+            bold: look.bold && cell.has(flags::BOLD),
+            italic: look.italic && cell.has(flags::ITALIC),
             underline: (cell.has(flags::UNDERLINE)
                 || cell.has(flags::DOUBLE_UNDERLINE)
                 || cell.has(flags::CURLY_UNDERLINE)
@@ -648,6 +724,7 @@ impl Render for TerminalPane {
             current_bg: theme.primary,
             current_fg: theme.on_primary,
         };
+        let (bold, italic, colors) = (self.font.bold, self.font.italic, self.colors);
         let cursor_color = color(theme.terminal.cursor);
         let cursor_text = color(theme.terminal.cursor_text);
         // Only a focused pane's cursor blinks, and only if its program asks.
@@ -693,9 +770,18 @@ impl Render for TerminalPane {
                         size(cell.width * cols as f32, cell.height),
                     )
                 };
+                let look = Look {
+                    palette,
+                    bold,
+                    italic,
+                    colors,
+                    default_fg: frame.fg,
+                    default_bg: frame.bg,
+                    ansi: frame.ansi,
+                };
                 window.with_content_mask(Some(gpui::ContentMask { bounds }), |window| {
                     for (row, cells) in frame.lines.iter().enumerate() {
-                        let (segments, backgrounds) = segments(cells, &palette);
+                        let (segments, backgrounds) = segments(cells, &look);
                         for (start, end, bg) in backgrounds {
                             window.paint_quad(fill(cell_bounds(start, row, end - start), bg));
                         }
@@ -1028,6 +1114,18 @@ mod tests {
         }
     }
 
+    fn look() -> Look {
+        Look {
+            palette: palette(),
+            bold: true,
+            italic: true,
+            colors: TextColors::default(),
+            default_fg: 0xeeeeee,
+            default_bg: 0x000000,
+            ansi: [0; 16],
+        }
+    }
+
     #[test]
     fn runs_split_at_style_changes_and_wide_cells_paint_alone() {
         let row = vec![
@@ -1040,7 +1138,7 @@ mod tests {
             cell(" ", 0),
             cell("e", 0),
         ];
-        let (segments, backgrounds) = segments(&row, &palette());
+        let (segments, backgrounds) = segments(&row, &look());
         assert!(backgrounds.is_empty());
         let shape: Vec<_> = segments
             .iter()
@@ -1067,7 +1165,7 @@ mod tests {
         ];
         row[0].bg = Some(0x101010);
         row[1].bg = Some(0x101010);
-        let (_, backgrounds) = segments(&row, &palette());
+        let (_, backgrounds) = segments(&row, &look());
         assert_eq!(backgrounds.len(), 3);
         assert_eq!((backgrounds[0].0, backgrounds[0].1), (0, 2));
         assert_eq!(backgrounds[1].2, color(0x333333));

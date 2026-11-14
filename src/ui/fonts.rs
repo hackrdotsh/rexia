@@ -9,6 +9,13 @@ pub struct TerminalFont {
     pub size: f32,
     /// Extra line spacing, as a multiple of the font's natural line height.
     pub line_height: f32,
+    /// Pixels added to each character's width.
+    pub spacing: f32,
+    pub ligatures: bool,
+    /// Whether bold and italic text draws bold and italic.
+    pub bold: bool,
+    pub italic: bool,
+    pub fallbacks: Vec<String>,
 }
 
 impl TerminalFont {
@@ -68,6 +75,11 @@ pub fn default_terminal_font() -> TerminalFont {
             .unwrap_or_else(|| "monospace".into()),
         size: size.unwrap_or(TerminalFont::DEFAULT_SIZE),
         line_height: 1.0,
+        spacing: 0.,
+        ligatures: false,
+        bold: true,
+        italic: true,
+        fallbacks: Vec::new(),
     }
 }
 

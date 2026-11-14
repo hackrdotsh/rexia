@@ -163,6 +163,17 @@ pub fn terminal_font(settings: &Settings) -> TerminalFont {
         font.size = size.clamp(6., 72.);
     }
     font.line_height = settings.terminal.line_height.clamp(0.8, 2.0);
+    let terminal = &settings.terminal;
+    font.spacing = terminal.character_spacing.clamp(-4., 16.);
+    font.ligatures = terminal.ligatures;
+    font.bold = terminal.text_styles.bold();
+    font.italic = terminal.text_styles.italic();
+    font.fallbacks = terminal
+        .fallback_fonts
+        .iter()
+        .map(|f| f.trim().to_owned())
+        .filter(|f| !f.is_empty())
+        .collect();
     font
 }
 
@@ -382,6 +393,10 @@ impl Workspace {
             .force_cursor_style
             .then_some(self.settings.terminal.cursor_style);
         let blink = self.settings.terminal.blink_interval();
+        let colors = super::terminal::TextColors {
+            improve_contrast: self.settings.terminal.improve_contrast,
+            theme_palette: self.settings.terminal.theme_palette,
+        };
         let padding = Point::new(
             px(self.settings.terminal.padding_x),
             px(self.settings.terminal.padding_y),
@@ -396,6 +411,7 @@ impl Workspace {
                     pane.padding = padding;
                     pane.force_cursor = force_cursor;
                     pane.blink = blink;
+                    pane.colors = colors;
                     pane
                 })
             });
