@@ -1,7 +1,9 @@
 //! The settings page: rexia's preferences by section, applied and saved as they change.
 //! Colors, corners, borders and fonts aren't here: they follow Noctalia.
 use super::{Workspace, overlay::Overlay};
-use crate::settings::{ShellIconTheme, SidebarGesture, SidebarTextSize, TabIconColor};
+use crate::settings::{
+    AppLinks, SelectionColor, ShellIconTheme, SidebarGesture, SidebarTextSize, TabIconColor,
+};
 use crate::{
     rex::stream::CursorShape,
     rex::{activity::ProgramState, host::HostCommand},
@@ -352,6 +354,7 @@ impl Workspace {
         let blink = terminal.blink_interval();
         let cursor = terminal.cursor_style;
         let padding_fill = terminal.padding_fill;
+        let selection = terminal.selection;
         let cursor_shader = terminal.cursor_shaders.then_some(terminal.cursor_shader);
         let colors = crate::ui::terminal::TextColors {
             improve_contrast: terminal.improve_contrast,
@@ -366,6 +369,7 @@ impl Workspace {
                 pane.blink = blink;
                 pane.colors = colors;
                 pane.padding_fill = padding_fill;
+                pane.selection = selection;
                 pane.cursor_shader = cursor_shader;
                 cx.notify();
             });
@@ -436,6 +440,11 @@ impl Workspace {
         let block = self.focused.as_ref()?;
         let pane = self.panes.get(block)?.read(cx);
         Some((pane.padding_fill_colors(), pane.header_fill()))
+    }
+
+    /// The focused pane, for tests.
+    pub fn focused_terminal(&self) -> Option<Entity<crate::ui::terminal::TerminalPane>> {
+        self.panes.get(self.focused.as_ref()?).cloned()
     }
 
     /// The focused pane's character cell width, in pixels.
@@ -1007,6 +1016,98 @@ impl Workspace {
             theme,
             cx,
         ));
+        let sel = t.selection;
+        rows.push(self.selection_color_row(
+            "selection-foreground",
+            "Selection foreground",
+            "The text color inside a selection.",
+            sel.foreground,
+            true,
+            |s, v| s.terminal.selection.foreground = v,
+            theme,
+            cx,
+        ));
+        rows.push(self.selection_color_row(
+            "selection-background",
+            "Selection background",
+            "The fill color behind selected text.",
+            sel.background,
+            false,
+            |s, v| s.terminal.selection.background = v,
+            theme,
+            cx,
+        ));
+        rows.push(self.toggle_row(
+            "selection-rounded",
+            "Rounded corners",
+            "Round the outer corners of terminal text selections.",
+            |s| s.terminal.selection.rounded,
+            |s, v| s.terminal.selection.rounded = v,
+            theme,
+            cx,
+        ));
+        rows.push(self.toggle_row(
+            "copy-animation",
+            "Play animation on copy",
+            "Shine across the selection to confirm each copy.",
+            |s| s.terminal.selection.copy_animation,
+            |s, v| s.terminal.selection.copy_animation = v,
+            theme,
+            cx,
+        ));
+        rows.push(section_label("Links", theme));
+        rows.push(self.choice_row(
+            "app-links",
+            "Links that open apps",
+            "Whether ctrl+click opens links such as ssh:// that launch another app. Web, mail and file links always open.",
+            &[
+                (AppLinks::Ask, "Ask"),
+                (AppLinks::Always, "Always"),
+                (AppLinks::Never, "Never"),
+            ],
+            t.app_links,
+            |s, v| s.terminal.app_links = v,
+            theme,
+            cx,
+        ));
+        let trusted = &t.trusted_links;
+        rows.push(
+            row(
+                "trusted-links",
+                "Trusted links",
+                if trusted.is_empty() {
+                    "None yet. Always Open in the link prompt adds one."
+                } else {
+                    "Links chosen to always open, by app and host."
+                },
+                theme,
+            )
+            .into_any_element(),
+        );
+        for (index, key) in trusted.iter().enumerate() {
+            let remove = key.clone();
+            rows.push(
+                div()
+                    .flex()
+                    .items_center()
+                    .gap(px(10.))
+                    .px(px(12.))
+                    .pb(px(6.))
+                    .child(div().flex_1().text_size(px(13.)).child(key.clone()))
+                    .child(
+                        button(format!("trusted-remove-{index}"), "Remove", false, theme).on_click(
+                            cx.listener(move |ws, _, _, cx| {
+                                let remove = remove.clone();
+                                ws.update_settings(
+                                    move |s| s.terminal.trusted_links.retain(|k| *k != remove),
+                                    cx,
+                                )
+                            }),
+                        ),
+                    )
+                    .into_any_element(),
+            );
+        }
         rows.push(section_label("Titles", theme));
         rows.push(self.toggle_row(
             "prefer-generated-titles",
@@ -1087,6 +1188,61 @@ impl Workspace {
             cx,
         ));
         rows
+    }
+
+    /// The theme's selection color, the accent, (for text) the program's own colors, or one
+    /// of the 16 terminal colors, as swatches.
+    #[allow(clippy::too_many_arguments)]
+    fn selection_color_row(
+        &self,
+        id: &'static str,
+        title: &str,
+        detail: &str,
+        current: SelectionColor,
+        keep: bool,
+        set: fn(&mut Settings, SelectionColor),
+        theme: &Theme,
+        cx: &mut Context<Self>,
+    ) -> AnyElement {
+        let mut named = vec![
+            (SelectionColor::Theme, "Theme"),
+            (SelectionColor::Accent, "Accent"),
+        ];
+        if keep {
+            named.push((SelectionColor::Keep, "Keep program colors"));
+        }
+        let buttons = named.into_iter().map(|(value, label)| {
+            button(format!("{id}-{label}"), label, value == current, theme).on_click(
+                cx.listener(move |ws, _, _, cx| ws.update_settings(|s| set(s, value), cx)),
+            )
+        });
+        let swatches = (0..16u8).map(|index| {
+            let chosen = current == SelectionColor::Palette(index);
+            div()
+                .id(SharedString::from(format!("{id}-swatch-{index}")))
+                .size(px(14.))
+                .rounded(theme.radius_small())
+                .bg(crate::ui::theme::color(
+                    theme.terminal.ansi[usize::from(index)],
+                ))
+                .cursor_pointer()
+                .when(chosen, |d| d.border_2().border_color(theme.text))
+                .on_click(cx.listener(move |ws, _, _, cx| {
+                    ws.update_settings(|s| set(s, SelectionColor::Palette(index)), cx)
+                }))
+        });
+        row(id, title, detail, theme)
+            .child(
+                div()
+                    .flex()
+                    .flex_col()
+                    .flex_none()
+                    .items_end()
+                    .gap(px(6.))
+                    .child(div().flex().gap(px(4.)).children(buttons))
+                    .child(div().grid().grid_cols(8).gap(px(3.)).children(swatches)),
+            )
+            .into_any_element()
     }
 
     /// Accent, the terminal text color, or one of the 16 terminal colors, as swatches.

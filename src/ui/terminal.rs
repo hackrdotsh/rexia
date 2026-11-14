@@ -11,7 +11,7 @@ use crate::rex::{
     host::{HostCommand, HostHandle, PaneCommand, PaneStatus, Scroll},
     stream::{CursorShape, Frame, SelectMode, flags},
 };
-use crate::settings::PaddingFill;
+use crate::settings::{PaddingFill, SelectionColor};
 use gpui::RenderImage;
 use gpui::{
     App, Bounds, ClipboardItem, Context, FocusHandle, Focusable, Font, FontStyle, FontWeight, Hsla,
@@ -22,11 +22,20 @@ use gpui::{
 use serde_json::json;
 use std::{collections::HashMap, sync::Arc};
 
-/// Links a click may open: web, mail and local files. Other schemes could start programs.
+/// Links a click opens without asking: web, mail and local files. Other schemes could
+/// start programs, so the workspace decides about them.
 pub fn openable(link: &str) -> bool {
-    url::Url::parse(link)
-        .is_ok_and(|url| matches!(url.scheme(), "http" | "https" | "mailto" | "file"))
+    crate::ui::workspace::links::ordinary(link)
 }
+
+/// What a pane asks of the workspace around it.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum PaneEvent {
+    /// A program's link was ctrl+clicked.
+    OpenLink(String),
+}
+
+impl gpui::EventEmitter<PaneEvent> for TerminalPane {}
 
 /// The background of the cell at `row`, `col`.
 fn cell_bg(frame: &Frame, row: usize, col: usize) -> u32 {
@@ -181,6 +190,92 @@ fn image_area(
     )
 }
 
+/// How long the copy shine takes to cross the selection.
+const SHINE: std::time::Duration = std::time::Duration::from_millis(450);
+
+/// The selection's leftmost and rightmost columns on screen, which the shine crosses.
+fn selection_columns(frame: &Frame) -> Option<(u16, u16)> {
+    let mut span: Option<(u16, u16)> = None;
+    for cells in &frame.lines {
+        for (col, cell) in cells.iter().enumerate() {
+            if cell.has(flags::SELECTED) {
+                let col = col as u16;
+                span = Some(span.map_or((col, col + 1), |(a, b)| (a.min(col), b.max(col + 1))));
+            }
+        }
+    }
+    span
+}
+
+/// Whether the cell at `row`, `col` is selected.
+fn selected_at(frame: &Frame, row: isize, col: u16) -> bool {
+    usize::try_from(row)
+        .ok()
+        .and_then(|r| frame.lines.get(r))
+        .and_then(|cells| cells.get(usize::from(col)))
+        .is_some_and(|cell| cell.has(flags::SELECTED))
+}
+
+/// Rounded corners for a selected run: only the selection's outer corners round, so
+/// rows that touch stay joined.
+fn selection_corners(
+    frame: &Frame,
+    row: usize,
+    start: u16,
+    end: u16,
+    cell: CellSize,
+) -> gpui::Corners<Pixels> {
+    let radius = (cell.height * 0.3).min(px(6.));
+    let row = row as isize;
+    let last = end.saturating_sub(1);
+    let open = |r: isize, c: u16| {
+        if selected_at(frame, r, c) {
+            px(0.)
+        } else {
+            radius
+        }
+    };
+    gpui::Corners {
+        top_left: open(row - 1, start),
+        top_right: open(row - 1, last),
+        bottom_left: open(row + 1, start),
+        bottom_right: open(row + 1, last),
+    }
+}
+
+/// The copy shine over one selected run: a light band sweeping left to right across the
+/// whole selection at progress `t`, clipped to the run. `grid_left` is the grid's left edge.
+fn paint_shine(
+    window: &mut Window,
+    area: Bounds<Pixels>,
+    grid_left: Pixels,
+    span: Option<(u16, u16)>,
+    t: f32,
+    cell: CellSize,
+) {
+    let Some((first, last)) = span else { return };
+    let band = cell.width * 6.;
+    let start = grid_left + cell.width * f32::from(first) - band;
+    let travel = cell.width * f32::from(last - first) + band * 2.;
+    let center = start + travel * t;
+    let glow = gpui::hsla(0., 0., 1., 0.4 * (1. - t * 0.5));
+    let clear = gpui::hsla(0., 0., 1., 0.);
+    let half = band / 2.;
+    window.with_content_mask(Some(gpui::ContentMask { bounds: area }), |window| {
+        for (from, a, b) in [(center - half, clear, glow), (center, glow, clear)] {
+            let piece = Bounds::new(point(from, area.origin.y), size(half, area.size.height));
+            window.paint_quad(fill(
+                piece,
+                gpui::linear_gradient(
+                    90.,
+                    gpui::linear_color_stop(a, 0.),
+                    gpui::linear_color_stop(b, 1.),
+                ),
+            ));
+        }
+    });
+}
+
 /// Measured once per font: the size of one cell.
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct CellSize {
@@ -210,6 +305,12 @@ pub struct TerminalPane {
     pub colors: TextColors,
     /// Whether a program's colors fill the padding.
     pub padding_fill: PaddingFill,
+    /// How selections look.
+    pub selection: crate::settings::SelectionLook,
+    /// When the copy shine started, and how many copies have shone.
+    shine: Option<std::time::Instant>,
+    shines: usize,
+    drawn_selection: Option<(Option<Hsla>, Hsla)>,
     /// The trail effect drawn when the cursor jumps; none while cursor shaders are off.
     pub cursor_shader: Option<crate::settings::CursorShader>,
     /// Where the focused cursor was last drawn, and the trail it's drawing now.
@@ -257,6 +358,10 @@ impl TerminalPane {
             copy_on_select: false,
             colors: TextColors::default(),
             padding_fill: PaddingFill::Off,
+            selection: Default::default(),
+            shine: None,
+            shines: 0,
+            drawn_selection: None,
             cursor_shader: None,
             last_cursor: None,
             trail: None,
@@ -422,6 +527,24 @@ impl TerminalPane {
         self.cell
     }
 
+    /// The middle of the cell at `col`, `row`, in window coordinates, for tests.
+    pub fn cell_point(&self, col: u16, row: u16) -> Option<Point<Pixels>> {
+        let cell = self.cell?;
+        Some(
+            self.origin
+                + point(
+                    cell.width * (f32::from(col) + 0.5),
+                    cell.height * (f32::from(row) + 0.5),
+                ),
+        )
+    }
+
+    /// The selection's text and fill colors as last drawn (`None` text keeps the
+    /// program's colors), for tests.
+    pub fn selection_colors(&self) -> Option<(Option<Hsla>, Hsla)> {
+        self.drawn_selection
+    }
+
     /// The color a cell's text draws in, after the color settings.
     pub fn drawn_text_color(&self, row: usize, col: usize) -> Option<u32> {
         let frame = self.frame()?;
@@ -429,7 +552,7 @@ impl TerminalPane {
         let look = Look {
             palette: Palette {
                 selection_bg: Hsla::default(),
-                selection_fg: Hsla::default(),
+                selection_fg: None,
                 match_bg: Hsla::default(),
                 current_bg: Hsla::default(),
                 current_fg: Hsla::default(),
@@ -642,14 +765,37 @@ impl TerminalPane {
 
     pub fn copy(&mut self, cx: &mut Context<Self>) {
         let Some(pane) = self.pane() else { return };
-        cx.spawn(async move |_, cx| {
+        cx.spawn(async move |this, cx| {
             if let Some(Some(text)) = pane.ask(PaneCommand::Copy).await
                 && !text.is_empty()
             {
                 cx.update(|cx| cx.write_to_clipboard(ClipboardItem::new_string(text)));
+                // A shine across the selection confirms the copy.
+                let _ = this.update(cx, |pane, cx| {
+                    if pane.selection.copy_animation {
+                        pane.shine = Some(std::time::Instant::now());
+                        pane.shines += 1;
+                        cx.notify();
+                    }
+                });
             }
         })
         .detach();
+    }
+
+    /// How far the copy shine has gone, from 0 to 1, while it runs.
+    fn shine_progress(&mut self) -> Option<f32> {
+        let t = self.shine?.elapsed().as_secs_f32() / SHINE.as_secs_f32();
+        if t >= 1. {
+            self.shine = None;
+            return None;
+        }
+        Some(t)
+    }
+
+    /// How many copies have shone, for tests.
+    pub fn copy_shines(&self) -> usize {
+        self.shines
     }
 
     pub fn select_all(&mut self) {
@@ -730,14 +876,13 @@ impl TerminalPane {
             && let Some(pane) = self.pane()
         {
             let (x, y) = at;
-            cx.spawn(async move |_, cx| {
+            cx.spawn(async move |this, cx| {
                 let link = pane
                     .ask(|reply| PaneCommand::LinkAt { x, y, reply })
                     .await
-                    .flatten()
-                    .filter(|link| openable(link));
+                    .flatten();
                 if let Some(link) = link {
-                    cx.update(|cx| cx.open_url(&link));
+                    let _ = this.update(cx, |_, cx| cx.emit(PaneEvent::OpenLink(link)));
                 }
             })
             .detach();
@@ -871,7 +1016,8 @@ struct Segment {
 #[derive(Clone, Copy)]
 struct Palette {
     selection_bg: Hsla,
-    selection_fg: Hsla,
+    /// The text color inside a selection; `None` keeps the program's colors.
+    selection_fg: Option<Hsla>,
     match_bg: Hsla,
     current_bg: Hsla,
     current_fg: Hsla,
@@ -916,17 +1062,19 @@ impl Look {
     }
 }
 
-fn segments(
-    cells: &[crate::rex::stream::Cell],
-    look: &Look,
-) -> (Vec<Segment>, Vec<(u16, u16, Hsla)>) {
+/// A run of cells sharing a background: first column, end column, color, and whether
+/// it's part of a selection.
+type Background = (u16, u16, Hsla, bool);
+
+fn segments(cells: &[crate::rex::stream::Cell], look: &Look) -> (Vec<Segment>, Vec<Background>) {
     let palette = &look.palette;
     let mut segments: Vec<Segment> = Vec::new();
-    let mut backgrounds: Vec<(u16, u16, Hsla)> = Vec::new();
+    let mut backgrounds: Vec<Background> = Vec::new();
     for (col, cell) in cells.iter().enumerate() {
         let col = col as u16;
         let mut fg = color(look.text_color(cell.fg, cell.bg));
         let mut bg = cell.bg.map(color);
+        let mut selected = false;
         if cell.has(flags::CURRENT_MATCH) {
             bg = Some(palette.current_bg);
             fg = palette.current_fg;
@@ -934,15 +1082,18 @@ fn segments(
             bg = Some(palette.match_bg);
         } else if cell.has(flags::SELECTED) {
             bg = Some(palette.selection_bg);
-            fg = palette.selection_fg;
+            fg = palette.selection_fg.unwrap_or(fg);
+            selected = true;
         }
         if cell.has(flags::FAINT) {
             fg.a *= 0.6;
         }
         if let Some(bg) = bg {
             match backgrounds.last_mut() {
-                Some((_, end, last)) if *end == col && *last == bg => *end = col + 1,
-                _ => backgrounds.push((col, col + 1, bg)),
+                Some((_, end, last, was)) if *end == col && *last == bg && *was == selected => {
+                    *end = col + 1
+                }
+                _ => backgrounds.push((col, col + 1, bg, selected)),
             }
         }
         if cell.has(flags::SPACER) || cell.text.is_empty() || cell.text == " " {
@@ -1006,13 +1157,32 @@ impl Render for TerminalPane {
         let font_size = px(self.font.pixels());
         let padding = self.padding;
         let status = model.as_ref().map(|m| m.status.clone());
+        let selection = self.selection;
+        let ansi = frame.as_ref().map(|f| f.ansi);
+        let pick = |choice: SelectionColor, theme_color: u32| match choice {
+            SelectionColor::Theme => Some(color(theme_color)),
+            SelectionColor::Accent => Some(theme.primary),
+            SelectionColor::Keep => None,
+            SelectionColor::Palette(index) => Some(color(
+                ansi.map_or(theme.terminal.ansi[usize::from(index % 16)], |a| {
+                    a[usize::from(index % 16)]
+                }),
+            )),
+        };
+        let shine = self.shine_progress();
+        if shine.is_some() {
+            window.request_animation_frame();
+        }
+        let selection_span = frame.as_deref().and_then(selection_columns);
         let palette = Palette {
-            selection_bg: color(theme.terminal.selection_background),
-            selection_fg: color(theme.terminal.selection_foreground),
+            selection_bg: pick(selection.background, theme.terminal.selection_background)
+                .unwrap_or(color(theme.terminal.selection_background)),
+            selection_fg: pick(selection.foreground, theme.terminal.selection_foreground),
             match_bg: theme.primary_container,
             current_bg: theme.primary,
             current_fg: theme.on_primary,
         };
+        self.drawn_selection = Some((palette.selection_fg, palette.selection_bg));
         let (bold, italic, colors) = (self.font.bold, self.font.italic, self.colors);
         let padding_fill = self.padding_fill;
         let cursor_color = color(theme.terminal.cursor);
@@ -1097,8 +1267,17 @@ impl Render for TerminalPane {
                     let mut rows = Vec::with_capacity(frame.lines.len());
                     for (row, cells) in frame.lines.iter().enumerate() {
                         let (segments, backgrounds) = segments(cells, &look);
-                        for (start, end, bg) in backgrounds {
-                            window.paint_quad(fill(cell_bounds(start, row, end - start), bg));
+                        for (start, end, bg, selected) in backgrounds {
+                            let area = cell_bounds(start, row, end - start);
+                            if selected && selection.rounded {
+                                let corners = selection_corners(&frame, row, start, end, cell);
+                                window.paint_quad(fill(area, bg).corner_radii(corners));
+                            } else {
+                                window.paint_quad(fill(area, bg));
+                            }
+                            if selected && let Some(t) = shine {
+                                paint_shine(window, area, origin.x, selection_span, t, cell);
+                            }
                         }
                         rows.push(segments);
                     }
@@ -1452,6 +1631,44 @@ mod tests {
     }
 
     #[test]
+    fn selections_round_only_their_outer_corners() {
+        // Two selected rows: columns 2 to 5, then 0 to 3.
+        let mut frame = frame_with(&[&[None; 6], &[None; 6]], false);
+        for col in 2..6 {
+            frame.lines[0][col].flags = flags::SELECTED;
+        }
+        for col in 0..4 {
+            frame.lines[1][col].flags = flags::SELECTED;
+        }
+        let cell = CellSize {
+            width: px(10.),
+            height: px(20.),
+        };
+        assert_eq!(selection_columns(&frame), Some((0, 6)));
+        let top = selection_corners(&frame, 0, 2, 6, cell);
+        // The first row's bottom-left sits over selected text, so it stays square.
+        assert_eq!(
+            (
+                top.top_left,
+                top.top_right,
+                top.bottom_left,
+                top.bottom_right
+            ),
+            (px(6.), px(6.), px(0.), px(6.))
+        );
+        let bottom = selection_corners(&frame, 1, 0, 4, cell);
+        assert_eq!(
+            (
+                bottom.top_left,
+                bottom.top_right,
+                bottom.bottom_left,
+                bottom.bottom_right
+            ),
+            (px(6.), px(0.), px(6.), px(6.))
+        );
+    }
+
+    #[test]
     fn padding_takes_edge_colors_as_chosen() {
         let blue = Some(0x2040c0);
         let red = Some(0xc02020);
@@ -1513,7 +1730,7 @@ mod tests {
     fn palette() -> Palette {
         Palette {
             selection_bg: color(0x333333),
-            selection_fg: color(0xeeeeee),
+            selection_fg: Some(color(0xeeeeee)),
             match_bg: color(0x444444),
             current_bg: color(0x555555),
             current_fg: color(0x000000),
@@ -1573,6 +1790,7 @@ mod tests {
         row[1].bg = Some(0x101010);
         let (_, backgrounds) = segments(&row, &look());
         assert_eq!(backgrounds.len(), 3);
+        assert!(!backgrounds[0].3 && backgrounds[1].3 && !backgrounds[2].3);
         assert_eq!((backgrounds[0].0, backgrounds[0].1), (0, 2));
         assert_eq!(backgrounds[1].2, color(0x333333));
         assert_eq!(backgrounds[2].2, color(0x555555));

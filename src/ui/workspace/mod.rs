@@ -8,6 +8,7 @@ mod extras;
 mod filter;
 pub mod gestures;
 mod highlight;
+pub mod links;
 mod overlay;
 mod preferences;
 pub mod remote;
@@ -21,7 +22,7 @@ use super::{
     components::{dot, heading, icon_button, list_row, small_icon_button, title},
     fonts::{self, TerminalFont},
     icons::icon,
-    terminal::TerminalPane,
+    terminal::{PaneEvent, TerminalPane},
     theme::Theme,
     titles,
 };
@@ -171,6 +172,8 @@ pub struct Workspace {
     identity: Identity,
     /// How Toggle Visibility hides the window.
     hide_window: std::rc::Rc<dyn Fn(&mut Window)>,
+    /// Opens links on the desktop; tests swap it for a recorder.
+    link_opener: links::LinkOpener,
     /// The window this workspace fills, to tell it from rexia's other windows.
     window_handle: Option<gpui::AnyWindowHandle>,
     /// Preferences changed since other windows last heard.
@@ -329,6 +332,7 @@ impl Workspace {
             filter,
             identity,
             hide_window: std::rc::Rc::new(|window: &mut Window| window.minimize_window()),
+            link_opener: std::rc::Rc::new(|link: &str, cx: &mut gpui::App| cx.open_url(link)),
             window_handle: Some(window.window_handle()),
             settings_changed: std::cell::Cell::new(false),
             tracker: Default::default(),
@@ -460,6 +464,7 @@ impl Workspace {
             .then_some(self.settings.terminal.cursor_style);
         let blink = self.settings.terminal.blink_interval();
         let padding_fill = self.settings.terminal.padding_fill;
+        let selection = self.settings.terminal.selection;
         let cursor_shader = self
             .settings
             .terminal
@@ -474,10 +479,12 @@ impl Workspace {
             px(self.settings.terminal.padding_y),
         );
         for (session, block) in visible {
-            let pane = self.panes.entry(block.clone()).or_insert_with(|| {
+            let shown = block.clone();
+            if !self.panes.contains_key(&block) {
                 let host = self.hosts[self.active].handle.clone();
                 let font = self.font.clone();
-                cx.new(|cx| {
+                let key = block.clone();
+                let pane = cx.new(|cx| {
                     let mut pane = TerminalPane::new(host, session, block, font, cx);
                     pane.copy_on_select = copy_on_select;
                     pane.padding = padding;
@@ -485,10 +492,17 @@ impl Workspace {
                     pane.blink = blink;
                     pane.colors = colors;
                     pane.padding_fill = padding_fill;
+                    pane.selection = selection;
                     pane.cursor_shader = cursor_shader;
                     pane
+                });
+                cx.subscribe(&pane, |ws, _, event: &PaneEvent, cx| match event {
+                    PaneEvent::OpenLink(link) => ws.open_link(link.clone(), cx),
                 })
-            });
+                .detach();
+                self.panes.insert(key, pane);
+            }
+            let pane = &self.panes[&shown];
             pane.update(cx, |pane, cx| {
                 if pane.changed() {
                     cx.notify();

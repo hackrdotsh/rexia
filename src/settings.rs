@@ -171,6 +171,52 @@ pub enum ShellIconTheme {
     Accent,
 }
 
+/// Whether links that launch other apps, such as ssh://, open on ctrl+click.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum AppLinks {
+    #[default]
+    Ask,
+    Always,
+    Never,
+}
+
+/// A color for selected text or behind it.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum SelectionColor {
+    /// The terminal theme's selection color.
+    #[default]
+    Theme,
+    /// The interface's accent.
+    Accent,
+    /// Text keeps the colors its program gave it (foreground only).
+    Keep,
+    /// One of the 16 terminal colors.
+    Palette(u8),
+}
+
+/// How selections look: their colors, corners, and the shine that confirms a copy.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct SelectionLook {
+    pub foreground: SelectionColor,
+    pub background: SelectionColor,
+    pub rounded: bool,
+    pub copy_animation: bool,
+}
+
+impl Default for SelectionLook {
+    fn default() -> Self {
+        Self {
+            foreground: SelectionColor::Theme,
+            background: SelectionColor::Theme,
+            rounded: false,
+            copy_animation: true,
+        }
+    }
+}
+
 /// The effect cursor shaders draw behind a cursor that jumps.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
@@ -241,6 +287,10 @@ pub struct TerminalSettings {
     pub padding_x: f32,
     pub padding_y: f32,
     pub copy_on_select: bool,
+    pub selection: SelectionLook,
+    pub app_links: AppLinks,
+    /// App links chosen to always open, by scheme and host (`ssh://build`).
+    pub trusted_links: Vec<String>,
     pub padding_fill: PaddingFill,
     /// Color the pane header to match the program too, while the padding fills.
     pub padding_fill_header: bool,
@@ -294,6 +344,9 @@ impl Default for TerminalSettings {
             padding_x: 8.,
             padding_y: 6.,
             copy_on_select: false,
+            selection: SelectionLook::default(),
+            app_links: AppLinks::Ask,
+            trusted_links: Vec::new(),
             padding_fill: PaddingFill::Off,
             padding_fill_header: true,
             cursor_style: crate::rex::stream::CursorShape::Block,

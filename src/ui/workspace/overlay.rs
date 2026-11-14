@@ -163,6 +163,11 @@ pub enum Dialog {
         input: Entity<TextInput>,
         _subscription: Subscription,
     },
+    /// Open a link that launches another app? Buttons: Cancel, Always Open, Open.
+    OpenLink {
+        link: String,
+        focused: usize,
+    },
     Confirm {
         title: String,
         body: String,
@@ -1128,6 +1133,22 @@ impl Workspace {
             return false;
         };
         match dialog {
+            Dialog::OpenLink { focused, .. } => match key {
+                "escape" => self.close_overlay(window, cx),
+                "enter" => match *focused {
+                    0 => self.close_overlay(window, cx),
+                    choice => self.answer_link(choice == 1, window, cx),
+                },
+                "tab" | "right" => {
+                    *focused = (*focused + 1) % 3;
+                    cx.notify();
+                }
+                "left" => {
+                    *focused = (*focused + 2) % 3;
+                    cx.notify();
+                }
+                _ => {}
+            },
             Dialog::Confirm { focused, .. } => match key {
                 "escape" => self.close_overlay(window, cx),
                 "enter" => {
@@ -1411,6 +1432,37 @@ impl Workspace {
                     ]))
                     .into_any_element()
             }
+            Dialog::OpenLink { link, focused } => div()
+                .flex()
+                .flex_col()
+                .gap(px(10.))
+                .child(heading("Open this link in another app?".into()))
+                .child(
+                    div()
+                        .text_size(px(13.))
+                        .text_color(theme.text_muted)
+                        .child(format!(
+                            "{link}\n\nIt opens in whichever app handles {} links.",
+                            link.split(':').next().unwrap_or("these")
+                        )),
+                )
+                .child(actions_row(vec![
+                    button("link-cancel", "Cancel".into(), None, *focused == 0)
+                        .on_click(cx.listener(|ws, _, window, cx| ws.close_overlay(window, cx)))
+                        .into_any_element(),
+                    button("link-always", "Always Open".into(), None, *focused == 1)
+                        .on_click(cx.listener(|ws, _, window, cx| ws.answer_link(true, window, cx)))
+                        .into_any_element(),
+                    button(
+                        "link-open",
+                        "Open".into(),
+                        Some(theme.primary),
+                        *focused == 2,
+                    )
+                    .on_click(cx.listener(|ws, _, window, cx| ws.answer_link(false, window, cx)))
+                    .into_any_element(),
+                ]))
+                .into_any_element(),
             Dialog::Confirm {
                 title,
                 body,
