@@ -8,11 +8,209 @@ impl<T: AsyncRead + AsyncWrite + Unpin + Send> Io for T {}
 
 pub type Socket = WebSocketStream<tokio_tungstenite::MaybeTlsStream<Box<dyn Io>>>;
 
-/// A server address: a Unix socket path, or an HTTP(S)/WS(S) URL.
+/// A server address: a Unix socket path, an HTTP(S)/WS(S) URL, or an ssh:// host.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum Endpoint {
     Unix(String),
     Url(url::Url),
+    Ssh(SshTarget),
+}
+
+/// `ssh://[USER@]HOST[:PORT][/SOCKET]`: a server reached through the system's ssh, which
+/// runs `rex __internal dial-stdio` on the host, as the Rex CLI does. Without a socket,
+/// that finds (or starts) the ssh user's own server.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct SshTarget {
+    pub user: Option<String>,
+    pub host: String,
+    pub port: Option<u16>,
+    pub socket: Option<String>,
+}
+
+impl SshTarget {
+    fn parse(url: &url::Url) -> Result<Self> {
+        if url.as_str().contains('%') {
+            bail!("an ssh:// address can't contain % escapes");
+        }
+        if url.query().is_some() || url.fragment().is_some() {
+            bail!("an ssh:// address can't have a query or fragment");
+        }
+        if url.password().is_some() {
+            bail!("an ssh:// address can't hold a password; ssh uses your keys");
+        }
+        let host = url
+            .host_str()
+            .filter(|h| !h.is_empty())
+            .context("the address needs a host")?
+            .to_owned();
+        let socket = match url.path() {
+            "" | "/" => None,
+            path => {
+                // The path goes into a shell command on the host.
+                if !path
+                    .chars()
+                    .all(|c| c.is_ascii_alphanumeric() || "/._-+@:".contains(c))
+                {
+                    bail!("the socket path can only use letters, digits and / . _ - + @ :");
+                }
+                Some(path.to_owned())
+            }
+        };
+        Ok(Self {
+            user: (!url.username().is_empty()).then(|| url.username().to_owned()),
+            host,
+            port: url.port(),
+            socket,
+        })
+    }
+
+    /// The command ssh runs on the host. `sh -c` keeps it working whatever the login
+    /// shell is, and `~/.local/bin` is where Rex's unprivileged install goes.
+    pub fn remote_command(&self) -> String {
+        let server = self
+            .socket
+            .as_ref()
+            .map(|s| format!(" -S unix://{s}"))
+            .unwrap_or_default();
+        format!("sh -c 'PATH=\"$HOME/.local/bin:$PATH\"; exec rex{server} __internal dial-stdio'")
+    }
+
+    /// The arguments for ssh: no prompts (there's no terminal to answer them), keepalives
+    /// so a dead link is noticed, then the host and the command.
+    pub fn ssh_args(&self) -> Vec<String> {
+        let mut args: Vec<String> = [
+            "-T",
+            "-o",
+            "BatchMode=yes",
+            "-o",
+            "ServerAliveInterval=15",
+            "-o",
+            "ServerAliveCountMax=3",
+        ]
+        .map(String::from)
+        .to_vec();
+        if let Some(port) = self.port {
+            args.extend(["-p".into(), port.to_string()]);
+        }
+        let destination = match &self.user {
+            Some(user) => format!("{user}@{}", self.host),
+            None => self.host.clone(),
+        };
+        args.extend(["--".into(), destination, self.remote_command()]);
+        args
+    }
+}
+
+impl std::fmt::Display for SshTarget {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "ssh://")?;
+        if let Some(user) = &self.user {
+            write!(f, "{user}@")?;
+        }
+        write!(f, "{}", self.host)?;
+        if let Some(port) = self.port {
+            write!(f, ":{port}")?;
+        }
+        write!(f, "{}", self.socket.as_deref().unwrap_or(""))
+    }
+}
+
+/// ssh's standard input and output as one stream. The process ends with the stream.
+struct SshStream {
+    _child: tokio::process::Child,
+    stdin: tokio::process::ChildStdin,
+    stdout: tokio::process::ChildStdout,
+}
+
+impl AsyncRead for SshStream {
+    fn poll_read(
+        self: std::pin::Pin<&mut Self>,
+        cx: &mut std::task::Context<'_>,
+        buf: &mut tokio::io::ReadBuf<'_>,
+    ) -> std::task::Poll<std::io::Result<()>> {
+        std::pin::Pin::new(&mut self.get_mut().stdout).poll_read(cx, buf)
+    }
+}
+
+impl AsyncWrite for SshStream {
+    fn poll_write(
+        self: std::pin::Pin<&mut Self>,
+        cx: &mut std::task::Context<'_>,
+        buf: &[u8],
+    ) -> std::task::Poll<std::io::Result<usize>> {
+        std::pin::Pin::new(&mut self.get_mut().stdin).poll_write(cx, buf)
+    }
+
+    fn poll_flush(
+        self: std::pin::Pin<&mut Self>,
+        cx: &mut std::task::Context<'_>,
+    ) -> std::task::Poll<std::io::Result<()>> {
+        std::pin::Pin::new(&mut self.get_mut().stdin).poll_flush(cx)
+    }
+
+    fn poll_shutdown(
+        self: std::pin::Pin<&mut Self>,
+        cx: &mut std::task::Context<'_>,
+    ) -> std::task::Poll<std::io::Result<()>> {
+        std::pin::Pin::new(&mut self.get_mut().stdin).poll_shutdown(cx)
+    }
+}
+
+/// What ssh printed on standard error, for reporting why a connection failed.
+type Stderr = std::sync::Arc<std::sync::Mutex<String>>;
+
+/// Start ssh to `target`. `$REXIA_SSH` names another ssh program, for tests.
+fn spawn_ssh(target: &SshTarget) -> Result<(SshStream, Stderr)> {
+    use std::process::Stdio;
+    let program = std::env::var("REXIA_SSH").unwrap_or_else(|_| "ssh".into());
+    let mut child = tokio::process::Command::new(&program)
+        .args(target.ssh_args())
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .kill_on_drop(true)
+        .spawn()
+        .with_context(|| format!("couldn't run {program}"))?;
+    let stdin = child.stdin.take().context("ssh has no standard input")?;
+    let stdout = child.stdout.take().context("ssh has no standard output")?;
+    let mut stderr = child.stderr.take().context("ssh has no standard error")?;
+    let log: Stderr = Default::default();
+    let sink = log.clone();
+    tokio::spawn(async move {
+        use tokio::io::AsyncReadExt;
+        let mut chunk = [0u8; 1024];
+        while let Ok(n) = stderr.read(&mut chunk).await {
+            if n == 0 {
+                break;
+            }
+            let mut text = sink.lock().expect("ssh stderr");
+            if text.len() < 8192 {
+                text.push_str(&String::from_utf8_lossy(&chunk[..n]));
+            }
+        }
+    });
+    Ok((
+        SshStream {
+            _child: child,
+            stdin,
+            stdout,
+        },
+        log,
+    ))
+}
+
+/// The last thing ssh or the host's rex said, once it's had a moment to say it.
+async fn ssh_failure(log: &Stderr) -> Option<String> {
+    tokio::time::sleep(std::time::Duration::from_millis(300)).await;
+    let text = log.lock().expect("ssh stderr").clone();
+    let line = text.lines().rev().find(|l| !l.trim().is_empty())?.trim();
+    Some(
+        if line.contains("rex: not found") || line.contains("rex: command not found") {
+            "rex isn't installed on the host, or isn't on its PATH or in ~/.local/bin".into()
+        } else {
+            line.to_owned()
+        },
+    )
 }
 
 impl Endpoint {
@@ -35,7 +233,7 @@ impl Endpoint {
         let url = url::Url::parse(&with_scheme).context("invalid server address")?;
         match url.scheme() {
             "https" | "http" | "wss" | "ws" => {}
-            "ssh" => bail!("ssh:// hosts aren't supported yet; expose the server over HTTPS"),
+            "ssh" => return Ok(Self::Ssh(SshTarget::parse(&url)?)),
             other => bail!("unsupported address scheme {other}"),
         }
         if url.host_str().is_none() {
@@ -68,6 +266,7 @@ impl std::fmt::Display for Endpoint {
         match self {
             Self::Unix(path) => write!(f, "unix://{path}"),
             Self::Url(url) => write!(f, "{}", url.as_str().trim_end_matches('/')),
+            Self::Ssh(target) => write!(f, "{target}"),
         }
     }
 }
@@ -93,6 +292,7 @@ async fn io(endpoint: &Endpoint) -> Result<Box<dyn Io>> {
             tcp.set_nodelay(true)?;
             Ok(Box::new(tcp))
         }
+        Endpoint::Ssh(_) => unreachable!("ssh hosts are opened by open()"),
     }
 }
 
@@ -109,7 +309,7 @@ pub async fn connect(endpoint: &Endpoint, path: &str, protocol: &str) -> Result<
 async fn open(endpoint: &Endpoint, path: &str, protocol: &str) -> Result<Socket> {
     let _ = rustls::crypto::ring::default_provider().install_default();
     let mut url = match endpoint {
-        Endpoint::Unix(_) => url::Url::parse("ws://localhost")?,
+        Endpoint::Unix(_) | Endpoint::Ssh(_) => url::Url::parse("ws://localhost")?,
         Endpoint::Url(url) => {
             let mut url = url.clone();
             let scheme = if matches!(url.scheme(), "https" | "wss") {
@@ -128,9 +328,23 @@ async fn open(endpoint: &Endpoint, path: &str, protocol: &str) -> Result<Socket>
     request
         .headers_mut()
         .insert("Sec-WebSocket-Protocol", protocol.parse()?);
-    let stream = io(endpoint).await?;
-    let (socket, response) =
-        tokio_tungstenite::client_async_tls_with_config(request, stream, None, None).await?;
+    let (stream, ssh_log): (Box<dyn Io>, Option<Stderr>) = match endpoint {
+        Endpoint::Ssh(target) => {
+            let (stream, log) = spawn_ssh(target)?;
+            (Box::new(stream), Some(log))
+        }
+        _ => (io(endpoint).await?, None),
+    };
+    let handshake =
+        tokio_tungstenite::client_async_tls_with_config(request, stream, None, None).await;
+    let (socket, response) = match (handshake, ssh_log) {
+        (Ok(done), _) => done,
+        (Err(error), Some(log)) => match ssh_failure(&log).await {
+            Some(reason) => bail!("ssh: {reason}"),
+            None => return Err(error.into()),
+        },
+        (Err(error), None) => return Err(error.into()),
+    };
     let negotiated = response
         .headers()
         .get("Sec-WebSocket-Protocol")
@@ -160,6 +374,40 @@ mod tests {
         assert_eq!(host.to_string(), "https://studio.tail.ts.net");
         assert!(Endpoint::parse("unix://relative").is_err());
         assert!(Endpoint::parse("ftp://x").is_err());
-        assert!(Endpoint::parse("ssh://me@box").is_err());
+    }
+
+    #[test]
+    fn parses_ssh_hosts_and_builds_the_command() {
+        let Endpoint::Ssh(target) = Endpoint::parse("ssh://alice@build.example.com:2222").unwrap()
+        else {
+            panic!("not an ssh endpoint");
+        };
+        assert_eq!(target.user.as_deref(), Some("alice"));
+        assert_eq!(target.port, Some(2222));
+        assert_eq!(target.socket, None);
+        assert_eq!(target.to_string(), "ssh://alice@build.example.com:2222");
+        let args = target.ssh_args();
+        assert!(args.windows(2).any(|w| w == ["-p", "2222"]));
+        assert_eq!(args[args.len() - 2], "alice@build.example.com");
+        assert_eq!(
+            args.last().unwrap(),
+            "sh -c 'PATH=\"$HOME/.local/bin:$PATH\"; exec rex __internal dial-stdio'"
+        );
+
+        let Endpoint::Ssh(target) = Endpoint::parse("ssh://box/run/rex/server.sock").unwrap()
+        else {
+            panic!("not an ssh endpoint");
+        };
+        assert_eq!(target.socket.as_deref(), Some("/run/rex/server.sock"));
+        assert!(
+            target
+                .remote_command()
+                .contains("rex -S unix:///run/rex/server.sock __internal")
+        );
+
+        assert!(Endpoint::parse("ssh://box/tmp/a b").is_err());
+        assert!(Endpoint::parse("ssh://box/tmp/%27").is_err());
+        assert!(Endpoint::parse("ssh://me:secret@box").is_err());
+        assert!(Endpoint::parse("ssh://").is_err());
     }
 }

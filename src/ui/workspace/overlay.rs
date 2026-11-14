@@ -878,7 +878,8 @@ impl Workspace {
 
     pub fn open_add_host(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         let label = cx.new(|cx| TextInput::new("studio", cx));
-        let address = cx.new(|cx| TextInput::new("studio.tail1234.ts.net or https://…", cx));
+        let address =
+            cx.new(|cx| TextInput::new("studio.tail1234.ts.net, https://… or ssh://user@host", cx));
         let on_event = |field: usize| {
             move |ws: &mut Workspace,
                   _: &Entity<TextInput>,

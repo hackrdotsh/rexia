@@ -132,10 +132,10 @@ fn palettes_switchers_dialogs_and_find() {
     h.run("client.host.add", Value::Null);
     h.type_text("studio");
     h.press("tab");
-    h.type_text("ssh://me@studio");
+    h.type_text("ftp://studio");
     h.press("enter");
     let problem = h.workspace(|ws| ws.dialog_error());
-    println!("add host ssh:// -> {problem:?}");
+    println!("add host ftp:// -> {problem:?}");
     assert!(problem.is_some());
     h.screenshot("add-host");
     h.press("ctrl-a");
