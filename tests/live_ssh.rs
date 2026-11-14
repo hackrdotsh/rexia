@@ -111,7 +111,9 @@ fn ssh_hosts_stream_terminals_and_explain_failures() {
     let args = std::fs::read_to_string(dir.path().join("args.log")).unwrap();
     let first = args.lines().find(|l| l.contains("localhost")).unwrap();
     println!("ssh {first}");
-    assert!(first.contains("-T -o BatchMode=yes"));
+    assert!(first.contains("-T -o ConnectTimeout=15"));
+    assert!(first.contains("-o ControlMaster=auto"));
+    assert!(!first.contains("BatchMode"));
     assert!(first.contains(&format!("-- tester@localhost sh -c 'PATH=\"$HOME/.local/bin:$PATH\"; exec rex -S unix://{socket} __internal dial-stdio'")));
     println!(
         "ssh connections opened: {}",
