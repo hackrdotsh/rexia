@@ -8,6 +8,8 @@ radius, borders, and fonts.
 
 rexia is unofficial and isn't affiliated with Superlogical.
 
+See [docs/parity.md](docs/parity.md) for how it compares with Rex for Mac.
+
 ## Requirements
 
 - Nix with flakes, and direnv with nix-direnv for automatic shell loading.
