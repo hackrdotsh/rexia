@@ -44,6 +44,24 @@ pub enum ToolbarLayout {
     Right,
 }
 
+impl ToolbarLayout {
+    /// Tabs listed down the sidebar instead of across the top.
+    pub fn vertical(self) -> bool {
+        self != Self::Above
+    }
+}
+
+/// When the toolbar shows: always, when the pointer reaches the top of the window, or only
+/// after Reveal Toolbar.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ToolbarBehavior {
+    #[default]
+    Always,
+    Hover,
+    Hidden,
+}
+
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum PaneStyle {
@@ -138,6 +156,11 @@ impl Default for TerminalSettings {
 pub struct InterfaceSettings {
     pub sidebar: bool,
     pub toolbar_layout: ToolbarLayout,
+    pub toolbar_behavior: ToolbarBehavior,
+    /// The side Toggle Toolbar Layout goes back to from Above.
+    pub vertical_side: ToolbarLayout,
+    /// Horizontal tabs share the tab bar equally.
+    pub tabs_fill: bool,
     pub pane_style: PaneStyle,
     pub pane_headers: PaneHeaders,
     pub highlight_active_pane: bool,
@@ -154,6 +177,9 @@ impl Default for InterfaceSettings {
         Self {
             sidebar: true,
             toolbar_layout: ToolbarLayout::Above,
+            toolbar_behavior: ToolbarBehavior::Always,
+            vertical_side: ToolbarLayout::Left,
+            tabs_fill: false,
             pane_style: PaneStyle::Comfortable,
             pane_headers: PaneHeaders::Always,
             highlight_active_pane: true,

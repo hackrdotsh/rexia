@@ -678,6 +678,27 @@ pub const ACTIONS: &[ActionDef] = &[
         [(&["ctrl+shift+b"], None)]
     ),
     action!(
+        "client.toolbar.reveal",
+        "Reveal Toolbar",
+        "View",
+        "toolbar tabs show reveal hidden hover",
+        [(&["ctrl+alt+shift+t"], None)]
+    ),
+    action!(
+        "client.pane_header.reveal",
+        "Reveal Pane Header",
+        "View",
+        "pane header title show reveal hidden hover",
+        [(&["ctrl+alt+shift+h"], None)]
+    ),
+    action!(
+        "client.tab_style.toggle",
+        "Toggle Toolbar Layout",
+        "View",
+        "toolbar layout tabs vertical horizontal sidebar above left right",
+        [(&["ctrl+shift+s"], None)]
+    ),
+    action!(
         "client.sidebar.filter.focus",
         "Focus Tab Filter",
         "View",

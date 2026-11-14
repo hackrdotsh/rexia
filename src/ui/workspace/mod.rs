@@ -5,6 +5,7 @@ mod attention;
 mod filter;
 mod overlay;
 mod preferences;
+mod toolbar;
 
 use super::{
     components::{dot, heading, icon_button, list_row, small_icon_button, title},
@@ -24,7 +25,7 @@ use crate::{
         host::{HostCommand, HostHandle, HostModel, shell_layout},
         view::{self, Rect},
     },
-    settings::{FadeInactive, HostConfig, PaneHeaders, PaneStyle, Settings},
+    settings::{FadeInactive, HostConfig, PaneHeaders, PaneStyle, Settings, ToolbarLayout},
 };
 pub use actions::{Outcome, Target};
 use gpui::{
@@ -111,6 +112,7 @@ pub struct Workspace {
     area: Bounds<Pixels>,
     /// Where the notice was drawn, from the last paint.
     notice_area: Option<Bounds<Pixels>>,
+    reveal: toolbar::Reveal,
     drag: Option<Drag>,
     /// The block this client last focused for the server's focused block.
     focused: Option<String>,
@@ -240,6 +242,7 @@ impl Workspace {
             focus: cx.focus_handle(),
             area: Bounds::default(),
             notice_area: None,
+            reveal: Default::default(),
             drag: None,
             focused: None,
             expanded: HashSet::new(),
@@ -619,6 +622,7 @@ impl Workspace {
     }
 
     fn on_mouse_move(&mut self, event: &MouseMoveEvent, _: &mut Window, cx: &mut Context<Self>) {
+        self.track_pointer(event.position, cx);
         let (fx, fy) = self.fraction(event.position);
         let start_fraction = match &self.drag {
             Some(Drag::Layer { start, .. }) => Some(self.fraction(*start)),
@@ -694,6 +698,8 @@ impl Workspace {
             .filter(|l| !l.is_empty())
             .unwrap_or_else(|| "No session".into());
         let active_window = view.and_then(|v| v.active_window_id.clone());
+        let fill = self.settings.interface.tabs_fill;
+        let count = view.map_or(0, |v| v.windows.len());
         let tabs: Vec<AnyElement> = view
             .map(|v| v.windows.as_slice())
             .unwrap_or_default()
@@ -708,7 +714,9 @@ impl Workspace {
                     .focused_block_id
                     .as_ref()
                     .and_then(|b| model.blocks.get(b));
-                let (fg, bg) = if active {
+                // Filling tabs show a background only when there's more than one.
+                let lone = fill && count < 2;
+                let (fg, bg) = if active && !lone {
                     (theme.on_primary, theme.primary)
                 } else {
                     (theme.text, theme.background)
@@ -723,12 +731,13 @@ impl Workspace {
                     .gap(px(8.))
                     .h(px(32.))
                     .min_w(px(120.))
-                    .max_w(px(240.))
+                    .when(fill, |d| d.flex_1())
+                    .when(!fill, |d| d.max_w(px(240.)))
                     .px(px(10.))
                     .rounded(theme.radius_small())
                     .bg(bg)
                     .text_color(fg)
-                    .when(!active && theme.button_borders, |d| {
+                    .when(!active && !lone && theme.button_borders, |d| {
                         d.border(theme.border_width).border_color(theme.border)
                     })
                     .when(!active, |d| d.hover(|d| d.bg(theme.overlay(0.06))))
@@ -770,12 +779,14 @@ impl Workspace {
             .collect();
 
         div()
+            .id("toolbar")
             .flex()
             .flex_none()
             .items_center()
             .gap(px(8.))
-            .h(px(48.))
+            .h(px(toolbar::TOOLBAR_HEIGHT))
             .px(px(10.))
+            .bg(theme.background)
             .border_b(theme.border_width)
             .border_color(theme.border)
             .child(icon_button(
@@ -935,6 +946,9 @@ impl Workspace {
                                         .whitespace_nowrap()
                                         .child(titles::tab_title(window, &model)),
                                 )
+                                .children(self.tab_mark(index, window, &model).map(
+                                    |(state, badge)| activity_mark(state, badge, false, theme),
+                                ))
                                 .on_click(cx.listener(move |ws, _, _, cx| {
                                     ws.select_tab(window_id.clone(), cx)
                                 })),
@@ -947,13 +961,10 @@ impl Workspace {
             .id("sidebar")
             .flex()
             .flex_col()
-            .flex_none()
-            .w(px(260.))
-            .h_full()
+            .flex_1()
+            .min_h_0()
             .p(px(10.))
             .gap(px(6.))
-            .border_r(theme.border_width)
-            .border_color(theme.border)
             .overflow_y_scroll()
             .child(
                 div()
@@ -1013,7 +1024,6 @@ impl Workspace {
             PaneStyle::Comfortable => 8.,
             PaneStyle::Compact => 2.,
         };
-        let headers = self.settings.interface.pane_headers;
         // Fading needs something to stand out against.
         let fade = if window.panes().len() > 1 {
             self.settings.interface.fade_inactive
@@ -1050,7 +1060,7 @@ impl Workspace {
             let state = model.blocks.get(&pane.block_id);
             let is_focused = focused.as_deref() == Some(pane.block_id.as_str());
             let floating = pane.floating.clone();
-            let header = (headers != PaneHeaders::Hidden).then(|| {
+            let header = self.header_shown(&pane.block_id).then(|| {
                 self.pane_header(
                     &pane.block_id,
                     &block,
@@ -1188,7 +1198,8 @@ impl Workspace {
             theme.text_muted
         };
         let id = block_id.to_owned();
-        let hover_only = self.settings.interface.pane_headers == PaneHeaders::Hover;
+        let hover_only = self.settings.interface.pane_headers == PaneHeaders::Hover
+            && !self.header_revealed(block_id);
         let group = SharedString::from(format!("pane-{block_id}"));
         let mut header = div()
             .id(SharedString::from(format!("header-{block_id}")))
@@ -1512,15 +1523,67 @@ impl Render for Workspace {
     fn render(&mut self, _: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let theme = Theme::get(cx).clone();
         let model = self.model();
-        let toolbar = self.render_toolbar(&model, &theme, cx);
-        let sidebar = self.settings.interface.sidebar.then(|| {
-            if self.settings.interface.activity_view {
+        let layout = self.settings.interface.toolbar_layout;
+        let floats = self.toolbar_floats();
+        let shown = self.toolbar_visible();
+        let session_label = model
+            .view()
+            .map(|v| v.label.clone())
+            .filter(|l| !l.is_empty())
+            .unwrap_or_else(|| "No session".into());
+        let top_bar = if !layout.vertical() && shown {
+            Some(self.render_toolbar(&model, &theme, cx))
+        } else {
+            None
+        };
+        let (toolbar, floating_bar) = if floats {
+            (None, top_bar)
+        } else {
+            (top_bar, None)
+        };
+        let sidebar = if self.settings.interface.sidebar {
+            let content = if self.settings.interface.activity_view {
                 self.render_activity_sidebar(&theme, cx)
             } else {
                 self.render_sidebar(&theme, cx)
-            }
-        });
+            };
+            let side_bar = if layout.vertical() && shown {
+                Some(self.render_side_toolbar(session_label, &theme, cx))
+            } else {
+                None
+            };
+            let column = div()
+                .relative()
+                .flex()
+                .flex_col()
+                .flex_none()
+                .w(px(260.))
+                .h_full()
+                .when(layout == ToolbarLayout::Right, |d| {
+                    d.border_l(theme.border_width)
+                })
+                .when(layout != ToolbarLayout::Right, |d| {
+                    d.border_r(theme.border_width)
+                })
+                .border_color(theme.border);
+            // A floating toolbar covers the top of the list instead of pushing it down.
+            Some(match side_bar {
+                Some(bar) if floats => column
+                    .child(content)
+                    .child(div().absolute().top_0().left_0().right_0().child(bar)),
+                Some(bar) => column.child(bar).child(content),
+                None => column.child(content),
+            })
+        } else {
+            None
+        };
         let panes = self.render_panes(&model, &theme, cx);
+        let row = div().flex().flex_1().min_h_0();
+        let body = match sidebar {
+            Some(side) if layout == ToolbarLayout::Right => row.child(panes).child(side),
+            Some(side) => row.child(side).child(panes),
+            None => row.child(panes),
+        };
         if self.notice.is_none() {
             self.notice_area = None;
         }
@@ -1583,14 +1646,10 @@ impl Render for Workspace {
             .capture_key_down(cx.listener(Self::on_key_down))
             .on_mouse_move(cx.listener(Self::on_mouse_move))
             .on_mouse_up(MouseButton::Left, cx.listener(Self::on_mouse_up))
-            .child(toolbar)
-            .child(
-                div()
-                    .flex()
-                    .flex_1()
-                    .min_h_0()
-                    .children(sidebar)
-                    .child(panes),
+            .children(toolbar)
+            .child(body)
+            .children(
+                floating_bar.map(|bar| div().absolute().top_0().left_0().right_0().child(bar)),
             )
             .children(notice)
             .children(self.key_hint(&theme))

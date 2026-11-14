@@ -6,6 +6,7 @@ use crate::{
     rex::{activity::ProgramState, host::HostCommand},
     settings::{
         BlinkSpeed, FadeInactive, NoticePosition, PaneHeaders, PaneStyle, Settings, StateActivity,
+        ToolbarBehavior, ToolbarLayout,
     },
     sound::{self, Cue},
     ui::{
@@ -454,6 +455,49 @@ impl Workspace {
             )
             .child(icon("palette").size(px(18.)).text_color(theme.primary))
             .into_any_element(),
+            self.choice_row(
+                "toolbar-layout",
+                "Toolbar layout",
+                "Tabs above the panes, or down the sidebar on either side.",
+                &[
+                    (ToolbarLayout::Above, "Above"),
+                    (ToolbarLayout::Left, "Left side"),
+                    (ToolbarLayout::Right, "Right side"),
+                ],
+                i.toolbar_layout,
+                |s, v| {
+                    s.interface.toolbar_layout = v;
+                    if v.vertical() {
+                        s.interface.vertical_side = v;
+                        s.interface.sidebar = true;
+                    }
+                },
+                theme,
+                cx,
+            ),
+            self.choice_row(
+                "toolbar-behavior",
+                "Toolbar behavior",
+                "Show on hover hides it until the pointer reaches the window's top edge.",
+                &[
+                    (ToolbarBehavior::Always, "Always"),
+                    (ToolbarBehavior::Hover, "On hover"),
+                    (ToolbarBehavior::Hidden, "Hidden"),
+                ],
+                i.toolbar_behavior,
+                |s, v| s.interface.toolbar_behavior = v,
+                theme,
+                cx,
+            ),
+            self.toggle_row(
+                "tabs-fill",
+                "Tabs fill available space",
+                "Tabs above the panes share the tab bar equally.",
+                |s| s.interface.tabs_fill,
+                |s, v| s.interface.tabs_fill = v,
+                theme,
+                cx,
+            ),
             self.toggle_row(
                 "sidebar",
                 "Show sidebar",

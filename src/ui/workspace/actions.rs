@@ -854,6 +854,9 @@ impl Workspace {
             }
             "client.sidebar.toggle" => self.toggle_sidebar(cx),
             "client.sidebar.filter.focus" => self.focus_filter(window, cx),
+            "client.toolbar.reveal" => self.reveal_toolbar(cx),
+            "client.pane_header.reveal" => self.reveal_pane_header(cx),
+            "client.tab_style.toggle" => self.toggle_tab_style(cx),
             "client.sidebar.activity.toggle" => {
                 let interface = &mut self.settings.interface;
                 interface.activity_view = !interface.activity_view;
