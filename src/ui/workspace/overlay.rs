@@ -36,6 +36,8 @@ pub enum ListKind {
     RemoveHost,
     /// Choose an action to give a new key.
     Shortcuts,
+    /// Choose the effect cursor shaders draw.
+    CursorShaders,
     /// Browse directories: open a tab there, or (`insert`) type the path into the pane.
     Directory {
         insert: bool,
@@ -53,6 +55,7 @@ impl ListKind {
             Self::Hosts => "Switch to a host",
             Self::RemoveHost => "Remove a host",
             Self::Shortcuts => "Choose an action to give a new key",
+            Self::CursorShaders => "Choose a cursor shader",
             Self::Directory { .. } => "Path",
         }
     }
@@ -68,6 +71,7 @@ impl ListKind {
             Self::Hosts => "client.host.switch",
             Self::RemoveHost => "client.host.remove",
             Self::Shortcuts => "client.shortcuts.edit",
+            Self::CursorShaders => "client.cursor_shader.change",
             Self::Directory { insert: false } => "pane.go_to_directory",
             Self::Directory { insert: true } => "pane.insert_path",
         }
@@ -102,6 +106,7 @@ pub enum Choice {
         anchor: String,
     },
     Host(usize),
+    CursorShader(crate::settings::CursorShader),
     RemoveHost {
         id: String,
         label: String,
@@ -410,6 +415,22 @@ fn host_items(ws: &Workspace) -> Vec<Item> {
         .collect()
 }
 
+fn shader_items(ws: &Workspace) -> Vec<Item> {
+    let terminal = &ws.settings.terminal;
+    crate::settings::CursorShader::ALL
+        .into_iter()
+        .map(|shader| Item {
+            title: shader.title().to_owned(),
+            detail: Some(shader.description().to_owned()),
+            keys: None,
+            icon: "eye",
+            status: None,
+            current: terminal.cursor_shaders && terminal.cursor_shader == shader,
+            choice: Choice::CursorShader(shader),
+        })
+        .collect()
+}
+
 fn shortcut_items(ws: &Workspace) -> Vec<Item> {
     actions::ACTIONS
         .iter()
@@ -532,6 +553,7 @@ impl Workspace {
             ListKind::Hosts => host_items(self),
             ListKind::RemoveHost => removable_hosts(self),
             ListKind::Shortcuts => shortcut_items(self),
+            ListKind::CursorShaders => shader_items(self),
             ListKind::Directory { .. } => Vec::new(),
         };
         let input = cx.new(|cx| TextInput::new(kind.placeholder(), cx));
@@ -797,6 +819,7 @@ impl Workspace {
                 }
             }
             Choice::Host(index) => self.switch_host(index, cx),
+            Choice::CursorShader(shader) => self.choose_cursor_shader(shader, cx),
             Choice::Shortcut { name, title } => self.record_shortcut(name, title, window, cx),
             Choice::RemoveHost { id, label } => self.open_confirm(
                 format!("Remove {label}?"),

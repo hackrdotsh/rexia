@@ -210,6 +210,11 @@ pub struct TerminalPane {
     pub colors: TextColors,
     /// Whether a program's colors fill the padding.
     pub padding_fill: PaddingFill,
+    /// The trail effect drawn when the cursor jumps; none while cursor shaders are off.
+    pub cursor_shader: Option<crate::settings::CursorShader>,
+    /// Where the focused cursor was last drawn, and the trail it's drawing now.
+    last_cursor: Option<crate::ui::cursor_trail::CellSpot>,
+    trail: Option<crate::ui::cursor_trail::Trail>,
     /// The pane model revision last drawn.
     pub revision: u64,
     /// A shape to draw whatever the program asks for.
@@ -252,6 +257,9 @@ impl TerminalPane {
             copy_on_select: false,
             colors: TextColors::default(),
             padding_fill: PaddingFill::Off,
+            cursor_shader: None,
+            last_cursor: None,
+            trail: None,
             textures: HashMap::new(),
             revision: 0,
             force_cursor: None,
@@ -363,6 +371,50 @@ impl TerminalPane {
                 )
             })
             .collect()
+    }
+
+    /// Start a trail when the focused cursor jumps, and the trail to draw now, with its
+    /// progress. Unfocused panes and panes without a shader draw none.
+    fn track_trail(
+        &mut self,
+        cursor: Option<crate::rex::stream::Cursor>,
+    ) -> Option<(crate::ui::cursor_trail::Trail, f32)> {
+        use crate::ui::cursor_trail::{CellSpot, MIN_JUMP, Trail};
+        let (Some(shader), Some(cursor)) = (self.cursor_shader, cursor) else {
+            self.last_cursor = None;
+            self.trail = None;
+            return None;
+        };
+        let spot = CellSpot {
+            col: cursor.x,
+            row: cursor.y,
+            width: if cursor.wide { 2 } else { 1 },
+        };
+        if let Some(last) = self.last_cursor
+            && last != spot
+            && last.distance(spot) >= MIN_JUMP
+        {
+            self.trail = Some(Trail {
+                from: last,
+                to: spot,
+                started: std::time::Instant::now(),
+                shader,
+            });
+        }
+        self.last_cursor = Some(spot);
+        let trail = self.trail?;
+        match trail.progress(std::time::Instant::now()) {
+            Some(t) => Some((trail, t)),
+            None => {
+                self.trail = None;
+                None
+            }
+        }
+    }
+
+    /// The trail the cursor is drawing, for tests: where it jumped from and to.
+    pub fn cursor_trail(&self) -> Option<crate::ui::cursor_trail::Trail> {
+        self.trail
     }
 
     /// The size of one character cell, once measured.
@@ -977,6 +1029,11 @@ impl Render for TerminalPane {
             }
         });
         self.drawn_cursor = cursor_shape;
+        let trail = self.track_trail(cursor.filter(|_| focused));
+        if trail.is_some() {
+            window.request_animation_frame();
+        }
+        let accent = theme.primary;
         let preedit = self.preedit.clone().filter(|p| !p.is_empty() && focused);
         let focus_handle = self.focus.clone();
         let images = self.image_textures(frame.as_deref(), window);
@@ -1091,6 +1148,22 @@ impl Render for TerminalPane {
                         }
                     }
                     paint_images(Layer::AboveText, window);
+                    // A cursor shader's trail, under the cursor it leads to.
+                    if let Some((trail, t)) = &trail {
+                        let color = frame
+                            .cursor
+                            .and_then(|c| c.color)
+                            .map(super::theme::color)
+                            .unwrap_or(cursor_color);
+                        crate::ui::cursor_trail::paint_trail(
+                            window,
+                            trail,
+                            *t,
+                            |spot| cell_bounds(spot.col, spot.row as usize, spot.width),
+                            color,
+                            accent,
+                        );
+                    }
                     if let (Some(cursor), Some(shape), false) =
                         (frame.cursor, cursor_shape, cursor_hidden)
                     {

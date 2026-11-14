@@ -877,6 +877,17 @@ impl Workspace {
             }
             "client.server.restart" => self.ask_restart_server(cx).map_err(refused)?,
             "client.shortcuts.edit" => self.edit_shortcuts(window, cx),
+            "client.cursor_shader.toggle" => self.toggle_cursor_shaders(cx),
+            "client.cursor_shader.change" => match arg(args, "shader") {
+                Some(wanted) => {
+                    let shader = crate::settings::CursorShader::ALL
+                        .into_iter()
+                        .find(|s| s.title().eq_ignore_ascii_case(wanted))
+                        .ok_or_else(|| refused(format!("There's no cursor shader {wanted}")))?;
+                    self.choose_cursor_shader(shader, cx);
+                }
+                None => self.open_list(overlay::ListKind::CursorShaders, window, cx),
+            },
             "client.visibility.toggle" => return Ok(self.toggle_visibility(window)),
             "client.window.new" => self.open_new_window(cx),
             "client.window.close" => self.close_window(window),

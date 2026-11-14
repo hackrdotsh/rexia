@@ -119,6 +119,20 @@ pub const ACTIONS: &[ActionDef] = &[
         []
     ),
     action!(
+        "client.cursor_shader.toggle",
+        "Enable Cursor Shaders",
+        "View",
+        "cursor shader trail effect animation smear glow warp sweep comet blaze tapered rainbow gradient frozen enable disable toggle",
+        []
+    ),
+    action!(
+        "client.cursor_shader.change",
+        "Change Cursor Shader…",
+        "View",
+        "cursor shader trail effect choose pick warp sweep comet blaze tapered rainbow gradient frozen",
+        []
+    ),
+    action!(
         "client.shortcuts.edit",
         "Change Shortcut…",
         "App",

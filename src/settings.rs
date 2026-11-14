@@ -171,6 +171,21 @@ pub enum ShellIconTheme {
     Accent,
 }
 
+/// The effect cursor shaders draw behind a cursor that jumps.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum CursorShader {
+    #[default]
+    Warp,
+    Sweep,
+    Comet,
+    Blaze,
+    Tapered,
+    Rainbow,
+    Gradient,
+    Frozen,
+}
+
 /// Whether a program's background colors reach into the padding around its text.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
@@ -236,6 +251,9 @@ pub struct TerminalSettings {
     pub cursor_blink: BlinkSpeed,
     /// The time between blinks with a custom speed, in milliseconds.
     pub cursor_blink_ms: u32,
+    /// Draw a trail behind the cursor when it jumps.
+    pub cursor_shaders: bool,
+    pub cursor_shader: CursorShader,
     /// Pixels added to (or, negative, taken from) each character's width.
     pub character_spacing: f32,
     /// Join characters like -> and != into single symbols.
@@ -278,6 +296,8 @@ impl Default for TerminalSettings {
             force_cursor_style: false,
             cursor_blink: BlinkSpeed::Normal,
             cursor_blink_ms: 600,
+            cursor_shaders: false,
+            cursor_shader: CursorShader::Warp,
             character_spacing: 0.,
             ligatures: false,
             text_styles: TextStyles::Both,

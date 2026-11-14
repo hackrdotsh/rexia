@@ -2,6 +2,7 @@
 pub mod actions;
 pub mod activity;
 pub mod components;
+pub mod cursor_trail;
 pub mod fonts;
 pub mod fuzzy;
 pub mod icons;

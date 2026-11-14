@@ -326,6 +326,7 @@ impl Workspace {
         let blink = terminal.blink_interval();
         let cursor = terminal.cursor_style;
         let padding_fill = terminal.padding_fill;
+        let cursor_shader = terminal.cursor_shaders.then_some(terminal.cursor_shader);
         let colors = crate::ui::terminal::TextColors {
             improve_contrast: terminal.improve_contrast,
             theme_palette: terminal.theme_palette,
@@ -339,6 +340,7 @@ impl Workspace {
                 pane.blink = blink;
                 pane.colors = colors;
                 pane.padding_fill = padding_fill;
+                pane.cursor_shader = cursor_shader;
                 cx.notify();
             });
         }
@@ -471,7 +473,7 @@ impl Workspace {
     }
 
     #[allow(clippy::too_many_arguments)]
-    fn toggle_row(
+    pub(super) fn toggle_row(
         &self,
         id: &'static str,
         title: &str,
@@ -969,6 +971,7 @@ impl Workspace {
                 cx,
             ));
         }
+        rows.extend(self.cursor_shader_rows(theme, cx));
         rows.push(self.toggle_row(
             "copy-on-select",
             "Copy on select",

@@ -2,6 +2,7 @@
 //! and the active tab's panes laid out exactly as the server arranges them.
 mod actions;
 mod attention;
+mod cursor_shaders;
 mod extras;
 mod filter;
 pub mod gestures;
@@ -129,6 +130,7 @@ pub struct Workspace {
     reveal: toolbar::Reveal,
     highlight: highlight::Track,
     swipe: gestures::SwipeTracker,
+    shader_preview: cursor_shaders::ShaderPreview,
     /// The chosen SSH agent's status in words, and the socket it describes.
     ssh_agent_status: Option<(Option<PathBuf>, String)>,
     server_report: server_status::ServerReportState,
@@ -294,6 +296,7 @@ impl Workspace {
             reveal: Default::default(),
             highlight: Default::default(),
             swipe: Default::default(),
+            shader_preview: Default::default(),
             ssh_agent_status: None,
             server_report: Default::default(),
             tailscale_error: None,
@@ -446,6 +449,11 @@ impl Workspace {
             .then_some(self.settings.terminal.cursor_style);
         let blink = self.settings.terminal.blink_interval();
         let padding_fill = self.settings.terminal.padding_fill;
+        let cursor_shader = self
+            .settings
+            .terminal
+            .cursor_shaders
+            .then_some(self.settings.terminal.cursor_shader);
         let colors = super::terminal::TextColors {
             improve_contrast: self.settings.terminal.improve_contrast,
             theme_palette: self.settings.terminal.theme_palette,
@@ -466,6 +474,7 @@ impl Workspace {
                     pane.blink = blink;
                     pane.colors = colors;
                     pane.padding_fill = padding_fill;
+                    pane.cursor_shader = cursor_shader;
                     pane
                 })
             });
