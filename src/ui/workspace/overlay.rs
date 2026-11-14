@@ -322,6 +322,75 @@ fn go_to_items(ws: &Workspace) -> Vec<Item> {
     items
 }
 
+/// The new quick switcher: every program reporting a status (each of a pane's reporting
+/// programs on its own row, most urgent first), then every session, then every pane.
+fn quick_switcher_items(ws: &Workspace) -> Vec<Item> {
+    let mut processes: Vec<(ProgramState, Item)> = Vec::new();
+    let mut panes = Vec::new();
+    for (index, host) in ws.hosts.iter().enumerate() {
+        let model = host.handle.snapshot();
+        for (block, state) in &model.blocks {
+            let session = model
+                .session(&state.session_id)
+                .map(|s| s.label.clone())
+                .unwrap_or_default();
+            let view_block = model
+                .views
+                .get(&state.session_id)
+                .and_then(|v| v.windows.iter().find_map(|w| w.block(block)).cloned())
+                .unwrap_or_default();
+            let pane = titles::pane_title(&view_block, Some(state));
+            let choice = Choice::Block {
+                host: index,
+                session: state.session_id.clone(),
+                block: block.clone(),
+            };
+            for record in state.records.values() {
+                processes.push((
+                    record.state,
+                    Item {
+                        title: record
+                            .title
+                            .clone()
+                            .or_else(|| record.app.clone())
+                            .unwrap_or_else(|| pane.clone()),
+                        detail: Some(
+                            [record.msg.as_deref(), Some(&pane), Some(&session)]
+                                .into_iter()
+                                .flatten()
+                                .collect::<Vec<_>>()
+                                .join(" · "),
+                        ),
+                        keys: None,
+                        icon: titles::program_icon(Some(state)),
+                        status: Some((record.state, record.badge())),
+                        current: false,
+                        choice: choice.clone(),
+                    },
+                ));
+            }
+            let pwd = state.pwd.clone().or(state.process.cwd.clone());
+            panes.push(Item {
+                title: pane,
+                detail: Some(match pwd {
+                    Some(pwd) => format!("{pwd} · {session}"),
+                    None => format!("Pane in {session}"),
+                }),
+                keys: None,
+                icon: titles::program_icon(Some(state)),
+                status: None,
+                current: false,
+                choice,
+            });
+        }
+    }
+    processes.sort_by_key(|p| std::cmp::Reverse(p.0));
+    let mut items: Vec<Item> = processes.into_iter().map(|(_, item)| item).collect();
+    items.extend(session_items(ws));
+    items.extend(panes);
+    items
+}
+
 fn activity_items(ws: &Workspace) -> Vec<Item> {
     let mut items: Vec<(ProgramState, Item)> = Vec::new();
     for (index, host) in ws.hosts.iter().enumerate() {
@@ -552,6 +621,7 @@ impl Workspace {
         let items = match kind {
             ListKind::Commands => command_items(self),
             ListKind::Sessions => session_items(self),
+            ListKind::GoTo if self.settings.interface.quick_switcher => quick_switcher_items(self),
             ListKind::GoTo => go_to_items(self),
             ListKind::Activity => activity_items(self),
             ListKind::MoveToTab => move_items(self),
@@ -561,7 +631,12 @@ impl Workspace {
             ListKind::CursorShaders => shader_items(self),
             ListKind::Directory { .. } => Vec::new(),
         };
-        let input = cx.new(|cx| TextInput::new(kind.placeholder(), cx));
+        let placeholder = if kind == ListKind::GoTo && self.settings.interface.quick_switcher {
+            "Sessions, panes and reporting programs"
+        } else {
+            kind.placeholder()
+        };
+        let input = cx.new(|cx| TextInput::new(placeholder, cx));
         let subscription =
             cx.subscribe_in(&input, window, |ws, _, event: &InputEvent, window, cx| {
                 ws.on_list_input(event, window, cx);

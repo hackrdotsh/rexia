@@ -473,6 +473,7 @@ impl Workspace {
         let padding_fill = self.settings.terminal.padding_fill;
         let smooth_scrolling = self.settings.terminal.smooth_scrolling;
         let smooth_resizing = self.settings.terminal.smooth_resizing;
+        let anchor = self.settings.terminal.anchor;
         let selection = self.settings.terminal.selection;
         let cursor_shader = self
             .settings
@@ -503,6 +504,7 @@ impl Workspace {
                     pane.padding_fill = padding_fill;
                     pane.smooth_scrolling = smooth_scrolling;
                     pane.smooth_resizing = smooth_resizing;
+                    pane.anchor = anchor;
                     pane.selection = selection;
                     pane.cursor_shader = cursor_shader;
                     pane

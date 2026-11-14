@@ -382,6 +382,7 @@ impl Workspace {
         let padding_fill = terminal.padding_fill;
         let smooth_scrolling = terminal.smooth_scrolling;
         let smooth_resizing = terminal.smooth_resizing;
+        let anchor = terminal.anchor;
         let selection = terminal.selection;
         let cursor_shader = terminal.cursor_shaders.then_some(terminal.cursor_shader);
         let colors = crate::ui::terminal::TextColors {
@@ -399,6 +400,7 @@ impl Workspace {
                 pane.padding_fill = padding_fill;
                 pane.smooth_scrolling = smooth_scrolling;
                 pane.smooth_resizing = smooth_resizing;
+                pane.anchor = anchor;
                 pane.selection = selection;
                 pane.cursor_shader = cursor_shader;
                 cx.notify();
@@ -572,7 +574,7 @@ impl Workspace {
     }
 
     #[allow(clippy::too_many_arguments)]
-    fn choice_row<T: Copy + PartialEq + 'static>(
+    pub(super) fn choice_row<T: Copy + PartialEq + 'static>(
         &self,
         id: &'static str,
         title: &str,

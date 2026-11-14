@@ -6,7 +6,7 @@ use super::{
     Workspace,
     preferences::{SettingsPage, button, row},
 };
-use crate::{rex::endpoint::Endpoint, ui::theme::Theme};
+use crate::{rex::endpoint::Endpoint, settings::TerminalAnchor, ui::theme::Theme};
 use gpui::{
     AnyElement, ClipboardItem, Context, IntoElement, ParentElement, Styled, div, prelude::*, px,
 };
@@ -109,6 +109,29 @@ impl Workspace {
             ));
         }
         rows.push(local.into_any_element());
+        rows.push(heading("Experimental"));
+        rows.push(self.choice_row(
+            "terminal-anchor",
+            "Terminal anchoring",
+            "Pin terminal text to the top or the bottom of each pane; the part of a line left over goes to the other side.",
+            &[
+                (TerminalAnchor::Top, "Top"),
+                (TerminalAnchor::Bottom, "Bottom"),
+            ],
+            self.settings.terminal.anchor,
+            |s, v| s.terminal.anchor = v,
+            theme,
+            cx,
+        ));
+        rows.push(self.toggle_row(
+            "quick-switcher",
+            "New quick switcher",
+            "Go to Anything lists every program reporting a status, then every session and pane.",
+            |s| s.interface.quick_switcher,
+            |s, v| s.interface.quick_switcher = v,
+            theme,
+            cx,
+        ));
         rows.push(heading("Web Client Origins"));
         rows.push(
             row(

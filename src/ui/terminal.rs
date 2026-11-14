@@ -190,6 +190,22 @@ fn image_area(
     )
 }
 
+/// How far the text moves down so it sits at the pane's bottom: the space left under
+/// `rows` whole lines, with Bottom anchoring.
+fn anchor_shift(
+    anchor: crate::settings::TerminalAnchor,
+    bounds: Bounds<Pixels>,
+    padding: Point<Pixels>,
+    cell: CellSize,
+    rows: Option<u16>,
+) -> Pixels {
+    let (crate::settings::TerminalAnchor::Bottom, Some(rows)) = (anchor, rows) else {
+        return px(0.);
+    };
+    let inner = bounds.size.height - padding.y * 2.;
+    (inner - cell.height * f32::from(rows)).max(px(0.))
+}
+
 /// How long the copy shine takes to cross the selection.
 const SHINE: std::time::Duration = std::time::Duration::from_millis(450);
 
@@ -309,6 +325,8 @@ pub struct TerminalPane {
     pub selection: crate::settings::SelectionLook,
     /// When the copy shine started, and how many copies have shone.
     shine: Option<std::time::Instant>,
+    /// Where the text sits when the pane is taller than its whole lines.
+    pub anchor: crate::settings::TerminalAnchor,
     /// Reflow text locally as the pane changes size, and the size last reflowed to.
     pub smooth_resizing: bool,
     reflowed: Option<(u16, u16)>,
@@ -371,6 +389,7 @@ impl TerminalPane {
             size_hold: None,
             smooth_scrolling: true,
             smooth_resizing: true,
+            anchor: Default::default(),
             reflowed: None,
             scroll_carry: 0.,
             shines: 0,
@@ -528,6 +547,11 @@ impl TerminalPane {
                 None
             }
         }
+    }
+
+    /// Where the grid's top-left corner is drawn, for tests.
+    pub fn grid_origin(&self) -> Point<Pixels> {
+        self.origin
     }
 
     /// The size last asked of the server, for tests.
@@ -1263,6 +1287,7 @@ impl Render for TerminalPane {
         let (bold, italic, colors) = (self.font.bold, self.font.italic, self.colors);
         let padding_fill = self.padding_fill;
         let scroll_shift = self.scroll_offset();
+        let anchor = self.anchor;
         let cursor_color = color(theme.terminal.cursor);
         let cursor_text = color(theme.terminal.cursor_text);
         // Only a focused pane's cursor blinks, and only if its program asks.
@@ -1291,7 +1316,10 @@ impl Render for TerminalPane {
                 let entity = entity.clone();
                 move |bounds, _window, cx| {
                     entity.update(cx, |pane, _| {
-                        pane.origin = bounds.origin + padding;
+                        let rows = pane.frame().map(|f| f.rows);
+                        pane.origin = bounds.origin
+                            + padding
+                            + point(px(0.), anchor_shift(anchor, bounds, padding, cell, rows));
                         pane.fit(bounds, cell);
                     });
                 }
@@ -1304,7 +1332,8 @@ impl Render for TerminalPane {
                 );
                 window.paint_quad(fill(bounds, background));
                 let Some(frame) = frame else { return };
-                let origin = bounds.origin + padding + point(px(0.), scroll_shift);
+                let shift = anchor_shift(anchor, bounds, padding, cell, Some(frame.rows));
+                let origin = bounds.origin + padding + point(px(0.), scroll_shift + shift);
                 for (area, rgb) in padding_fills(&frame, padding_fill, bounds, origin, cell) {
                     window.paint_quad(fill(area, color(rgb)));
                 }

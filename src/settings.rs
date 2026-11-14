@@ -195,6 +195,16 @@ impl AnimationStyle {
     }
 }
 
+/// Where terminal text sits in a pane taller than its whole lines: the leftover part of
+/// a line goes below the text (Top) or above it (Bottom).
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum TerminalAnchor {
+    #[default]
+    Top,
+    Bottom,
+}
+
 /// Whether links that launch other apps, such as ssh://, open on ctrl+click.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
@@ -318,6 +328,8 @@ pub struct TerminalSettings {
     pub smooth_scrolling: bool,
     /// Reflow text on the frame a pane changes size, without waiting for the server.
     pub smooth_resizing: bool,
+    /// Experimental: pin terminal text to the top or the bottom of each pane.
+    pub anchor: TerminalAnchor,
     /// List recently chosen paths first in the path browser.
     pub recent_paths: bool,
     pub app_links: AppLinks,
@@ -380,6 +392,7 @@ impl Default for TerminalSettings {
             key_hints: true,
             smooth_scrolling: true,
             smooth_resizing: true,
+            anchor: TerminalAnchor::Top,
             recent_paths: true,
             app_links: AppLinks::Ask,
             trusted_links: Vec::new(),
@@ -414,6 +427,8 @@ pub struct InterfaceSettings {
     /// Horizontal tabs share the tab bar equally.
     pub tabs_fill: bool,
     pub animation: AnimationStyle,
+    /// Experimental: Go to Anything lists every session, pane and reporting program.
+    pub quick_switcher: bool,
     pub sidebar_text_size: SidebarTextSize,
     pub sidebar_gesture: SidebarGesture,
     /// Spread or pinch over a pane to zoom or restore it, and swipe for the sidebar.
@@ -448,6 +463,7 @@ impl Default for InterfaceSettings {
             vertical_side: ToolbarLayout::Left,
             tabs_fill: false,
             animation: AnimationStyle::Natural,
+            quick_switcher: false,
             sidebar_text_size: SidebarTextSize::Medium,
             sidebar_gesture: SidebarGesture::Swipe,
             trackpad_gestures: true,
