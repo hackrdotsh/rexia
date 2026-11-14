@@ -6,7 +6,7 @@ preview.19 server.
 
 ## Actions
 
-Rex for Mac lists 116 actions. rexia implements 91 of them under the same names, so
+Rex for Mac lists 116 actions. rexia implements 94 of them under the same names, so
 init.lua bindings, `rex do` and `client.perform` reach rexia the same way. It also adds
 three of its own: `client.sidebar.activity.toggle`, `.by_session` and `.by_priority`.
 Keys follow Linux conventions: where Mac uses `cmd`, rexia uses `ctrl+shift` (Ghostty's
@@ -19,7 +19,7 @@ Implemented by area:
   select all, send key, go to anything, go to directory, insert path, view activity.
 - **Sessions (11):** new, close, rename, select, next and previous, switch, expand and
   collapse, refresh.
-- **Client (41):** command palette, find, the sidebar's tab filter, tabs (new, close, close others, go to, move,
+- **Client (44):** command palette, find, the sidebar's tab filter, toolbar layout and reveals, tabs (new, close, close others, go to, move,
   rename, next and previous), modes, prompt jumps, page scrolling, font size, sidebar and
   activity view, hosts (add, remove, switch), settings, diagnostics, config path and
   reload, version and debug copy, notices, full screen.
@@ -30,7 +30,6 @@ Not implemented yet:
 | --- | --- |
 | `client.window.new`, `client.window.close`, `client.tab.move_to_new_window` | rexia has one window. |
 | `client.key.forward` as a palette entry | Works as a binding (keys reach Lua scripts), but isn't listed. |
-| `client.toolbar.reveal`, `client.pane_header.reveal`, `client.tab_style.toggle` | Toolbar layouts and vertical tabs aren't built. |
 | `client.shortcuts.edit` | Rebind keys in init.lua instead. |
 | `client.server.restart` | rexia never starts or stops a server. |
 | `client.visibility.toggle` | Needs a global shortcut; compositors bind this themselves. |
@@ -47,7 +46,8 @@ Not implemented yet:
 | Notifications › In-App Notifications | Notification position: click a spot in a picture of the window to float notices at the top or bottom, left, center or right. |
 | Interface › Panes, Active Pane, Splits & Focus | Pane style, pane headers (always, hover, hidden), active pane highlight, fade inactive panes, focus follows mouse. Highlight color, opacity and animation aren't built. |
 | Interface › Appearance, Themes | Replaced by Noctalia: palette, corner radius, borders, shadows and the interface font follow its live config. |
-| Interface › Toolbar, Tab behavior, Tab icons, Window | Sidebar toggle only. Toolbar layouts, vertical tabs and tab icon options aren't built. |
+| Interface › Toolbar, Tab behavior | Toolbar layout (above, or down the sidebar on the left or right side), toolbar behavior (always, on hover, or hidden until Reveal Toolbar; a toolbar that isn't always shown floats over the panes so they don't resize), and tabs filling the bar. With vertical tabs, the selected session's tabs are listed in the sidebar. |
+| Interface › Tab icons, Window | Not built: tab icon colors and themes, sidebar text size, sidebar gestures. |
 | Interface › Padding | Padding X and Y. Filling padding with program colors isn't built. |
 | Terminal › Typography | Font family, size and line height. Defaults come from Ghostty's config, then fontconfig. |
 | Terminal › Cursor | Cursor style (block, bar, underline) for programs that don't choose one, force style, and blink speed (off, slow, normal, fast, or a custom interval). As in preview.30, a cursor blinks only when its program asks. When a pane attaches, a program's explicit steady block looks like the default, so it shows your style until the program sets the cursor again. Cursor shaders aren't built. |
