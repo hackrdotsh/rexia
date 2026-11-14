@@ -44,7 +44,7 @@ Not implemented yet:
 | --- | --- |
 | Notifications › Program Activity | All of it: activity in tabs, idle processes, each process, desktop notifications, launcher badge (Unity LauncherEntry), sounds with volume, and the per-state tabs/notify/sound switches. |
 | Notifications › System Notifications | Terminal notifications (OSC 9 and 777). Tailscale notices aren't applicable. |
-| Notifications › In-App Notifications | Not built; errors show as a dismissable notice. |
+| Notifications › In-App Notifications | Notification position: click a spot in a picture of the window to float notices at the top or bottom, left, center or right. |
 | Interface › Panes, Active Pane, Splits & Focus | Pane style, pane headers (always, hover, hidden), active pane highlight, fade inactive panes, focus follows mouse. Highlight color, opacity and animation aren't built. |
 | Interface › Appearance, Themes | Replaced by Noctalia: palette, corner radius, borders, shadows and the interface font follow its live config. |
 | Interface › Toolbar, Tab behavior, Tab icons, Window | Sidebar toggle only. Toolbar layouts, vertical tabs and tab icon options aren't built. |
