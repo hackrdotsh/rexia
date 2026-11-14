@@ -3,5 +3,6 @@ pub mod activity;
 pub mod client;
 pub mod data;
 pub mod endpoint;
+pub mod host;
 pub mod stream;
 pub mod view;

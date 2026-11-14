@@ -1,5 +1,3 @@
-mod rex;
-
 use gpui::{
     App, Bounds, Context, Window, WindowBounds, WindowOptions, div, prelude::*, px, rgb, size,
 };
