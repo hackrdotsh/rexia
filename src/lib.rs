@@ -5,4 +5,5 @@ pub mod noctalia;
 pub mod notify;
 pub mod rex;
 pub mod settings;
+pub mod sound;
 pub mod ui;
