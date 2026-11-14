@@ -6,7 +6,7 @@ preview.19 server.
 
 ## Actions
 
-Rex for Mac lists 116 actions. rexia implements 103 of them under the same names, so
+Rex for Mac lists 116 actions. rexia implements 104 of them under the same names, so
 init.lua bindings, `rex do` and `client.perform` reach rexia the same way. It also adds
 three of its own: `client.sidebar.activity.toggle`, `.by_session` and `.by_priority`.
 Preview.30's Enable Cursor Shaders and Change Cursor Shader aren't in the published action
@@ -35,7 +35,7 @@ Not implemented yet:
 | --- | --- |
 | `client.theme.change`, `client.theme.import`, `client.appearance.switch_mode` | Not planned: colors follow Noctalia. |
 | `client.update.*` (7) | Not applicable: rexia ships through Nix. |
-| `client.pair_device`, `client.permissions`, `client.quick_look` | macOS-specific or tied to Rex.app's installer. |
+| `client.pair_device`, `client.permissions` | macOS-specific or tied to Rex.app's installer. |
 
 ## Settings
 
@@ -75,6 +75,13 @@ Not implemented yet:
 ## Behavior
 
 Working:
+
+- Quick Look (`client.quick_look`, ctrl+shift+y) previews what's under the pointer in the
+  focused pane: a program's link first, else a path or URL in the text (a `:line:col`
+  suffix is dropped, and relative paths start from the pane's directory). Files go to
+  GNOME's previewer (Sushi, `org.gnome.NautilusPreviewer` over D-Bus); without it, and for
+  web links, the desktop's opener (`xdg-open`) shows them. Files on a remote host aren't
+  previewed.
 
 - Open Onboarding Session… (`client.onboarding`) opens a session with the server's
   onboarding block (`com.superlogical.onboarding`), or shows the one already open. The
