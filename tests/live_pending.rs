@@ -149,8 +149,7 @@ done
     let ran = std::fs::read_to_string(&log).unwrap();
     let start = ran
         .lines()
-        .filter(|l| l.contains("server start"))
-        .last()
+        .rfind(|l| l.contains("server start"))
         .unwrap()
         .to_owned();
     println!("rex ran: {start}");
