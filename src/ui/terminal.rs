@@ -62,6 +62,8 @@ pub struct TerminalPane {
     hold_until: std::time::Instant,
     /// The cursor shape last drawn, for tests and diagnostics.
     drawn_cursor: Option<CursorShape>,
+    /// Text an input method is composing, shown at the cursor until it's committed.
+    preedit: Option<String>,
     _blink_timer: gpui::Task<()>,
 }
 
@@ -93,6 +95,7 @@ impl TerminalPane {
             blinking: false,
             hold_until: std::time::Instant::now(),
             drawn_cursor: None,
+            preedit: None,
             _blink_timer: cx.spawn(async move |this, cx| {
                 loop {
                     let Ok(interval) = this.read_with(cx, |pane, _| {
@@ -120,6 +123,40 @@ impl TerminalPane {
             self.blink_on = next;
             cx.notify();
         }
+    }
+
+    /// Text an input method is composing here.
+    pub fn preedit(&self) -> Option<&str> {
+        self.preedit.as_deref()
+    }
+
+    /// Type text an input method committed, or a character no key event names.
+    fn commit_text(&mut self, text: &str, cx: &mut Context<Self>) {
+        self.preedit = None;
+        if !text.is_empty() {
+            self.back_to_live();
+            self.blink_on = true;
+            self.input(
+                "client.key",
+                json!({"session_id": self.session_id, "block_id": self.block_id,
+                    "key": {"key": "unidentified", "mods": "", "text": text,
+                        "unshifted_codepoint": 0, "action": "press"}}),
+            );
+        }
+        cx.notify();
+    }
+
+    /// The cursor cell in window coordinates, where input methods put their candidates.
+    fn cursor_bounds(&self) -> Option<Bounds<Pixels>> {
+        let cell = self.cell?;
+        let cursor = self.frame()?.cursor?;
+        Some(Bounds::new(
+            point(
+                self.origin.x + cell.width * cursor.x as f32,
+                self.origin.y + cell.height * cursor.y as f32,
+            ),
+            size(cell.width, cell.height),
+        ))
     }
 
     /// The cursor as last drawn: its shape, whether it blinks, and whether it's showing.
@@ -625,6 +662,8 @@ impl Render for TerminalPane {
             }
         });
         self.drawn_cursor = cursor_shape;
+        let preedit = self.preedit.clone().filter(|p| !p.is_empty() && focused);
+        let focus_handle = self.focus.clone();
 
         let grid = canvas(
             {
@@ -637,6 +676,11 @@ impl Render for TerminalPane {
                 }
             },
             move |bounds, (), window, cx| {
+                window.handle_input(
+                    &focus_handle,
+                    gpui::ElementInputHandler::new(bounds, entity.clone()),
+                    cx,
+                );
                 window.paint_quad(fill(bounds, background));
                 let Some(frame) = frame else { return };
                 let origin = bounds.origin + padding;
@@ -764,6 +808,46 @@ impl Render for TerminalPane {
                             }
                         }
                     }
+                    // What an input method is composing covers the cells from the cursor on,
+                    // a wide character taking two, as the terminal will lay it out.
+                    if let (Some(text), Some(cursor)) = (preedit.clone(), frame.cursor) {
+                        use unicode_width::UnicodeWidthChar;
+                        let fg = super::theme::color(frame.fg);
+                        let mut col = cursor.x;
+                        for c in text.chars() {
+                            let cells = c.width().unwrap_or(0).max(1) as u16;
+                            let area = cell_bounds(col, cursor.y as usize, cells);
+                            window.paint_quad(fill(area, background));
+                            let glyph = c.to_string();
+                            let run = TextRun {
+                                len: glyph.len(),
+                                font: terminal_font.clone(),
+                                color: fg,
+                                background_color: None,
+                                underline: Some(UnderlineStyle {
+                                    thickness: px(1.),
+                                    color: Some(fg),
+                                    wavy: false,
+                                }),
+                                strikethrough: None,
+                            };
+                            let line = window.text_system().shape_line(
+                                glyph.into(),
+                                font_size,
+                                &[run],
+                                Some(area.size.width),
+                            );
+                            let _ = line.paint(
+                                area.origin,
+                                cell.height,
+                                TextAlign::Left,
+                                None,
+                                window,
+                                cx,
+                            );
+                            col += cells;
+                        }
+                    }
                 });
             },
         )
@@ -814,6 +898,99 @@ impl Render for TerminalPane {
                     .font_family(theme.ui_font.clone())
                     .child(text)
             }))
+    }
+}
+
+impl gpui::EntityInputHandler for TerminalPane {
+    fn text_for_range(
+        &mut self,
+        range: std::ops::Range<usize>,
+        adjusted: &mut Option<std::ops::Range<usize>>,
+        _: &mut Window,
+        _: &mut Context<Self>,
+    ) -> Option<String> {
+        let text: Vec<u16> = self
+            .preedit
+            .as_deref()
+            .unwrap_or("")
+            .encode_utf16()
+            .collect();
+        let range = range.start.min(text.len())..range.end.min(text.len());
+        *adjusted = Some(range.clone());
+        Some(String::from_utf16_lossy(&text[range]))
+    }
+
+    fn selected_text_range(
+        &mut self,
+        _: bool,
+        _: &mut Window,
+        _: &mut Context<Self>,
+    ) -> Option<gpui::UTF16Selection> {
+        let end = self
+            .preedit
+            .as_deref()
+            .map_or(0, |p| p.encode_utf16().count());
+        Some(gpui::UTF16Selection {
+            range: end..end,
+            reversed: false,
+        })
+    }
+
+    fn marked_text_range(
+        &self,
+        _: &mut Window,
+        _: &mut Context<Self>,
+    ) -> Option<std::ops::Range<usize>> {
+        self.preedit
+            .as_deref()
+            .filter(|p| !p.is_empty())
+            .map(|p| 0..p.encode_utf16().count())
+    }
+
+    fn unmark_text(&mut self, _: &mut Window, cx: &mut Context<Self>) {
+        self.preedit = None;
+        cx.notify();
+    }
+
+    fn replace_text_in_range(
+        &mut self,
+        _: Option<std::ops::Range<usize>>,
+        text: &str,
+        _: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        self.commit_text(text, cx);
+    }
+
+    fn replace_and_mark_text_in_range(
+        &mut self,
+        _: Option<std::ops::Range<usize>>,
+        text: &str,
+        _: Option<std::ops::Range<usize>>,
+        _: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        self.preedit = (!text.is_empty()).then(|| text.to_owned());
+        cx.notify();
+    }
+
+    fn bounds_for_range(
+        &mut self,
+        _: std::ops::Range<usize>,
+        _: Bounds<Pixels>,
+        _: &mut Window,
+        _: &mut Context<Self>,
+    ) -> Option<Bounds<Pixels>> {
+        self.cursor_bounds()
+    }
+
+    fn character_index_for_point(
+        &mut self,
+        _: Point<Pixels>,
+        _: &mut Window,
+        _: &mut Context<Self>,
+    ) -> Option<usize> {
+        None
     }
 }
 

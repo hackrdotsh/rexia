@@ -275,6 +275,37 @@ impl Workspace {
         self.panes.get(block)?.read(cx).cursor_state()
     }
 
+    /// Act as an input method on the focused pane: compose `text`, or commit it with
+    /// `commit`. Returns where the method would put its candidate window.
+    pub fn input_method(
+        &mut self,
+        text: &str,
+        commit: bool,
+        window: &mut gpui::Window,
+        cx: &mut Context<Self>,
+    ) -> Option<gpui::Bounds<gpui::Pixels>> {
+        use gpui::EntityInputHandler;
+        let pane = self
+            .focused
+            .as_ref()
+            .and_then(|b| self.panes.get(b))?
+            .clone();
+        pane.update(cx, |pane, cx| {
+            if commit {
+                pane.replace_text_in_range(None, text, window, cx);
+            } else {
+                pane.replace_and_mark_text_in_range(None, text, None, window, cx);
+            }
+            pane.bounds_for_range(0..0, Default::default(), window, cx)
+        })
+    }
+
+    /// What an input method is composing in the focused pane.
+    pub fn focused_preedit(&self, cx: &gpui::App) -> Option<String> {
+        let block = self.focused.as_ref()?;
+        self.panes.get(block)?.read(cx).preedit().map(str::to_owned)
+    }
+
     /// Step the focused pane's cursor blink, as its timer would.
     pub fn blink_focused(&mut self, cx: &mut Context<Self>) {
         if let Some(pane) = self.focused.as_ref().and_then(|b| self.panes.get(b)) {
