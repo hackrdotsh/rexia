@@ -291,17 +291,21 @@ impl Workspace {
         if order.is_empty() {
             return;
         }
-        let active = self.hosts[self.active].config.id.clone();
+        // While hosts come and go, `active` can point past the end for a moment; the
+        // caller puts it right then.
+        let active = self.hosts.get(self.active).map(|h| h.config.id.clone());
         self.hosts.sort_by_key(|h| {
             order
                 .iter()
                 .position(|id| *id == h.config.id)
                 .unwrap_or(usize::MAX)
         });
-        self.active = self
-            .hosts
-            .iter()
-            .position(|h| h.config.id == active)
-            .unwrap_or(0);
+        if let Some(active) = active {
+            self.active = self
+                .hosts
+                .iter()
+                .position(|h| h.config.id == active)
+                .unwrap_or(0);
+        }
     }
 }
