@@ -37,20 +37,49 @@ Not implemented yet:
 | `client.update.*` (7) | Not applicable: rexia ships through Nix. |
 | `client.pair_device`, `client.permissions` | macOS-specific or tied to Rex.app's installer. |
 
+## Line-by-line audit
+
+Every setting in the Mac settings reference, every Mac action, and every Mac changelog post
+from preview.4 to preview.30 was checked against rexia's code. Actions: all 116 accounted
+for (104 built, 12 excluded above). These settings and changelog features were missing
+when checked, and are built in this order; each moves to its section once it's done:
+
+| Gap | Source |
+| --- | --- |
+| Terminal context menu: Copy, Paste, Copy Link, Show in Files, Quick Look, Split, Zoom, Clear, Reset, Close Pane | preview.5, 8, 10, 14, 19, 28 |
+| Paste safety: a paste that could run commands asks first; copied files paste as shell-escaped paths; an image-only clipboard pastes as a read-only temp file | preview.7, 8 |
+| Drop files on a terminal: local paths typed, files for a remote host uploaded (`upload_begin`) with progress and Cancel | preview.14, 27 |
+| Autobalance splits: even out a tab's panes when one opens or closes, keeping dividers you drag | Interface › Splits & Focus; preview.10, 26 |
+| Ask before closing a tab, pane or session whose program is working, blocked, unread or just finished | preview.25 |
+| Tooltips on buttons, with their shortcuts | preview.9, 23 |
+| Hover cards for tabs and pane headers: each pane's program, activity and directory; click a pane to go to it | preview.14, 16 |
+| Mute Tab: no notifications, sounds or badge count from it; a crossed-out speaker; kept across launches | preview.24 |
+| Dragging: tabs to reorder, a pane onto another tab, between tabs for a new tab, Ctrl-drag from anywhere in a pane | preview.14, 16, 29 |
+| Sidebar width: drag to resize, remembered | preview.12 |
+| Double-click a tab or a pane's title to rename it | preview.15, 27 |
+| Hold Ctrl to show each tab's shortcut | preview.16 |
+| Tailscale notifications: sign-in needed, device approval needed, failures | Notifications › System Notifications |
+| Terminal font style (an installed face such as Light) and weight | Terminal › Typography |
+| Quick Look every link on screen, stepping with the arrow keys; files on remote hosts downloaded first; Ctrl-click a remote file link saves a copy under ~/Downloads/Rex/HOST and opens it | preview.28, 29 |
+| Settings search, `rex://settings/...` links to a group or setting, reset buttons on changed settings, every simple setting as a palette row | preview.20, 25, 28 |
+| Typing a host's address in the palette offers to add it | preview.29 |
+| Hide the pointer while typing | preview.8 |
+| Stop retrying an ssh host after three refused logins or host keys, saying what to check | preview.29 |
+
 ## Settings
 
 | Mac section | rexia |
 | --- | --- |
 | Notifications › Program Activity | All of it: activity in tabs, idle processes, each process, desktop notifications, launcher badge (Unity LauncherEntry), sounds with volume, and the per-state tabs/notify/sound switches. |
-| Notifications › System Notifications | Terminal notifications (OSC 9 and 777). Tailscale notices aren't applicable. |
+| Notifications › System Notifications | Terminal notifications (OSC 9 and 777). Tailscale notices aren't built yet (see the audit). |
 | Notifications › In-App Notifications | Notification position: click a spot in a picture of the window to float notices at the top or bottom, left, center or right. |
-| Interface › Panes, Active Pane, Splits & Focus | Pane style, pane headers (always, hover, hidden), active pane highlight with its color (accent, terminal text, or one of the 16 terminal colors), opacity and animation (fade in, move from the previous pane, or instant), fade inactive panes, fade panes for inactive windows, focus follows mouse. Autobalancing splits is the server's. |
+| Interface › Panes, Active Pane, Splits & Focus | Pane style, pane headers (always, hover, hidden), active pane highlight with its color (accent, terminal text, or one of the 16 terminal colors), opacity and animation (fade in, move from the previous pane, or instant), fade inactive panes, fade panes for inactive windows, focus follows mouse. Autobalancing splits isn't built yet (see the audit). |
 | Interface › Appearance, Themes | Replaced by Noctalia: palette, corner radius, borders, shadows and the interface font follow its live config. |
 | Interface › Toolbar, Tab behavior | Toolbar layout (above, or down the sidebar on the left or right side), toolbar behavior (always, on hover, or hidden until Reveal Toolbar; a toolbar that isn't always shown floats over the panes so they don't resize), and tabs filling the bar. With vertical tabs, the selected session's tabs are listed in the sidebar. |
 | Interface › Tab icons, Window | Tab icons: show zero to five pane icons per tab (vertical tabs stop at three), focused pane first; use color always, for active panes, for active tabs, or never; shell icon theme (default artwork, terminal theme colors, or accent). Colored icons sit on a tile in their program's color from the terminal palette. Window: sidebar text size (small, medium or large; Linux has no system sidebar size to follow), and a gesture to toggle the sidebar (a two-finger touchpad swipe sideways, a swipe with Alt held, or off). Showing or hiding the sidebar always keeps the window's width, as tiling compositors expect. |
 | Interface › Gestures | Use trackpad gestures: spread two fingers over a pane to zoom it, pinch to restore it, and swipe for the sidebar. Pinches need a compositor with pointer gestures (Wayland `zwp_pointer_gestures_v1`). |
 | Interface › Padding | Padding X and Y, fill with program colors (off; automatic, which fills while a full-screen program runs along edges of one color; always, which extends every edge cell), and include pane header. |
-| Terminal › Typography | Font family, size and line height. Defaults come from Ghostty's config, then fontconfig. |
+| Terminal › Typography | Font family, size and line height (font style and weight aren't built yet, see the audit). Defaults come from Ghostty's config, then fontconfig. |
 | Terminal › Cursor | Cursor style (block, bar, underline) for programs that don't choose one, force style, and blink speed (off, slow, normal, fast, or a custom interval). As in preview.30, a cursor blinks only when its program asks. When a pane attaches, a program's explicit steady block looks like the default, so it shows your style until the program sets the cursor again. Cursor shaders: a trail behind the focused cursor when it jumps two cells or more, in eight effects (Warp, Sweep, Comet, Blaze, Tapered, Rainbow, Gradient, Frozen), with a preview to click in. GPUI has no custom GPU shaders, so each effect is drawn as a shape with its own taper, gradient, glow and fade rather than as Rex's own shader code. |
 | Terminal › Advanced Font | Character spacing, ligatures, which of bold and italic draw in their style, and fallback fonts. Font smoothing and forced faux bold and italic are left to the system's font rasterizer. |
 | Terminal › Colors | Improve text contrast (text below a 3:1 contrast ratio against its background is lifted just enough) and force theme palette for text (program colors become the perceptually nearest theme color, then contrast is corrected). Display P3 doesn't apply on Linux. |
