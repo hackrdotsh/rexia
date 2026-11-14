@@ -6,7 +6,7 @@ preview.19 server.
 
 ## Actions
 
-Rex for Mac lists 116 actions. rexia implements 97 of them under the same names, so
+Rex for Mac lists 116 actions. rexia implements 101 of them under the same names, so
 init.lua bindings, `rex do` and `client.perform` reach rexia the same way. It also adds
 three of its own: `client.sidebar.activity.toggle`, `.by_session` and `.by_priority`.
 Keys follow Linux conventions: where Mac uses `cmd`, rexia uses `ctrl+shift` (Ghostty's
@@ -19,7 +19,7 @@ Implemented by area:
   select all, send key, go to anything, go to directory, insert path, view activity.
 - **Sessions (11):** new, close, rename, select, next and previous, switch, expand and
   collapse, refresh.
-- **Client (47):** windows (new, close, move a tab to its own), command palette, find, the sidebar's tab filter, toolbar layout and reveals, tabs (new, close, close others, go to, move,
+- **Client (51):** windows (new, close, move a tab to its own, toggle visibility), send key to server, change shortcut, restart server, command palette, find, the sidebar's tab filter, toolbar layout and reveals, tabs (new, close, close others, go to, move,
   rename, next and previous), modes, prompt jumps, page scrolling, font size, sidebar and
   activity view, hosts (add, remove, switch), settings, diagnostics, config path and
   reload, version and debug copy, notices, full screen.
@@ -28,10 +28,6 @@ Not implemented yet:
 
 | Action | Notes |
 | --- | --- |
-| `client.key.forward` as a palette entry | Works as a binding (keys reach Lua scripts), but isn't listed. |
-| `client.shortcuts.edit` | Rebind keys in init.lua instead. |
-| `client.server.restart` | rexia never starts or stops a server. |
-| `client.visibility.toggle` | Needs a global shortcut; compositors bind this themselves. |
 | `client.theme.change`, `client.theme.import`, `client.appearance.switch_mode` | Not planned: colors follow Noctalia. |
 | `client.update.*` (7) | Not applicable: rexia ships through Nix. |
 | `client.agents.setup`, `client.onboarding`, `client.pair_device`, `client.permissions`, `client.quick_look` | macOS-specific or tied to Rex.app's installer. |
@@ -82,6 +78,14 @@ Working:
   tab per session, so windows sharing a session each keep the tab they show. Preferences
   changed in one window reach the others. Only the first window sends desktop
   notifications, so they aren't doubled.
+- Change Shortcut gives one of rexia's actions a new key (or none). It's saved in rexia's
+  settings and sent as rexia's own default layer, so bindings in init.lua still win.
+- Restart Server asks first, stops this computer's server, and starts it again with
+  `rex server start`; sessions come back and rexia reconnects.
+- Toggle Visibility brings rexia to the front, or minimizes it when it's in front. Wayland
+  gives apps no global shortcuts, so bind it in the compositor, for example in niri:
+  `Mod+Grave { spawn "rex" "do" "-C" "rexia" "client.visibility.toggle"; }` (after setting
+  rexia's client label to `rexia` in Settings › Client & Hosts).
 - Several hosts in one sidebar, streaming only the host on screen, with reconnects.
 - Servers that only speak API revisions below 8 are refused, with a message to update the
   server.
