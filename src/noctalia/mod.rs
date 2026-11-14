@@ -92,17 +92,36 @@ fn expand(path: &str) -> PathBuf {
     }
 }
 
-/// Run `noctalia msg …`, giving up after two seconds (Noctalia may not be running).
-fn msg(args: &[&str]) -> Option<String> {
+/// The Wayland displays a Noctalia instance serves, from its sockets in the runtime directory
+/// (`noctalia-wayland-0.sock`). Its dmenu socket isn't an instance.
+pub fn instance_displays(runtime_dir: &Path) -> Vec<String> {
+    let Ok(entries) = std::fs::read_dir(runtime_dir) else {
+        return Vec::new();
+    };
+    let mut displays: Vec<String> = entries
+        .filter_map(|entry| entry.ok()?.file_name().into_string().ok())
+        .filter_map(|name| {
+            let display = name.strip_prefix("noctalia-")?.strip_suffix(".sock")?;
+            (!display.starts_with("dmenu-")).then(|| display.to_owned())
+        })
+        .collect();
+    displays.sort();
+    displays
+}
+
+fn run_msg(args: &[&str], display: Option<&str>) -> Option<String> {
     let program = std::env::var("REXIA_NOCTALIA").unwrap_or_else(|_| "noctalia".into());
-    let mut child = Command::new(program)
+    let mut command = Command::new(program);
+    command
         .arg("msg")
         .args(args)
         .stdin(Stdio::null())
         .stdout(Stdio::piped())
-        .stderr(Stdio::null())
-        .spawn()
-        .ok()?;
+        .stderr(Stdio::null());
+    if let Some(display) = display {
+        command.env("WAYLAND_DISPLAY", display);
+    }
+    let mut child = command.spawn().ok()?;
     let deadline = Instant::now() + Duration::from_secs(2);
     loop {
         match child.try_wait() {
@@ -119,6 +138,21 @@ fn msg(args: &[&str]) -> Option<String> {
             }
         }
     }
+}
+
+/// Run `noctalia msg …`, giving up after two seconds. Noctalia finds its instance by
+/// `WAYLAND_DISPLAY`; when rexia runs on another display (a nested compositor, or a
+/// launcher without the session's environment) the instance is found by its socket.
+fn msg(args: &[&str]) -> Option<String> {
+    if let Some(out) = run_msg(args, None) {
+        return Some(out);
+    }
+    let runtime = std::env::var_os("XDG_RUNTIME_DIR").map(PathBuf::from)?;
+    let current = std::env::var("WAYLAND_DISPLAY").ok();
+    instance_displays(&runtime)
+        .into_iter()
+        .filter(|display| Some(display) != current.as_ref())
+        .find_map(|display| run_msg(args, Some(&display)))
 }
 
 /// Outputs of the user templates Noctalia has enabled, rexia's own first.
@@ -263,6 +297,21 @@ mod tests {
         format!(
             "mode = \"dark\"\n[colors]\nprimary = \"{primary}\"\non_primary = \"#263500\"\nsurface = \"#000000\"\non_surface = \"#e2e2e2\"\n"
         )
+    }
+
+    #[test]
+    fn instances_are_found_by_their_sockets() {
+        let dir = tempfile::tempdir().unwrap();
+        for name in [
+            "noctalia-wayland-0.sock",
+            "noctalia-dmenu-wayland-0.sock",
+            "noctalia-wayland-0.lock",
+            "wayland-1",
+        ] {
+            std::fs::write(dir.path().join(name), "").unwrap();
+        }
+        assert_eq!(instance_displays(dir.path()), vec!["wayland-0".to_owned()]);
+        assert!(instance_displays(&dir.path().join("missing")).is_empty());
     }
 
     #[test]
