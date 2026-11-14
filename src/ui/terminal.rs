@@ -309,6 +309,11 @@ pub struct TerminalPane {
     pub selection: crate::settings::SelectionLook,
     /// When the copy shine started, and how many copies have shone.
     shine: Option<std::time::Instant>,
+    /// Move history by pixels on touchpads, and the part of a line scrolled so far.
+    pub smooth_scrolling: bool,
+    scroll_carry: f32,
+    /// While panes move, the terminal keeps its size until then.
+    size_hold: Option<std::time::Instant>,
     shines: usize,
     drawn_selection: Option<(Option<Hsla>, Hsla)>,
     /// The trail effect drawn when the cursor jumps; none while cursor shaders are off.
@@ -360,6 +365,9 @@ impl TerminalPane {
             padding_fill: PaddingFill::Off,
             selection: Default::default(),
             shine: None,
+            size_hold: None,
+            smooth_scrolling: true,
+            scroll_carry: 0.,
             shines: 0,
             drawn_selection: None,
             cursor_shader: None,
@@ -517,6 +525,12 @@ impl TerminalPane {
         }
     }
 
+    /// How far the text is drawn below (or above) its lines while smooth scrolling, in
+    /// pixels, for tests.
+    pub fn scroll_offset(&self) -> Pixels {
+        self.cell.map_or(px(0.), |c| c.height * self.scroll_carry)
+    }
+
     /// The trail the cursor is drawing, for tests: where it jumped from and to.
     pub fn cursor_trail(&self) -> Option<crate::ui::cursor_trail::Trail> {
         self.trail
@@ -664,8 +678,21 @@ impl TerminalPane {
         cell
     }
 
+    /// Keep the terminal's size until `until`, while panes move; it fits afterwards.
+    pub fn hold_size_until(&mut self, until: std::time::Instant) {
+        self.size_hold = Some(until);
+    }
+
     /// Ask the server for the grid that fits `bounds`.
     fn fit(&mut self, bounds: Bounds<Pixels>, cell: CellSize) {
+        if self
+            .size_hold
+            .is_some_and(|t| std::time::Instant::now() < t)
+            && self.requested.is_some()
+        {
+            return;
+        }
+        self.size_hold = None;
         let inner_w = bounds.size.width - self.padding.x * 2.;
         let inner_h = bounds.size.height - self.padding.y * 2.;
         let cols = (inner_w / cell.width).floor().max(2.) as u16;
@@ -959,6 +986,32 @@ impl TerminalPane {
 
     fn on_scroll(&mut self, event: &ScrollEvent, _: &mut Window, cx: &mut Context<Self>) {
         let Some(cell) = self.cell else { return };
+        let frame = self.frame();
+        let app_scrolls = frame
+            .as_ref()
+            .is_some_and(|f| (f.mouse_tracking || f.alternate_screen) && !event.modifiers.shift);
+        // Smooth scrolling: a touchpad moves history by pixels, whole lines through the
+        // terminal and the rest by drawing the text that much lower or higher.
+        if let (ScrollDelta::Pixels(delta), true, false) =
+            (event.delta, self.smooth_scrolling, app_scrolls)
+        {
+            let bar = frame.as_ref().map(|f| f.scrollbar).unwrap_or_default();
+            self.scroll_carry += delta.y / cell.height;
+            let whole = self.scroll_carry.trunc();
+            self.scroll_carry -= whole;
+            if whole != 0. {
+                self.scroll(Scroll::Lines(-(whole as isize)));
+            }
+            // History has an end at each side: the top of the scrollback, and live output.
+            let at_top = bar.offset == 0 && whole >= 0.;
+            let at_bottom = bar.offset + bar.visible >= bar.total && whole <= 0.;
+            if (self.scroll_carry > 0. && at_top) || (self.scroll_carry < 0. && at_bottom) {
+                self.scroll_carry = 0.;
+            }
+            cx.notify();
+            return;
+        }
+        self.scroll_carry = 0.;
         let lines = match event.delta {
             ScrollDelta::Lines(delta) => delta.y,
             ScrollDelta::Pixels(delta) => delta.y / cell.height,
@@ -967,10 +1020,6 @@ impl TerminalPane {
         if whole == 0 {
             return;
         }
-        let frame = self.frame();
-        let app_scrolls = frame
-            .as_ref()
-            .is_some_and(|f| (f.mouse_tracking || f.alternate_screen) && !event.modifiers.shift);
         if app_scrolls {
             let at = self.cell_at(event.position);
             // Up is negative for Rex, as for the terminal engine.
@@ -1185,6 +1234,7 @@ impl Render for TerminalPane {
         self.drawn_selection = Some((palette.selection_fg, palette.selection_bg));
         let (bold, italic, colors) = (self.font.bold, self.font.italic, self.colors);
         let padding_fill = self.padding_fill;
+        let scroll_shift = self.scroll_offset();
         let cursor_color = color(theme.terminal.cursor);
         let cursor_text = color(theme.terminal.cursor_text);
         // Only a focused pane's cursor blinks, and only if its program asks.
@@ -1226,7 +1276,7 @@ impl Render for TerminalPane {
                 );
                 window.paint_quad(fill(bounds, background));
                 let Some(frame) = frame else { return };
-                let origin = bounds.origin + padding;
+                let origin = bounds.origin + padding + point(px(0.), scroll_shift);
                 for (area, rgb) in padding_fills(&frame, padding_fill, bounds, origin, cell) {
                     window.paint_quad(fill(area, color(rgb)));
                 }

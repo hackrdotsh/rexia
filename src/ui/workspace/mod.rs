@@ -9,6 +9,7 @@ mod filter;
 pub mod gestures;
 mod highlight;
 pub mod links;
+pub mod motion;
 mod overlay;
 mod preferences;
 pub mod remote;
@@ -139,6 +140,7 @@ pub struct Workspace {
     reveal: toolbar::Reveal,
     highlight: highlight::Track,
     swipe: gestures::SwipeTracker,
+    motion: motion::Motion,
     agents: agents::AgentsState,
     shader_preview: cursor_shaders::ShaderPreview,
     /// The chosen SSH agent's status in words, and the socket it describes.
@@ -309,6 +311,7 @@ impl Workspace {
             reveal: Default::default(),
             highlight: Default::default(),
             swipe: Default::default(),
+            motion: Default::default(),
             agents: Default::default(),
             shader_preview: Default::default(),
             ssh_agent_status: None,
@@ -464,6 +467,7 @@ impl Workspace {
             .then_some(self.settings.terminal.cursor_style);
         let blink = self.settings.terminal.blink_interval();
         let padding_fill = self.settings.terminal.padding_fill;
+        let smooth_scrolling = self.settings.terminal.smooth_scrolling;
         let selection = self.settings.terminal.selection;
         let cursor_shader = self
             .settings
@@ -492,6 +496,7 @@ impl Workspace {
                     pane.blink = blink;
                     pane.colors = colors;
                     pane.padding_fill = padding_fill;
+                    pane.smooth_scrolling = smooth_scrolling;
                     pane.selection = selection;
                     pane.cursor_shader = cursor_shader;
                     pane
@@ -1183,17 +1188,26 @@ impl Workspace {
         let moves = self.highlight.moves;
         let window_fade = self.window_fade();
         let mut area = div().flex_1().relative().overflow_hidden().child(tracker);
+        // A tab that's just been switched to shows its panes in place.
+        let first = self.motion.window.as_deref() != Some(window.id());
+        self.motion.window = Some(window.id().to_owned());
+        let shown: Vec<String> = window.panes().into_iter().map(|p| p.block_id).collect();
+        self.keep_pane_motion(&shown);
+        let style = self.settings.interface.animation;
         for pane in window.panes() {
             let Some(terminal) = self.panes.get(&pane.block_id).cloned() else {
                 continue;
             };
             let mut rect = pane.rect;
+            let mut dragging = false;
             if let (Some(layer), Some((dragged, origin, bounds))) = (&pane.floating, &dragged_layer)
                 && layer == dragged
             {
                 rect.x += bounds.x - origin.x;
                 rect.y += bounds.y - origin.y;
+                dragging = true;
             }
+            let place = self.place_pane(&pane.block_id, rect, dragging, first, cx);
             let block = window.block(&pane.block_id).cloned().unwrap_or_default();
             let state = model.blocks.get(&pane.block_id);
             let is_focused = focused.as_deref() == Some(pane.block_id.as_str());
@@ -1260,7 +1274,13 @@ impl Workspace {
             let card = if highlighted && bordered && animation == HighlightAnimation::Fade {
                 card.with_animation(
                     SharedString::from(format!("highlight-{}-{moves}", pane.block_id)),
-                    gpui::Animation::new(highlight::HIGHLIGHT_MOTION),
+                    gpui::Animation::new(
+                        self.settings
+                            .interface
+                            .animation
+                            .duration()
+                            .unwrap_or(highlight::HIGHLIGHT_MOTION),
+                    ),
                     move |card, t| card.border_color(tint.opacity(t)),
                 )
                 .into_any_element()
@@ -1280,16 +1300,41 @@ impl Workspace {
                     cx.listener(move |ws, event, _, cx| ws.on_pane_pinch(&pinch_block, event, cx)),
                 )
                 .child(card);
-            area = area.child(
-                div()
-                    .absolute()
-                    .left(relative(rect.x as f32))
-                    .top(relative(rect.y as f32))
-                    .w(relative(rect.w as f32))
-                    .h(relative(rect.h as f32))
-                    .p(px(gap / 2.))
-                    .child(card),
-            );
+            let positioned = div()
+                .absolute()
+                .left(relative(rect.x as f32))
+                .top(relative(rect.y as f32))
+                .w(relative(rect.w as f32))
+                .h(relative(rect.h as f32))
+                .p(px(gap / 2.))
+                .child(card);
+            let duration = style.duration().unwrap_or_default();
+            let curve = motion::easing(style);
+            // A pane glides from its old place, or a new one fades in.
+            let positioned = match place {
+                motion::PanePlace::Still => positioned.into_any_element(),
+                motion::PanePlace::Moving { from, moves } => positioned
+                    .with_animation(
+                        SharedString::from(format!("move-{}-{moves}", pane.block_id)),
+                        gpui::Animation::new(duration).with_easing(curve),
+                        move |el, t| {
+                            let r = motion::lerp(from, rect, t);
+                            el.left(relative(r.x as f32))
+                                .top(relative(r.y as f32))
+                                .w(relative(r.w as f32))
+                                .h(relative(r.h as f32))
+                        },
+                    )
+                    .into_any_element(),
+                motion::PanePlace::Opening { moves } => positioned
+                    .with_animation(
+                        SharedString::from(format!("open-{}-{moves}", pane.block_id)),
+                        gpui::Animation::new(duration).with_easing(curve),
+                        |el, t| el.opacity(t),
+                    )
+                    .into_any_element(),
+            };
+            area = area.child(positioned);
         }
         for divider in window.dividers() {
             area = area.child(self.divider(&session, divider, theme, cx));
@@ -1730,42 +1775,68 @@ impl Render for Workspace {
         } else {
             (top_bar, None)
         };
-        let sidebar = if self.settings.interface.sidebar {
-            let content = if self.settings.interface.activity_view {
-                self.render_activity_sidebar(&theme, cx)
-            } else {
-                self.render_sidebar(&theme, cx)
-            };
-            let side_bar = if layout.vertical() && shown {
-                Some(self.render_side_toolbar(session_label, &theme, cx))
+        let slide = self.sidebar_slide(self.settings.interface.sidebar, cx);
+        // A hiding sidebar is still drawn while it slides away.
+        let sidebar =
+            if self.settings.interface.sidebar || slide.is_some_and(|(showing, _)| !showing) {
+                let content = if self.settings.interface.activity_view {
+                    self.render_activity_sidebar(&theme, cx)
+                } else {
+                    self.render_sidebar(&theme, cx)
+                };
+                let side_bar = if layout.vertical() && shown {
+                    Some(self.render_side_toolbar(session_label, &theme, cx))
+                } else {
+                    None
+                };
+                let column = div()
+                    .relative()
+                    .flex()
+                    .flex_col()
+                    .flex_none()
+                    .w(px(260.))
+                    .h_full()
+                    .when(layout == ToolbarLayout::Right, |d| {
+                        d.border_l(theme.border_width)
+                    })
+                    .when(layout != ToolbarLayout::Right, |d| {
+                        d.border_r(theme.border_width)
+                    })
+                    .border_color(theme.border);
+                // A floating toolbar covers the top of the list instead of pushing it down.
+                let column = match side_bar {
+                    Some(bar) if floats => column
+                        .child(content)
+                        .child(div().absolute().top_0().left_0().right_0().child(bar)),
+                    Some(bar) => column.child(bar).child(content),
+                    None => column.child(content),
+                };
+                // Sliding in or out, the sidebar's width grows or shrinks; its contents stay
+                // their width and are cut off.
+                Some(match slide {
+                    Some((showing, moves)) => {
+                        let style = self.settings.interface.animation;
+                        div()
+                            .flex_none()
+                            .h_full()
+                            .overflow_hidden()
+                            .child(column)
+                            .with_animation(
+                                ("sidebar-slide", moves as usize),
+                                gpui::Animation::new(style.duration().unwrap_or_default())
+                                    .with_easing(motion::easing(style)),
+                                move |el, t| {
+                                    let shown = if showing { t } else { 1. - t };
+                                    el.w(px(260. * shown))
+                                },
+                            )
+                            .into_any_element()
+                    }
+                    None => column.into_any_element(),
+                })
             } else {
                 None
             };
-            let column = div()
-                .relative()
-                .flex()
-                .flex_col()
-                .flex_none()
-                .w(px(260.))
-                .h_full()
-                .when(layout == ToolbarLayout::Right, |d| {
-                    d.border_l(theme.border_width)
-                })
-                .when(layout != ToolbarLayout::Right, |d| {
-                    d.border_r(theme.border_width)
-                })
-                .border_color(theme.border);
-            // A floating toolbar covers the top of the list instead of pushing it down.
-            Some(match side_bar {
-                Some(bar) if floats => column
-                    .child(content)
-                    .child(div().absolute().top_0().left_0().right_0().child(bar)),
-                Some(bar) => column.child(bar).child(content),
-                None => column.child(content),
-            })
-        } else {
-            None
-        };
         let panes = self.render_panes(&model, &theme, cx);
         let row = div().flex().flex_1().min_h_0();
         let body = match sidebar {

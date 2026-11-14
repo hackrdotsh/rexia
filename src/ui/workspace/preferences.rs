@@ -2,7 +2,8 @@
 //! Colors, corners, borders and fonts aren't here: they follow Noctalia.
 use super::{Workspace, overlay::Overlay};
 use crate::settings::{
-    AppLinks, SelectionColor, ShellIconTheme, SidebarGesture, SidebarTextSize, TabIconColor,
+    AnimationStyle, AppLinks, SelectionColor, ShellIconTheme, SidebarGesture, SidebarTextSize,
+    TabIconColor,
 };
 use crate::{
     rex::stream::CursorShape,
@@ -354,6 +355,7 @@ impl Workspace {
         let blink = terminal.blink_interval();
         let cursor = terminal.cursor_style;
         let padding_fill = terminal.padding_fill;
+        let smooth_scrolling = terminal.smooth_scrolling;
         let selection = terminal.selection;
         let cursor_shader = terminal.cursor_shaders.then_some(terminal.cursor_shader);
         let colors = crate::ui::terminal::TextColors {
@@ -369,6 +371,7 @@ impl Workspace {
                 pane.blink = blink;
                 pane.colors = colors;
                 pane.padding_fill = padding_fill;
+                pane.smooth_scrolling = smooth_scrolling;
                 pane.selection = selection;
                 pane.cursor_shader = cursor_shader;
                 cx.notify();
@@ -643,6 +646,20 @@ impl Workspace {
                 ],
                 i.toolbar_behavior,
                 |s, v| s.interface.toolbar_behavior = v,
+                theme,
+                cx,
+            ),
+            self.choice_row(
+                "animation-style",
+                "Animation style",
+                "How panes move, open and close, the active border travels, and the sidebar shows or hides.",
+                &[
+                    (AnimationStyle::Snappy, "Snappy"),
+                    (AnimationStyle::Natural, "Natural"),
+                    (AnimationStyle::Off, "Off"),
+                ],
+                i.animation,
+                |s, v| s.interface.animation = v,
                 theme,
                 cx,
             ),
@@ -1052,6 +1069,16 @@ impl Workspace {
             "Shine across the selection to confirm each copy.",
             |s| s.terminal.selection.copy_animation,
             |s, v| s.terminal.selection.copy_animation = v,
+            theme,
+            cx,
+        ));
+        rows.push(section_label("Scrolling", theme));
+        rows.push(self.toggle_row(
+            "smooth-scrolling",
+            "Smooth scrolling",
+            "Move through terminal history by pixels instead of whole lines, on a touchpad.",
+            |s| s.terminal.smooth_scrolling,
+            |s, v| s.terminal.smooth_scrolling = v,
             theme,
             cx,
         ));

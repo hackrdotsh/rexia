@@ -171,6 +171,30 @@ pub enum ShellIconTheme {
     Accent,
 }
 
+/// How panes move, the active border travels, and the sidebar shows or hides.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum AnimationStyle {
+    /// Quick and direct.
+    Snappy,
+    /// Slower, easing in and out.
+    #[default]
+    Natural,
+    /// No motion: everything moves at once.
+    Off,
+}
+
+impl AnimationStyle {
+    /// How long a motion takes, or `None` when nothing animates.
+    pub fn duration(self) -> Option<std::time::Duration> {
+        match self {
+            Self::Snappy => Some(std::time::Duration::from_millis(120)),
+            Self::Natural => Some(std::time::Duration::from_millis(260)),
+            Self::Off => None,
+        }
+    }
+}
+
 /// Whether links that launch other apps, such as ssh://, open on ctrl+click.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
@@ -290,6 +314,8 @@ pub struct TerminalSettings {
     pub selection: SelectionLook,
     /// Show the keys that can come next after the first key of a sequence.
     pub key_hints: bool,
+    /// Move through history by pixels instead of whole lines.
+    pub smooth_scrolling: bool,
     /// List recently chosen paths first in the path browser.
     pub recent_paths: bool,
     pub app_links: AppLinks,
@@ -350,6 +376,7 @@ impl Default for TerminalSettings {
             copy_on_select: false,
             selection: SelectionLook::default(),
             key_hints: true,
+            smooth_scrolling: true,
             recent_paths: true,
             app_links: AppLinks::Ask,
             trusted_links: Vec::new(),
@@ -383,6 +410,7 @@ pub struct InterfaceSettings {
     pub vertical_side: ToolbarLayout,
     /// Horizontal tabs share the tab bar equally.
     pub tabs_fill: bool,
+    pub animation: AnimationStyle,
     pub sidebar_text_size: SidebarTextSize,
     pub sidebar_gesture: SidebarGesture,
     /// Spread or pinch over a pane to zoom or restore it, and swipe for the sidebar.
@@ -416,6 +444,7 @@ impl Default for InterfaceSettings {
             toolbar_behavior: ToolbarBehavior::Always,
             vertical_side: ToolbarLayout::Left,
             tabs_fill: false,
+            animation: AnimationStyle::Natural,
             sidebar_text_size: SidebarTextSize::Medium,
             sidebar_gesture: SidebarGesture::Swipe,
             trackpad_gestures: true,

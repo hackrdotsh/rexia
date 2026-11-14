@@ -83,6 +83,7 @@ impl Workspace {
     /// A highlight that moves from the previous pane to the focused one, drawn over both.
     pub(super) fn render_moving_highlight(&self, gap: f32, theme: &Theme) -> Option<AnyElement> {
         let (from, to) = self.highlight_motion()?;
+        let motion = self.settings.interface.animation.duration();
         let tint = self.highlight_color(theme);
         let radius = theme.radius();
         let width = theme.border_width.max(px(1.));
@@ -102,11 +103,15 @@ impl Workspace {
                         .border_color(tint),
                 )
         };
+        // With animation off, the highlight is simply where focus is.
+        let Some(motion) = motion else {
+            return Some(place(to).into_any_element());
+        };
         Some(
             place(to)
                 .with_animation(
                     ("highlight-move", self.highlight.moves as usize),
-                    Animation::new(HIGHLIGHT_MOTION).with_easing(gpui::ease_in_out),
+                    Animation::new(motion).with_easing(gpui::ease_in_out),
                     move |_, t| place(lerp(from, to, t)),
                 )
                 .into_any_element(),
