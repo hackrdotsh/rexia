@@ -152,13 +152,14 @@ fn host_streams_types_splits_and_cleans_up() {
     });
     println!("split into {} panes", panes.len());
 
-    // Programs report status over OSC 7501; the server relays it as block events.
+    // Programs report status over OSC 7501; the server relays it as block events. A record
+    // lasts as long as the process that reported it, so the reporter stays alive.
     host.send(HostCommand::Input {
         session_id: session.clone(),
         block_id: block.clone(),
         method: "block.event",
         payload: json!({"session_id": session, "block_id": block,
-            "event": {"type": "paste", "payload": {"text": "printf '\\033]7501;state=blocked:kind=question:app=rexia-test\\033\\\\'\r"}}}),
+            "event": {"type": "paste", "payload": {"text": "sh -c 'printf \"\\033]7501;state=blocked:kind=question:app=rexia-test\\033\\\\\\\\\"; sleep 30'\r"}}}),
         claim: true,
     });
     let badge = wait_for(&host, "program status", |m| {
