@@ -69,7 +69,7 @@ Not implemented yet:
 | Terminal › Titles, Shell | Prefer generated titles names panes and tabs after the running program and its directory (`nvim · rexia`) instead of titles programs set. Startup command: a program alone starts as the shell (so a shell such as fish starts as a login shell); with arguments it runs directly. It applies to new terminals on local hosts only, so remote hosts keep their own shells. Empty runs the login shell. |
 | Developer › Local API, Web Client Origins | Settings › Developer shows the local server's API address with Copy. Web client origins: add a browser origin or wildcard subdomain (`https://*.example.com`), see the list, and remove entries. Rex servers take origins only as a start option, so rexia passes them as `--websocket-origin-pattern` when it starts the server with Restart Server; a server started some other way (such as by systemd) needs them in its own command line. |
 | Developer › Rex Installation | Not built: choosing the server installation. Developer Mode, App Version and update experiments are macOS app options. |
-| Developer › Experimental | Not built: terminal anchoring and the new quick switcher. |
+| Developer › Experimental | Terminal anchoring: Top, or Bottom, which moves the text down by the part of a line left over so it sits on the pane's bottom edge. New quick switcher: Go to Anything lists every program reporting a status on its own row (several in one pane each get one, most urgent first), then every session and pane. Update experiments are macOS app options. |
 | App Icon, Launch | Not applicable: macOS app options. |
 
 ## Behavior
