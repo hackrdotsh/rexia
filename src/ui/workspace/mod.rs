@@ -4,6 +4,7 @@ mod actions;
 mod attention;
 mod extras;
 mod filter;
+pub mod gestures;
 mod highlight;
 mod overlay;
 mod preferences;
@@ -124,6 +125,9 @@ pub struct Workspace {
     notice_area: Option<Bounds<Pixels>>,
     reveal: toolbar::Reveal,
     highlight: highlight::Track,
+    swipe: gestures::SwipeTracker,
+    pinch: gestures::PinchTracker,
+    swipes: usize,
     /// Whether the window had the desktop's focus at the last draw.
     window_active: bool,
     drag: Option<Drag>,
@@ -276,6 +280,9 @@ impl Workspace {
             notice_area: None,
             reveal: Default::default(),
             highlight: Default::default(),
+            swipe: Default::default(),
+            pinch: Default::default(),
+            swipes: 0,
             window_active: true,
             drag: None,
             focused: None,
@@ -896,6 +903,8 @@ impl Workspace {
     }
 
     fn render_sidebar(&self, theme: &Theme, cx: &mut Context<Self>) -> AnyElement {
+        let (session_text, tab_text, tab_height) =
+            self.settings.interface.sidebar_text_size.metrics();
         let mut list = div().flex().flex_col().gap(px(2.));
         for (index, host) in self.hosts.iter().enumerate() {
             let model = host.handle.snapshot();
@@ -952,7 +961,7 @@ impl Workspace {
                             .overflow_hidden()
                             .text_ellipsis()
                             .whitespace_nowrap()
-                            .text_size(px(14.))
+                            .text_size(px(session_text))
                             .child(session.label.clone()),
                     )
                     .children(
@@ -986,10 +995,10 @@ impl Workspace {
                                 .gap(px(8.))
                                 .ml(px(18.))
                                 .px(px(10.))
-                                .h(px(28.))
+                                .h(px(tab_height))
                                 .rounded(theme.radius_small())
                                 .cursor_pointer()
-                                .text_size(px(13.))
+                                .text_size(px(tab_text))
                                 .when(active, |d| d.bg(theme.overlay(0.1)).text_color(theme.text))
                                 .when(!active, |d| {
                                     d.text_color(theme.text_muted)
@@ -1208,12 +1217,16 @@ impl Workspace {
             };
             let hover_block = pane.block_id.clone();
             let hover_session = session.clone();
+            let pinch_block = pane.block_id.clone();
             let card = div()
                 .id(SharedString::from(format!("card-{}", pane.block_id)))
                 .size_full()
                 .on_mouse_move(cx.listener(move |ws, _: &MouseMoveEvent, _, _| {
                     ws.focus_on_hover(&hover_session, &hover_block)
                 }))
+                .on_pinch(
+                    cx.listener(move |ws, event, _, cx| ws.on_pane_pinch(&pinch_block, event, cx)),
+                )
                 .child(card);
             area = area.child(
                 div()
@@ -1763,6 +1776,7 @@ impl Render for Workspace {
             .font_family(theme.ui_font.clone())
             .capture_key_down(cx.listener(Self::on_key_down))
             .on_mouse_move(cx.listener(Self::on_mouse_move))
+            .on_scroll(cx.listener(|ws, event, _, cx| ws.on_swipe(event, cx)))
             .on_mouse_up(MouseButton::Left, cx.listener(Self::on_mouse_up))
             .children(toolbar)
             .child(body)

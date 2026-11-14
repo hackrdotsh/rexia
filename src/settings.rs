@@ -112,6 +112,39 @@ pub enum FadeInactive {
     Both,
 }
 
+/// The size of session and tab titles in the sidebar.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum SidebarTextSize {
+    Small,
+    #[default]
+    Medium,
+    Large,
+}
+
+impl SidebarTextSize {
+    /// Session title size, tab title size, and tab row height, in pixels.
+    pub fn metrics(self) -> (f32, f32, f32) {
+        match self {
+            Self::Small => (12., 11., 24.),
+            Self::Medium => (14., 13., 28.),
+            Self::Large => (16., 15., 32.),
+        }
+    }
+}
+
+/// Which touchpad swipe shows or hides the sidebar.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum SidebarGesture {
+    /// A two-finger swipe sideways; hold Alt to scroll content sideways instead.
+    #[default]
+    Swipe,
+    /// A swipe sideways with Alt held.
+    AltSwipe,
+    Off,
+}
+
 /// Which tab icons draw in their program's colors; the rest draw in the text color.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
@@ -265,6 +298,10 @@ pub struct InterfaceSettings {
     pub vertical_side: ToolbarLayout,
     /// Horizontal tabs share the tab bar equally.
     pub tabs_fill: bool,
+    pub sidebar_text_size: SidebarTextSize,
+    pub sidebar_gesture: SidebarGesture,
+    /// Spread or pinch over a pane to zoom or restore it, and swipe for the sidebar.
+    pub trackpad_gestures: bool,
     pub tab_icon_color: TabIconColor,
     pub shell_icon_theme: ShellIconTheme,
     /// How many pane icons a tab shows: up to three in vertical tabs, five in horizontal.
@@ -294,6 +331,9 @@ impl Default for InterfaceSettings {
             toolbar_behavior: ToolbarBehavior::Always,
             vertical_side: ToolbarLayout::Left,
             tabs_fill: false,
+            sidebar_text_size: SidebarTextSize::Medium,
+            sidebar_gesture: SidebarGesture::Swipe,
+            trackpad_gestures: true,
             tab_icon_color: TabIconColor::Always,
             shell_icon_theme: ShellIconTheme::Default,
             tab_icons: 3,

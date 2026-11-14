@@ -1,7 +1,7 @@
 //! The settings page: rexia's preferences by section, applied and saved as they change.
 //! Colors, corners, borders and fonts aren't here: they follow Noctalia.
 use super::{Workspace, overlay::Overlay};
-use crate::settings::{ShellIconTheme, TabIconColor};
+use crate::settings::{ShellIconTheme, SidebarGesture, SidebarTextSize, TabIconColor};
 use crate::{
     rex::stream::CursorShape,
     rex::{activity::ProgramState, host::HostCommand},
@@ -603,6 +603,43 @@ impl Workspace {
                 "Hosts and sessions, or program activity, beside the panes.",
                 |s| s.interface.sidebar,
                 |s, v| s.interface.sidebar = v,
+                theme,
+                cx,
+            ),
+            self.choice_row(
+                "sidebar-text-size",
+                "Sidebar text size",
+                "The size of session and tab titles in the sidebar.",
+                &[
+                    (SidebarTextSize::Small, "Small"),
+                    (SidebarTextSize::Medium, "Medium"),
+                    (SidebarTextSize::Large, "Large"),
+                ],
+                i.sidebar_text_size,
+                |s, v| s.interface.sidebar_text_size = v,
+                theme,
+                cx,
+            ),
+            self.choice_row(
+                "sidebar-gesture",
+                "Use a gesture to toggle the sidebar",
+                "A two-finger swipe sideways shows or hides the sidebar; with Swipe, hold Alt to scroll sideways instead.",
+                &[
+                    (SidebarGesture::Swipe, "Swipe"),
+                    (SidebarGesture::AltSwipe, "Alt-swipe"),
+                    (SidebarGesture::Off, "Off"),
+                ],
+                i.sidebar_gesture,
+                |s, v| s.interface.sidebar_gesture = v,
+                theme,
+                cx,
+            ),
+            self.toggle_row(
+                "trackpad-gestures",
+                "Use trackpad gestures",
+                "Spread two fingers over a pane to zoom it and pinch to restore it, and swipe for the sidebar.",
+                |s| s.interface.trackpad_gestures,
+                |s, v| s.interface.trackpad_gestures = v,
                 theme,
                 cx,
             ),
