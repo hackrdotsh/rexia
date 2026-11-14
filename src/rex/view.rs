@@ -304,7 +304,7 @@ pub fn first_block(node: &Node) -> Option<&str> {
         .or_else(|| first_block(&node.split.as_ref()?.before))
 }
 
-fn last_block(node: &Node) -> Option<&str> {
+pub fn last_block(node: &Node) -> Option<&str> {
     node.block_id
         .as_deref()
         .or_else(|| last_block(&node.split.as_ref()?.after))
@@ -327,6 +327,109 @@ fn collect_dividers(node: &Node, out: &mut Vec<Divider>) {
     }
     collect_dividers(&split.before, out);
     collect_dividers(&split.after, out);
+}
+
+/// A split's new ratio for `session.resize_pane`, named by the blocks beside its border.
+#[derive(Clone, Debug, PartialEq)]
+pub struct Ratio {
+    pub before_block: String,
+    pub after_block: String,
+    pub horizontal: bool,
+    pub ratio: f64,
+}
+
+/// Ratios that give every pane in a run of same-direction splits an equal share.
+pub fn balanced(window: &Window) -> Vec<Ratio> {
+    fn weight(node: &Node, horizontal: bool) -> f64 {
+        match &node.split {
+            None => 1.,
+            Some(split) if (split.direction != "vertical") == horizontal => {
+                weight(&split.before, horizontal) + weight(&split.after, horizontal)
+            }
+            Some(split) => weight(&split.before, horizontal).max(weight(&split.after, horizontal)),
+        }
+    }
+    fn walk(node: &Node, out: &mut Vec<Ratio>) {
+        let Some(split) = &node.split else { return };
+        let horizontal = split.direction != "vertical";
+        if let (Some(before), Some(after)) = (last_block(&split.before), first_block(&split.after))
+        {
+            let a = weight(&split.before, horizontal);
+            let b = weight(&split.after, horizontal);
+            out.push(Ratio {
+                before_block: before.into(),
+                after_block: after.into(),
+                horizontal,
+                ratio: a / (a + b),
+            });
+        }
+        walk(&split.before, out);
+        walk(&split.after, out);
+    }
+    let mut out = Vec::new();
+    for layer in window.layers.iter().filter(|l| l.kind == "tiled") {
+        if let Some(node) = &layer.layout {
+            walk(node, &mut out);
+        }
+    }
+    out
+}
+
+/// The nearest pane in a direction from `from`, among panes that overlap it across that axis.
+pub fn neighbor<'p>(panes: &'p [Pane], from: &str, direction: &str) -> Option<&'p Pane> {
+    let origin = panes.iter().find(|p| p.block_id == from)?.rect;
+    let (cx, cy) = origin.center();
+    let overlaps = |a0: f64, a1: f64, b0: f64, b1: f64| a0 < b1 - 1e-6 && b0 < a1 - 1e-6;
+    panes
+        .iter()
+        .filter(|p| p.block_id != from && p.floating.is_none())
+        .filter(|p| {
+            let r = p.rect;
+            let (px, py) = r.center();
+            match direction {
+                "left" => px < cx && overlaps(r.y, r.y + r.h, origin.y, origin.y + origin.h),
+                "right" => px > cx && overlaps(r.y, r.y + r.h, origin.y, origin.y + origin.h),
+                "up" => py < cy && overlaps(r.x, r.x + r.w, origin.x, origin.x + origin.w),
+                "down" => py > cy && overlaps(r.x, r.x + r.w, origin.x, origin.x + origin.w),
+                _ => false,
+            }
+        })
+        .min_by(|a, b| {
+            let d = |p: &Pane| {
+                let (px, py) = p.rect.center();
+                (px - cx).powi(2) + (py - cy).powi(2)
+            };
+            d(a).total_cmp(&d(b))
+        })
+}
+
+/// The innermost divider beside `block` that moves in `direction`, with the ratio after
+/// moving it by `amount` of its split.
+pub fn nudge(window: &Window, block: &str, direction: &str, amount: f64) -> Option<Divider> {
+    let horizontal = matches!(direction, "left" | "right");
+    let pane = window
+        .panes()
+        .into_iter()
+        .find(|p| p.block_id == block)?
+        .rect;
+    let inside = |outer: &Rect| {
+        pane.x >= outer.x - 1e-6
+            && pane.y >= outer.y - 1e-6
+            && pane.x + pane.w <= outer.x + outer.w + 1e-6
+            && pane.y + pane.h <= outer.y + outer.h + 1e-6
+    };
+    let mut divider = window
+        .dividers()
+        .into_iter()
+        .filter(|d| d.horizontal == horizontal && inside(&d.rect))
+        .min_by(|a, b| (a.rect.w * a.rect.h).total_cmp(&(b.rect.w * b.rect.h)))?;
+    let delta = if matches!(direction, "left" | "up") {
+        -amount
+    } else {
+        amount
+    };
+    divider.ratio = (divider.ratio + delta).clamp(0.05, 0.95);
+    Some(divider)
 }
 
 #[cfg(test)]
@@ -423,6 +526,25 @@ mod tests {
             }]
         );
         assert!(window.dividers().is_empty());
+    }
+
+    #[test]
+    fn balance_neighbors_and_nudges() {
+        let view = view();
+        let window = view.active_window().unwrap();
+        let ratios = balanced(window);
+        // a | (b / c): the outer split weighs one column against one column.
+        assert_eq!(ratios[0].ratio, 0.5);
+        assert_eq!(ratios[1].ratio, 0.5);
+        let panes = window.panes();
+        assert_eq!(neighbor(&panes, "a", "right").unwrap().block_id, "b");
+        assert_eq!(neighbor(&panes, "c", "up").unwrap().block_id, "b");
+        assert_eq!(neighbor(&panes, "c", "left").unwrap().block_id, "a");
+        assert!(neighbor(&panes, "a", "left").is_none());
+        let moved = nudge(window, "b", "down", 0.1).unwrap();
+        assert_eq!((moved.before_block.as_str(), moved.ratio), ("b", 0.6));
+        let wider = nudge(window, "a", "right", 0.05).unwrap();
+        assert!((wider.ratio - 0.65).abs() < 1e-9);
     }
 
     #[test]
