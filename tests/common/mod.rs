@@ -1,6 +1,8 @@
 //! Shared harness for tests that drive a headless rexia workspace against a real Rex server
 //! named by REXIA_TEST_SERVER.
 #![allow(dead_code)]
+pub mod desktop;
+
 use gpui::{
     AnyWindowHandle, AppContext as _, HeadlessAppContext, Keystroke, WindowHandle, px, size,
 };
@@ -257,6 +259,31 @@ impl Harness {
             assert!(Instant::now() < deadline, "{method} never returned");
             std::thread::sleep(Duration::from_millis(20));
         }
+    }
+
+    /// Send desktop notifications to the bus at `address`.
+    pub fn attach_desktop(&mut self, address: &str) {
+        let window = self.window;
+        let (notifier, clicks) = rexia::notify::Notifier::spawn(Some(address.to_owned()));
+        self.cx.update(|cx| {
+            window
+                .update(cx, |ws, window, cx| {
+                    ws.set_notifier(notifier, clicks, window, cx)
+                })
+                .unwrap()
+        });
+        self.pump();
+    }
+
+    /// Give the window the desktop's focus, as when the user is looking at it.
+    pub fn activate(&mut self) {
+        let window = self.window;
+        self.cx.update(|cx| {
+            window
+                .update(cx, |_, window, _| window.activate_window())
+                .unwrap()
+        });
+        self.pump();
     }
 
     pub fn workspace<R>(&mut self, read: impl FnOnce(&Workspace) -> R) -> R {
