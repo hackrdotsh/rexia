@@ -80,7 +80,21 @@ impl FakePreviewer {
     }
 }
 
+/// A stand-in for the desktop's file manager: it notes each file it's asked to show.
+#[derive(Clone, Default)]
+struct FakeFiles {
+    shown: Arc<Mutex<Vec<String>>>,
+}
+
+#[zbus::interface(name = "org.freedesktop.FileManager1")]
+impl FakeFiles {
+    fn show_items(&self, uris: Vec<String>, _startup_id: &str) {
+        self.shown.lock().unwrap().extend(uris);
+    }
+}
+
 pub struct Desktop {
+    files: FakeFiles,
     pub address: String,
     fake: Fake,
     previewer: FakePreviewer,
@@ -96,7 +110,7 @@ impl Desktop {
     }
 
     /// Start the bus and the fake servers: notifications, and with `previewer`, GNOME's
-    /// previewer too.
+    /// previewer and a file manager too.
     pub fn start_with(previewer: bool) -> Option<Self> {
         let mut bus = Command::new("dbus-daemon")
             .args(["--session", "--nofork", "--nopidfile", "--print-address=1"])
@@ -121,11 +135,16 @@ impl Desktop {
             .ok()?
             .serve_at("/org/freedesktop/Notifications", fake.clone())
             .ok()?;
+        let files = FakeFiles::default();
         if previewer {
             builder = builder
                 .name("org.gnome.NautilusPreviewer")
                 .ok()?
                 .serve_at("/org/gnome/NautilusPreviewer", fake_previewer.clone())
+                .ok()?
+                .name("org.freedesktop.FileManager1")
+                .ok()?
+                .serve_at("/org/freedesktop/FileManager1", files.clone())
                 .ok()?;
         }
         let connection = runtime.block_on(builder.build()).ok()?;
@@ -133,6 +152,7 @@ impl Desktop {
             address,
             fake,
             previewer: fake_previewer,
+            files,
             connection: Some(connection),
             runtime,
             bus,
@@ -141,6 +161,11 @@ impl Desktop {
 
     pub fn shown(&self) -> Vec<Shown> {
         self.fake.shown.lock().unwrap().clone()
+    }
+
+    /// The files the stand-in file manager was asked to show.
+    pub fn shown_in_files(&self) -> Vec<String> {
+        self.files.shown.lock().unwrap().clone()
     }
 
     /// The files the stand-in previewer was asked to show.
