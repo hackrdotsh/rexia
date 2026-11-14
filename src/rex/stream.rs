@@ -92,6 +92,8 @@ pub struct Frame {
     pub bg: u32,
     pub cursor: Option<Cursor>,
     pub mouse_tracking: bool,
+    /// The program asked for bracketed paste (mode 2004), so a paste can't run anything.
+    pub bracketed_paste: bool,
     pub alternate_screen: bool,
     pub scrollbar: Scrollbar,
     pub has_selection: bool,
@@ -753,6 +755,7 @@ impl TerminalState {
             bg,
             cursor,
             mouse_tracking: terminal.is_mouse_tracking()?,
+            bracketed_paste: terminal.mode(ghostty_vt::terminal::Mode::BRACKETED_PASTE)?,
             alternate_screen: terminal.active_screen()? == ghostty_vt::screen::Screen::Alternate,
             scrollbar: Scrollbar {
                 total: bar.total,

@@ -152,9 +152,29 @@ pub enum RenameTarget {
 
 #[derive(Clone, Debug, PartialEq)]
 pub enum Confirm {
-    CloseSession { id: String },
-    RemoveHost { id: String },
+    /// Paste text that could run a command before it's read.
+    Paste {
+        block: String,
+        text: String,
+    },
+    CloseSession {
+        id: String,
+    },
+    RemoveHost {
+        id: String,
+    },
     RestartServer,
+}
+
+impl Confirm {
+    /// The button that leaves things as they are.
+    fn keep_label(&self) -> &'static str {
+        match self {
+            Self::Paste { .. } => "Cancel",
+            Self::RemoveHost { .. } => "Keep Host",
+            Self::CloseSession { .. } | Self::RestartServer => "Keep Running",
+        }
+    }
 }
 
 pub enum Dialog {
@@ -1039,6 +1059,14 @@ impl Workspace {
         self.close_overlay(window, cx);
     }
 
+    /// The open confirmation's title, for tests.
+    pub fn confirm_title(&self) -> Option<String> {
+        match &self.overlay {
+            Some(Overlay::Dialog(Dialog::Confirm { title, .. })) => Some(title.clone()),
+            _ => None,
+        }
+    }
+
     pub fn open_confirm(
         &mut self,
         title: String,
@@ -1064,6 +1092,11 @@ impl Workspace {
         let action = action.clone();
         self.close_overlay(window, cx);
         match action {
+            Confirm::Paste { block, text } => {
+                if let Some(pane) = self.panes.get(&block) {
+                    pane.read(cx).paste_text(text);
+                }
+            }
             Confirm::RestartServer => self.restart_server(cx),
             Confirm::CloseSession { id } => self
                 .host()
@@ -1597,7 +1630,7 @@ impl Workspace {
                 body,
                 confirm,
                 focused,
-                ..
+                action,
             } => div()
                 .flex()
                 .flex_col()
@@ -1610,9 +1643,14 @@ impl Workspace {
                         .child(body.clone()),
                 )
                 .child(actions_row(vec![
-                    button("confirm-cancel", "Keep Running".into(), None, *focused == 0)
-                        .on_click(cx.listener(|ws, _, window, cx| ws.close_overlay(window, cx)))
-                        .into_any_element(),
+                    button(
+                        "confirm-cancel",
+                        action.keep_label().into(),
+                        None,
+                        *focused == 0,
+                    )
+                    .on_click(cx.listener(|ws, _, window, cx| ws.close_overlay(window, cx)))
+                    .into_any_element(),
                     button(
                         "confirm-ok",
                         confirm.clone(),

@@ -22,6 +22,7 @@ mod ssh;
 pub mod ssh_questions;
 pub mod tab_icons;
 mod toolbar;
+pub mod uploads;
 mod windows;
 
 use super::{
@@ -146,6 +147,10 @@ pub struct Workspace {
     reveal: toolbar::Reveal,
     highlight: highlight::Track,
     swipe: gestures::SwipeTracker,
+    /// Files going to terminals on other machines, and how the last one ended.
+    uploads: Vec<uploads::Upload>,
+    next_upload: u64,
+    last_upload: Option<Result<(), String>>,
     /// The terminal's right-click menu, while it's open.
     context_menu: Option<Box<context_menu::ContextMenu>>,
     /// ssh's questions waiting for another dialog to close.
@@ -336,6 +341,9 @@ impl Workspace {
             reveal: Default::default(),
             highlight: Default::default(),
             swipe: Default::default(),
+            uploads: Vec::new(),
+            next_upload: 0,
+            last_upload: None,
             context_menu: None,
             ssh_questions: Default::default(),
             ssh_open: None,
@@ -560,6 +568,10 @@ impl Workspace {
                     PaneEvent::ContextMenu { position, cell } => {
                         ws.open_context_menu(block.clone(), *position, *cell, cx)
                     }
+                    PaneEvent::ConfirmPaste(text) => {
+                        ws.confirm_paste(block.clone(), text.clone(), cx)
+                    }
+                    PaneEvent::Upload(files) => ws.start_upload(block.clone(), files.clone(), cx),
                 })
                 .detach();
                 self.panes.insert(key, pane);
@@ -1980,6 +1992,7 @@ impl Render for Workspace {
             .children(self.key_hint(&theme))
             .children(self.render_find(&theme, cx))
             .children(self.render_overlay(&theme, cx))
+            .children(self.render_uploads(&theme, cx))
             .children(self.render_context_menu(&theme, cx))
             .children(self.render_ssh_question(&theme, cx))
     }

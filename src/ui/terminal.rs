@@ -33,6 +33,10 @@ pub fn openable(link: &str) -> bool {
 pub enum PaneEvent {
     /// A program's link was ctrl+clicked.
     OpenLink(String),
+    /// A paste that could run a command before it's read, waiting for a yes.
+    ConfirmPaste(String),
+    /// Files for a terminal on another machine, to upload there.
+    Upload(Vec<crate::rex::upload::Source>),
     /// Right-click: the menu for the cell at `cell`, shown at `position` in the window.
     ContextMenu {
         position: gpui::Point<Pixels>,
@@ -332,6 +336,8 @@ pub struct TerminalPane {
     shine: Option<std::time::Instant>,
     /// The cell the pointer was last over.
     pointer: Option<(u16, u16)>,
+    /// Files from another app being dragged over the pane.
+    dropping: Option<Vec<std::path::PathBuf>>,
     /// Where the text sits when the pane is taller than its whole lines.
     pub anchor: crate::settings::TerminalAnchor,
     /// Reflow text locally as the pane changes size, and the size last reflowed to.
@@ -398,6 +404,7 @@ impl TerminalPane {
             smooth_resizing: true,
             anchor: Default::default(),
             pointer: None,
+            dropping: None,
             reflowed: None,
             scroll_carry: 0.,
             shines: 0,
@@ -846,9 +853,68 @@ impl TerminalPane {
     }
 
     pub fn paste(&mut self, cx: &mut Context<Self>) {
-        let Some(text) = cx.read_from_clipboard().and_then(|item| item.text()) else {
+        if let Some(item) = cx.read_from_clipboard() {
+            self.paste_item(item, cx);
+        }
+    }
+
+    /// Paste what a clipboard holds: copied files as their paths, an image as a file, and
+    /// text, after asking when it could run a command before it can be read.
+    pub fn paste_item(&mut self, item: ClipboardItem, cx: &mut Context<Self>) {
+        use crate::rex::upload::{self, Source};
+        for entry in item.entries() {
+            if let gpui::ClipboardEntry::ExternalPaths(paths) = entry {
+                let files = paths.paths().iter().cloned().map(Source::Path).collect();
+                return self.paste_files(files, cx);
+            }
+        }
+        if let Some(text) = item.text() {
+            if let Some(paths) = upload::copied_files(&text) {
+                return self.paste_files(paths.into_iter().map(Source::Path).collect(), cx);
+            }
+            let bracketed = self.frame().is_some_and(|f| f.bracketed_paste);
+            if upload::unsafe_paste(&text, bracketed) {
+                cx.emit(PaneEvent::ConfirmPaste(text));
+            } else {
+                self.paste_text(text);
+            }
             return;
-        };
+        }
+        for entry in item.entries() {
+            if let gpui::ClipboardEntry::Image(image) = entry {
+                let name = format!("Pasted image.{}", image_extension(image.format));
+                let bytes = std::sync::Arc::new(image.bytes.clone());
+                return self.paste_files(vec![Source::Bytes { name, bytes }], cx);
+            }
+        }
+    }
+
+    /// Files dropped or pasted on the terminal: their paths typed, for a terminal on this
+    /// machine; uploaded first, for one on another.
+    pub fn paste_files(&mut self, files: Vec<crate::rex::upload::Source>, cx: &mut Context<Self>) {
+        use crate::rex::upload::{Source, shell_quote};
+        if files.is_empty() {
+            return;
+        }
+        if !self.host.endpoint.is_local() {
+            cx.emit(PaneEvent::Upload(files));
+            return;
+        }
+        let mut paths = Vec::new();
+        for file in files {
+            match file {
+                Source::Path(path) => paths.push(path),
+                Source::Bytes { name, bytes } => match keep_pasted(&name, &bytes) {
+                    Ok(path) => paths.push(path),
+                    Err(error) => eprintln!("rexia: couldn't keep the pasted {name}: {error}"),
+                },
+            }
+        }
+        let text = paths
+            .iter()
+            .map(|p| shell_quote(&p.display().to_string()))
+            .collect::<Vec<_>>()
+            .join(" ");
         self.paste_text(text);
     }
 
@@ -1047,7 +1113,19 @@ impl TerminalPane {
         }
     }
 
-    fn on_mouse_up(&mut self, event: &MouseUpEvent, _: &mut Window, cx: &mut Context<Self>) {
+    fn on_mouse_up(&mut self, event: &MouseUpEvent, window: &mut Window, cx: &mut Context<Self>) {
+        if let Some(paths) = self.dropping.take()
+            && event.button == MouseButton::Left
+            && cx.has_active_drag()
+        {
+            cx.stop_active_drag(window);
+            let files = paths
+                .into_iter()
+                .map(crate::rex::upload::Source::Path)
+                .collect();
+            self.paste_files(files, cx);
+            return;
+        }
         let at = self.cell_at(event.position);
         if let Some(button) = self.reporting.take() {
             self.mouse_report("release", Some(button), at, &event.modifiers);
@@ -1609,6 +1687,17 @@ impl Render for TerminalPane {
             }))
             .on_mouse_down(MouseButton::Left, cx.listener(Self::on_mouse_down))
             .on_mouse_down(MouseButton::Right, cx.listener(Self::on_mouse_down))
+            // Files dragged in from other apps. GPUI's on_drop misses a drop that follows
+            // typing (the pane counts as not hovered until the mouse moves), so the pane notes
+            // the files while they're over it and takes them when the button comes up.
+            .on_drag_move(cx.listener(
+                |this, event: &gpui::DragMoveEvent<gpui::ExternalPaths>, _, cx| {
+                    this.dropping = event
+                        .bounds
+                        .contains(&event.event.position)
+                        .then(|| event.drag(cx).paths().to_vec());
+                },
+            ))
             .on_mouse_down(MouseButton::Middle, cx.listener(Self::on_mouse_down))
             .on_mouse_move(cx.listener(Self::on_mouse_move))
             .on_mouse_up(MouseButton::Left, cx.listener(Self::on_mouse_up))
@@ -1727,6 +1816,35 @@ impl gpui::EntityInputHandler for TerminalPane {
     }
 }
 
+fn image_extension(format: gpui::ImageFormat) -> &'static str {
+    use gpui::ImageFormat::*;
+    match format {
+        Png => "png",
+        Jpeg => "jpg",
+        Webp => "webp",
+        Gif => "gif",
+        Svg => "svg",
+        Bmp => "bmp",
+        Tiff => "tiff",
+        _ => "img",
+    }
+}
+
+/// Keep pasted bytes, such as a screenshot, in a file only this user can read, for a
+/// terminal on this machine to take: under rexia's runtime directory, in a new folder so
+/// the name stays as pasted.
+fn keep_pasted(name: &str, bytes: &[u8]) -> std::io::Result<std::path::PathBuf> {
+    use std::os::unix::fs::PermissionsExt;
+    let dir = crate::rex::askpass::runtime_dir()?
+        .join("pastes")
+        .join(crate::rex::upload::uuid());
+    std::fs::create_dir_all(&dir)?;
+    let path = dir.join(name);
+    std::fs::write(&path, bytes)?;
+    std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o400))?;
+    Ok(path)
+}
+
 #[cfg(test)]
 mod tests {
     fn frame_with(bgs: &[&[Option<u32>]], alternate: bool) -> Frame {
@@ -1751,6 +1869,7 @@ mod tests {
             bg: 0x000000,
             cursor: None,
             mouse_tracking: false,
+            bracketed_paste: false,
             alternate_screen: alternate,
             scrollbar: Default::default(),
             has_selection: false,
