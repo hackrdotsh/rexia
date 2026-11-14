@@ -6,7 +6,7 @@ preview.19 server.
 
 ## Actions
 
-Rex for Mac lists 116 actions. rexia implements 90 of them under the same names, so
+Rex for Mac lists 116 actions. rexia implements 91 of them under the same names, so
 init.lua bindings, `rex do` and `client.perform` reach rexia the same way. It also adds
 three of its own: `client.sidebar.activity.toggle`, `.by_session` and `.by_priority`.
 Keys follow Linux conventions: where Mac uses `cmd`, rexia uses `ctrl+shift` (Ghostty's
@@ -19,7 +19,7 @@ Implemented by area:
   select all, send key, go to anything, go to directory, insert path, view activity.
 - **Sessions (11):** new, close, rename, select, next and previous, switch, expand and
   collapse, refresh.
-- **Client (40):** command palette, find, tabs (new, close, close others, go to, move,
+- **Client (41):** command palette, find, the sidebar's tab filter, tabs (new, close, close others, go to, move,
   rename, next and previous), modes, prompt jumps, page scrolling, font size, sidebar and
   activity view, hosts (add, remove, switch), settings, diagnostics, config path and
   reload, version and debug copy, notices, full screen.
@@ -30,7 +30,6 @@ Not implemented yet:
 | --- | --- |
 | `client.window.new`, `client.window.close`, `client.tab.move_to_new_window` | rexia has one window. |
 | `client.key.forward` as a palette entry | Works as a binding (keys reach Lua scripts), but isn't listed. |
-| `client.sidebar.filter.focus` | No tab filter field in the sidebar. |
 | `client.toolbar.reveal`, `client.pane_header.reveal`, `client.tab_style.toggle` | Toolbar layouts and vertical tabs aren't built. |
 | `client.shortcuts.edit` | Rebind keys in init.lua instead. |
 | `client.server.restart` | rexia never starts or stops a server. |
