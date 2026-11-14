@@ -27,6 +27,10 @@ url = "2"
 zbus = { version = "5", default-features = false, features = ["tokio"] }
 
 [dev-dependencies]
+gpui = { package = "gpui-pre", version = "=0.3.12", features = ["test-support"] }
+gpui_platform = { package = "gpui-pre-platform", version = "=0.3.12", features = ["font-kit", "wayland", "x11", "test-support"] }
+gpui_wgpu = { package = "gpui-pre-wgpu", version = "=0.3.12" }
+image = { version = "0.25", default-features = false, features = ["png"] }
 tempfile = "3"
 
 [profile.dev]
