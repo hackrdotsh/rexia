@@ -3,6 +3,7 @@
 mod actions;
 mod attention;
 mod overlay;
+mod preferences;
 
 use super::{
     components::{dot, heading, icon_button, list_row, small_icon_button, title},
@@ -31,6 +32,7 @@ use gpui::{
     prelude::*, px, relative,
 };
 pub use overlay::{Confirm, ListKind, RenameTarget};
+pub use preferences::Section as SettingsSection;
 use serde_json::{Value, json};
 use std::{
     collections::{HashMap, HashSet},

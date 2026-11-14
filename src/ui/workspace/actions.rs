@@ -97,6 +97,22 @@ impl Workspace {
             }
             return;
         }
+        if self.settings_section().is_some() {
+            // The page's own keys first; the key that opened it closes it again.
+            let stroke = keys::stroke(&event.keystroke);
+            let reopen = matches!(
+                self.keymap.lookup(None, &[stroke.spellings()], |_| true),
+                Lookup::Run(binding) if binding.action == "client.settings"
+            );
+            if reopen {
+                self.commit_settings_fields(cx);
+                self.close_overlay(window, cx);
+                cx.stop_propagation();
+            } else if self.settings_key(&event.keystroke, window, cx) {
+                cx.stop_propagation();
+            }
+            return;
+        }
         if self.overlay.is_some() {
             if self.dialog_key(&event.keystroke.key, window, cx) {
                 cx.stop_propagation();
@@ -348,6 +364,7 @@ impl Workspace {
             "client.debug.copy" => {
                 cx.write_to_clipboard(ClipboardItem::new_string(self.debug_report()))
             }
+            "client.settings" => self.open_settings(window, cx),
             "client.diagnostics" => {
                 let report = self.debug_report();
                 self.open_diagnostics(report, cx);

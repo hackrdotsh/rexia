@@ -171,6 +171,7 @@ pub enum Dialog {
 pub enum Overlay {
     List(ListOverlay),
     Dialog(Dialog),
+    Settings(super::preferences::SettingsPage),
 }
 
 pub struct FindBar {
@@ -1115,6 +1116,11 @@ impl Workspace {
                 .p(px(18.))
                 .gap(px(12.))
                 .child(self.render_dialog(dialog, theme, cx))
+                .into_any_element(),
+            Overlay::Settings(page) => panel
+                .w(px(820.))
+                .h(px(600.))
+                .child(self.render_settings(page, theme, cx))
                 .into_any_element(),
         };
         Some(

@@ -98,6 +98,13 @@ pub const ACTIONS: &[ActionDef] = &[
         [(&["ctrl+shift+p"], None)]
     ),
     action!(
+        "client.settings",
+        "Settings…",
+        "App",
+        "preferences settings options configure",
+        [(&["ctrl+,"], None)]
+    ),
+    action!(
         "client.diagnostics",
         "Rex Diagnostics",
         "App",
