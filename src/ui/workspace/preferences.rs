@@ -68,6 +68,10 @@ pub struct SettingsPage {
     label: Entity<TextInput>,
     font: Entity<TextInput>,
     fallbacks: Entity<TextInput>,
+    /// Tailscale's preferred hostname, tags and control server, read when signing in.
+    pub(super) ts_hostname: Entity<TextInput>,
+    pub(super) ts_tags: Entity<TextInput>,
+    pub(super) ts_control: Entity<TextInput>,
     _subscriptions: [Subscription; 3],
 }
 
@@ -216,6 +220,9 @@ impl Workspace {
             label,
             font,
             fallbacks,
+            ts_hostname: cx.new(|cx| TextInput::new("rex", cx)),
+            ts_tags: cx.new(|cx| TextInput::new("tag:rex", cx)),
+            ts_control: cx.new(|cx| TextInput::new("Tailscale's own", cx)),
             _subscriptions: subscriptions,
         }));
         cx.notify();
@@ -522,7 +529,7 @@ impl Workspace {
             .into_any_element()
     }
 
-    fn field_row(
+    pub(super) fn field_row(
         id: &'static str,
         title: &str,
         detail: &str,
@@ -1451,14 +1458,22 @@ impl Workspace {
                     .px(px(20.))
                     .py(px(14.))
                     .overflow_y_scroll()
+                    // Rows keep their height and the page scrolls, rather than squeezing
+                    // them into the panel.
                     .child(
                         div()
-                            .text_size(px(16.))
-                            .font_weight(FontWeight::BOLD)
-                            .pb(px(6.))
-                            .child(page.section.title()),
-                    )
-                    .children(rows),
+                            .flex()
+                            .flex_col()
+                            .flex_none()
+                            .child(
+                                div()
+                                    .text_size(px(16.))
+                                    .font_weight(FontWeight::BOLD)
+                                    .pb(px(6.))
+                                    .child(page.section.title()),
+                            )
+                            .children(rows),
+                    ),
             )
             .into_any_element()
     }

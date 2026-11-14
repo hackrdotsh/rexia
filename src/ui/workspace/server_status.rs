@@ -26,6 +26,8 @@ pub struct ServerReport {
     pub installed: Option<String>,
     /// When the report was made, in Unix seconds.
     pub fetched: u64,
+    /// The host's Tailscale event count when the report was made.
+    pub tailscale_revision: u64,
 }
 
 impl Default for ServerReport {
@@ -37,6 +39,7 @@ impl Default for ServerReport {
             version: Err("not asked yet".into()),
             installed: None,
             fetched: 0,
+            tailscale_revision: 0,
         }
     }
 }
@@ -189,6 +192,7 @@ impl Workspace {
         let host = self.active;
         let handle = self.host().handle.clone();
         let local = handle.endpoint.is_local();
+        let tailscale_revision = handle.snapshot().tailscale_revision;
         self.server_report = ServerReportState::Loading;
         cx.notify();
         cx.spawn(async move |this, cx| {
@@ -208,6 +212,7 @@ impl Workspace {
                 version: version.map_err(|e| e.to_string()),
                 installed,
                 fetched: now_unix(),
+                tailscale_revision,
             };
             let _ = this.update(cx, |ws, cx| {
                 ws.server_report = ServerReportState::Ready(report);
@@ -380,6 +385,7 @@ impl Workspace {
                     .into_any_element(),
             );
         }
+        rows.extend(self.remote_section(theme, cx));
         rows
     }
 }

@@ -99,6 +99,8 @@ pub struct HostModel {
     /// Tabs this client shows instead of the session's active one, by session. The server
     /// keeps one active tab per session, so a window that split off a tab pins its own.
     pub pins: HashMap<String, String>,
+    /// Bumped on every `tailscale_status_changed` event, which updates `server`.
+    pub tailscale_revision: u64,
 }
 
 impl HostModel {
@@ -1014,6 +1016,23 @@ impl Host {
                 }
             }
             "hosts_changed" => self.refresh_hosts(control).await,
+            "tailscale_status_changed" => {
+                // The payload is the new status, or holds it under `tailscale`.
+                let status = if event.payload.get("state").is_some() {
+                    event.payload.clone()
+                } else {
+                    event.payload["tailscale"].clone()
+                };
+                if status.is_object() {
+                    self.shared.update(|m| {
+                        if !m.server.is_object() {
+                            m.server = json!({});
+                        }
+                        m.server["tailscale"] = status.clone();
+                        m.tailscale_revision += 1;
+                    });
+                }
+            }
             "client_call_requested" => {
                 // This client doesn't connect Lua actions to other servers.
                 if let Some(call_id) = event.payload["call_id"].as_str() {

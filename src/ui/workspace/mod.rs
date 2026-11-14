@@ -8,6 +8,7 @@ pub mod gestures;
 mod highlight;
 mod overlay;
 mod preferences;
+pub mod remote;
 pub mod server_status;
 pub mod tab_icons;
 mod toolbar;
@@ -128,6 +129,11 @@ pub struct Workspace {
     highlight: highlight::Track,
     swipe: gestures::SwipeTracker,
     server_report: server_status::ServerReportState,
+    /// The last Tailscale call's error, the call under way, and whether turning it on
+    /// lets tailnet members in.
+    tailscale_error: Option<String>,
+    tailscale_busy: Option<&'static str>,
+    tailscale_members: bool,
     pinch: gestures::PinchTracker,
     swipes: usize,
     /// Whether the window had the desktop's focus at the last draw.
@@ -284,6 +290,9 @@ impl Workspace {
             highlight: Default::default(),
             swipe: Default::default(),
             server_report: Default::default(),
+            tailscale_error: None,
+            tailscale_busy: None,
+            tailscale_members: false,
             pinch: Default::default(),
             swipes: 0,
             window_active: true,
