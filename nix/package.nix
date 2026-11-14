@@ -58,6 +58,7 @@ rustPlatform.buildRustPackage {
       ../src
       ../assets
       ../resources
+      ../vendor
     ];
   };
 
