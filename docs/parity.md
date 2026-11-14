@@ -100,6 +100,10 @@ when checked, and are built in this order; each moves to its section once it's d
 
 Working:
 
+- The terminal grid sits on whole device pixels, as Ghostty's does: a cell is a whole
+  number of device pixels wide (rounded) and tall (rounded up), and the grid starts on a
+  device pixel, so every glyph does too and pixel fonts such as DepartureMono stay crisp.
+
 - Closing busy work asks first: closing a pane or tab, or the other panes or tabs beside
   one (from the actions, the tab's close button or the pane header's), asks when a program
   in it is working, needs attention, failed, or finished without being seen. The question
