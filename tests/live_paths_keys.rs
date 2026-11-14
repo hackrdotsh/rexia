@@ -45,13 +45,15 @@ fn key_hints_and_recent_paths() {
     h.run("pane.go_to_directory", Value::Null);
     h.type_text("/tmp");
     h.press("enter");
-    let recent = h.workspace(|ws| ws.settings.recent_paths.clone());
-    println!("recent paths: {recent:?}");
-    assert!(
+    // It's remembered once the pane has gone there.
+    let recent = h.wait_ui("the recent path", |ws| {
+        let recent = ws.settings.recent_paths.clone();
         recent
             .values()
             .any(|paths| paths.first().map(String::as_str) == Some("/tmp/"))
-    );
+            .then_some(recent)
+    });
+    println!("recent paths: {recent:?}");
     h.run("pane.go_to_directory", Value::Null);
     let titles = loop {
         h.pump();
