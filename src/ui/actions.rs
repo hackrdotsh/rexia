@@ -91,6 +91,41 @@ pub const ACTIONS: &[ActionDef] = &[
         []
     ),
     action!(
+        "client.palette.toggle",
+        "Command Palette…",
+        "App",
+        "command palette search commands actions",
+        [(&["ctrl+shift+p"], None)]
+    ),
+    action!(
+        "client.diagnostics",
+        "Rex Diagnostics",
+        "App",
+        "diagnostics logs debug troubleshoot report keymap",
+        []
+    ),
+    action!(
+        "client.find.open",
+        "Find…",
+        "Find",
+        "find search text scrollback highlight",
+        [(&["ctrl+shift+f"], None)]
+    ),
+    action!(
+        "client.find.next",
+        "Find Next",
+        "Find",
+        "find search next match",
+        [(&["f3"], None)]
+    ),
+    action!(
+        "client.find.previous",
+        "Find Previous",
+        "Find",
+        "find search previous match",
+        [(&["shift+f3"], None)]
+    ),
+    action!(
         "client.mode.enter",
         "Enter Mode",
         "Keys",
@@ -119,6 +154,27 @@ pub const ACTIONS: &[ActionDef] = &[
         "Session",
         "create session add",
         [(&["ctrl+alt+shift+n"], None)]
+    ),
+    action!(
+        "session.switch",
+        "Change Session…",
+        "Session",
+        "session switch jump go",
+        [(&["ctrl+shift+k"], None)]
+    ),
+    action!(
+        "session.rename",
+        "Rename Session",
+        "Session",
+        "rename session name title",
+        []
+    ),
+    action!(
+        "session.close",
+        "Close Session",
+        "Session",
+        "close kill destroy delete session",
+        []
     ),
     action!(
         "session.select",
@@ -178,6 +234,20 @@ pub const ACTIONS: &[ActionDef] = &[
         [],
         args = HOST
     ),
+    action!(
+        "client.host.add",
+        "Add Remote Host…",
+        "Host",
+        "host remote add server machine url https connect",
+        []
+    ),
+    action!(
+        "client.host.remove",
+        "Remove Host…",
+        "Host",
+        "remove forget delete host remote server",
+        []
+    ),
     // Tabs
     action!(
         "client.tab.new",
@@ -192,6 +262,13 @@ pub const ACTIONS: &[ActionDef] = &[
         "Tab",
         "close tab window",
         [(&["ctrl+alt+w"], None)]
+    ),
+    action!(
+        "client.tab.rename",
+        "Rename Tab",
+        "Tab",
+        "rename tab window name title",
+        []
     ),
     action!(
         "client.tab.close_others",
@@ -448,6 +525,48 @@ pub const ACTIONS: &[ActionDef] = &[
         "Move Pane to New Tab",
         "Pane",
         "pane move new tab detach",
+        []
+    ),
+    action!(
+        "pane.move_to_tab",
+        "Move Pane to Tab…",
+        "Pane",
+        "pane move tab send other existing join",
+        []
+    ),
+    action!(
+        "pane.go_to_directory",
+        "Go to Directory…",
+        "Pane",
+        "go to directory folder path cd new tab",
+        [(&["ctrl+alt+g"], None)]
+    ),
+    action!(
+        "pane.go_to",
+        "Go to Anything…",
+        "Pane",
+        "go to anything pane tab session jump switch find",
+        [(&["ctrl+shift+space"], None)]
+    ),
+    action!(
+        "pane.view_activity",
+        "View Activity…",
+        "Pane",
+        "view activity working blocked failed done agents status",
+        []
+    ),
+    action!(
+        "pane.insert_path",
+        "Insert Path…",
+        "Pane",
+        "insert path file folder directory cursor type",
+        [(&["ctrl+alt+i"], None)]
+    ),
+    action!(
+        "pane.rename",
+        "Rename Pane",
+        "Pane",
+        "rename pane block name title label",
         []
     ),
     action!(

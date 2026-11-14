@@ -1,14 +1,14 @@
 //! Running actions: from keys (through the server's keymap), from other clients
 //! (`client.perform`), and from buttons. Actions that belong to the server, such as init.lua
 //! actions and block actions, go back to it with `client.action`.
-use super::Workspace;
+use super::{Workspace, overlay};
 use crate::{
     keymap::{Keymap, Lookup},
     rex::{
         host::{HostCommand, PerformRequest, shell_layout},
         view::{self, View},
     },
-    ui::{actions, keys, terminal::TerminalPane},
+    ui::{actions, keys, terminal::TerminalPane, titles},
 };
 use gpui::{ClipboardItem, Context, Entity, KeyDownEvent, Window};
 use serde_json::{Value, json};
@@ -79,6 +79,29 @@ impl Workspace {
         cx: &mut Context<Self>,
     ) {
         if keys::is_modifier(&event.keystroke) {
+            return;
+        }
+        // Palettes and dialogs take keys first; their fields edit and Esc closes them. The key
+        // that opened a list closes it again.
+        if let Some(kind) = self.list_kind() {
+            let stroke = keys::stroke(&event.keystroke);
+            if let Lookup::Run(binding) = self.keymap.lookup(None, &[stroke.spellings()], |_| true)
+                && binding.action == kind.action()
+            {
+                cx.stop_propagation();
+                self.close_overlay(window, cx);
+            }
+            return;
+        }
+        if self.overlay.is_some() {
+            if self.dialog_key(&event.keystroke.key, window, cx) {
+                cx.stop_propagation();
+            }
+            return;
+        }
+        if let Some(find) = &self.find
+            && gpui::Focusable::focus_handle(find.input.read(cx), cx).is_focused(window)
+        {
             return;
         }
         let stroke = keys::stroke(&event.keystroke);
@@ -157,6 +180,36 @@ impl Workspace {
             payload,
             claim: true,
         });
+    }
+
+    /// The app, system, server and keymap state, for bug reports.
+    pub(super) fn debug_report(&self) -> String {
+        let mut report = format!(
+            "rexia {}\nOS: {} {}\nWayland display: {}\n",
+            env!("CARGO_PKG_VERSION"),
+            std::env::consts::OS,
+            std::env::consts::ARCH,
+            std::env::var("WAYLAND_DISPLAY").unwrap_or_else(|_| "none".into()),
+        );
+        for host in &self.hosts {
+            let m = host.handle.snapshot();
+            report.push_str(&format!(
+                "Host {} ({}): {:?}, API revision {}, {} sessions, client {}\n",
+                host.config.label,
+                host.handle.endpoint,
+                m.connection,
+                m.api_revision,
+                m.sessions.len(),
+                m.client_id.unwrap_or_default(),
+            ));
+        }
+        if let Some(path) = &self.keymap.config_path {
+            report.push_str(&format!("Config: {path}\n"));
+        }
+        for line in &self.keymap.diagnostics {
+            report.push_str(&format!("Keymap: {line}\n"));
+        }
+        report
     }
 
     /// Answer other clients' `client.perform` requests.
@@ -289,29 +342,74 @@ impl Workspace {
                 .detach();
             }
             "client.debug.copy" => {
-                let mut report = format!(
-                    "rexia {}\nOS: {} {}\nWayland display: {}\n",
-                    env!("CARGO_PKG_VERSION"),
-                    std::env::consts::OS,
-                    std::env::consts::ARCH,
-                    std::env::var("WAYLAND_DISPLAY").unwrap_or_else(|_| "none".into()),
+                cx.write_to_clipboard(ClipboardItem::new_string(self.debug_report()))
+            }
+            "client.diagnostics" => {
+                let report = self.debug_report();
+                self.open_diagnostics(report, cx);
+            }
+            "client.palette.toggle" => self.open_list(overlay::ListKind::Commands, window, cx),
+            "session.switch" => self.open_list(overlay::ListKind::Sessions, window, cx),
+            "pane.go_to" => self.open_list(overlay::ListKind::GoTo, window, cx),
+            "pane.view_activity" => self.open_list(overlay::ListKind::Activity, window, cx),
+            "pane.move_to_tab" => self.open_list(overlay::ListKind::MoveToTab, window, cx),
+            "pane.go_to_directory" => {
+                self.open_list(overlay::ListKind::Directory { insert: false }, window, cx)
+            }
+            "pane.insert_path" => {
+                self.open_list(overlay::ListKind::Directory { insert: true }, window, cx)
+            }
+            "client.host.add" => self.open_add_host(window, cx),
+            "client.host.remove" => self.open_list(overlay::ListKind::RemoveHost, window, cx),
+            "client.find.open" => self.open_find(window, cx),
+            "client.find.next" => self.find_step(true, window, cx),
+            "client.find.previous" => self.find_step(false, window, cx),
+            "session.rename" => {
+                let id = need_session()?;
+                let label = model
+                    .session(&id)
+                    .map(|s| s.label.clone())
+                    .unwrap_or_default();
+                self.open_rename(overlay::RenameTarget::Session(id), label, window, cx);
+            }
+            "client.tab.rename" => {
+                let window_view = window_view
+                    .as_ref()
+                    .ok_or_else(|| refused("No tab is open"))?;
+                let label = titles::tab_title(window_view, &model);
+                self.open_rename(
+                    overlay::RenameTarget::Window(window_view.id().to_owned()),
+                    label,
+                    window,
+                    cx,
                 );
-                for host in &self.hosts {
-                    let m = host.handle.snapshot();
-                    report.push_str(&format!(
-                        "Host {} ({}): {:?}, API revision {}, {} sessions, client {}\n",
-                        host.config.label,
-                        host.handle.endpoint,
-                        m.connection,
-                        m.api_revision,
-                        m.sessions.len(),
-                        m.client_id.unwrap_or_default(),
-                    ));
-                }
-                for line in &self.keymap.diagnostics {
-                    report.push_str(&format!("Keymap: {line}\n"));
-                }
-                cx.write_to_clipboard(ClipboardItem::new_string(report));
+            }
+            "pane.rename" => {
+                let block = need_block()?;
+                let label = window_view
+                    .as_ref()
+                    .and_then(|w| w.block(&block))
+                    .map(|b| titles::pane_title(b, model.blocks.get(&block)))
+                    .unwrap_or_default();
+                self.open_rename(overlay::RenameTarget::Block(block), label, window, cx);
+            }
+            "session.close" => {
+                let id = need_session()?;
+                let label = model
+                    .session(&id)
+                    .map(|s| s.label.clone())
+                    .unwrap_or_default();
+                let tabs = view.as_ref().map_or(0, |v| v.windows.len());
+                let panes = view.as_ref().map_or(0, |v| {
+                    v.windows.iter().map(|w| w.blocks().count()).sum::<usize>()
+                });
+                self.open_confirm(
+                    format!("Close {label}?"),
+                    format!("The programs running in its {panes} panes across {tabs} tabs end."),
+                    "Close Session".into(),
+                    overlay::Confirm::CloseSession { id },
+                    cx,
+                );
             }
             "client.notice.dismiss" => self.notice = None,
             "client.config.copy_path" => {
@@ -394,7 +492,10 @@ impl Workspace {
                         .iter()
                         .position(|h| h.config.id == wanted || h.config.label == wanted)
                         .ok_or_else(|| refused(format!("There's no host {wanted}")))?,
-                    None => (self.active + 1) % self.hosts.len(),
+                    None => {
+                        self.open_list(overlay::ListKind::Hosts, window, cx);
+                        return Ok(Value::Null);
+                    }
                 };
                 self.switch_host(next, cx);
             }

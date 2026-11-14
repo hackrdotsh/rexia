@@ -1,6 +1,7 @@
 //! The main window: a toolbar with the session's tabs, a sidebar of hosts and sessions,
 //! and the active tab's panes laid out exactly as the server arranges them.
 mod actions;
+mod overlay;
 
 use super::{
     components::{dot, heading, icon_button, list_row, small_icon_button, title},
@@ -28,6 +29,7 @@ use gpui::{
     MouseMoveEvent, MouseUpEvent, Pixels, Point, SharedString, Task, Window, canvas, div,
     prelude::*, px, relative,
 };
+pub use overlay::{Confirm, ListKind, RenameTarget};
 use serde_json::{Value, json};
 use std::{
     collections::{HashMap, HashSet},
@@ -38,6 +40,43 @@ use std::{
 pub struct HostEntry {
     pub config: HostConfig,
     pub handle: HostHandle,
+    /// The host's ID in the home server's host list, for hosts that come from it.
+    pub server_id: Option<String>,
+    _wake: Task<()>,
+}
+
+/// Start a host worker and the task that redraws the workspace when it changes.
+fn spawn_host(
+    config: HostConfig,
+    identity: &Identity,
+    preferred: Option<String>,
+    visible: bool,
+    window: &mut Window,
+    cx: &mut Context<Workspace>,
+) -> HostEntry {
+    let handle = HostHandle::spawn(endpoint_for(&config), identity.clone(), preferred);
+    handle.send(HostCommand::TerminalTheme(Some(
+        Theme::get(cx).terminal_theme(),
+    )));
+    handle.send(HostCommand::Visible(visible));
+    handle.send(HostCommand::Keymap(super::actions::keymap_request()));
+    let wake = handle.wake.clone();
+    let task = cx.spawn_in(window, async move |this, cx| {
+        while wake.recv_async().await.is_ok() {
+            if this
+                .update_in(cx, |ws, window, cx| ws.sync(window, cx))
+                .is_err()
+            {
+                break;
+            }
+        }
+    });
+    HostEntry {
+        config,
+        handle,
+        server_id: None,
+        _wake: task,
+    }
 }
 
 enum Drag {
@@ -79,6 +118,9 @@ pub struct Workspace {
     modes: Vec<String>,
     /// Keys typed so far of a sequence, each as its spellings.
     pending: Vec<Vec<String>>,
+    overlay: Option<overlay::Overlay>,
+    find: Option<overlay::FindBar>,
+    identity: Identity,
     _tasks: Vec<Task<()>>,
     _watcher: Option<noctalia::Watcher>,
 }
@@ -126,7 +168,6 @@ impl Workspace {
             .and_then(|id| settings.hosts.iter().position(|h| &h.id == id))
             .unwrap_or(0);
         let mut tasks = Vec::new();
-        let theme = Theme::get(cx).terminal_theme();
         let hosts: Vec<HostEntry> = settings
             .hosts
             .iter()
@@ -135,25 +176,14 @@ impl Workspace {
                 let preferred = (index == active)
                     .then(|| settings.last_session.clone())
                     .flatten();
-                let handle = HostHandle::spawn(endpoint_for(config), identity.clone(), preferred);
-                handle.send(HostCommand::TerminalTheme(Some(theme.clone())));
-                handle.send(HostCommand::Visible(index == active));
-                handle.send(HostCommand::Keymap(super::actions::keymap_request()));
-                let wake = handle.wake.clone();
-                tasks.push(cx.spawn_in(window, async move |this, cx| {
-                    while wake.recv_async().await.is_ok() {
-                        if this
-                            .update_in(cx, |ws, window, cx| ws.sync(window, cx))
-                            .is_err()
-                        {
-                            break;
-                        }
-                    }
-                }));
-                HostEntry {
-                    config: config.clone(),
-                    handle,
-                }
+                spawn_host(
+                    config.clone(),
+                    &identity,
+                    preferred,
+                    index == active,
+                    window,
+                    cx,
+                )
             })
             .collect();
 
@@ -203,8 +233,68 @@ impl Workspace {
             keymap_source: None,
             modes: Vec::new(),
             pending: Vec::new(),
+            overlay: None,
+            find: None,
+            identity,
             _tasks: tasks,
             _watcher: watcher,
+        }
+    }
+
+    /// The host whose server keeps the host list: this machine's, else the first.
+    pub fn home(&self) -> usize {
+        self.hosts
+            .iter()
+            .position(|h| h.config.is_local())
+            .unwrap_or(0)
+    }
+
+    /// Show the remote hosts saved on the home server, as every Rex client does.
+    fn reconcile_hosts(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        let listed = self.hosts[self.home()].handle.snapshot().hosts;
+        let listed: Vec<(String, String, String)> = listed
+            .iter()
+            .filter_map(|h| {
+                let id = h["id"].as_str()?.to_owned();
+                let label = h["label"].as_str()?.to_owned();
+                let endpoint = h["endpoints"].as_array()?.first()?.as_str()?.to_owned();
+                Some((id, label, endpoint))
+            })
+            .collect();
+        let active_id = self.hosts[self.active].config.id.clone();
+        let before = self.hosts.len();
+        self.hosts.retain(|h| {
+            h.server_id
+                .as_ref()
+                .is_none_or(|id| listed.iter().any(|(listed, _, _)| listed == id))
+        });
+        for (id, label, endpoint) in listed {
+            if self.hosts.iter().any(|h| h.server_id.as_ref() == Some(&id)) {
+                continue;
+            }
+            let config = HostConfig {
+                id: id.clone(),
+                label,
+                endpoint,
+            };
+            let mut entry = spawn_host(config, &self.identity, None, false, window, cx);
+            entry.server_id = Some(id);
+            self.hosts.push(entry);
+        }
+        if self.hosts.len() != before
+            || self
+                .hosts
+                .get(self.active)
+                .is_none_or(|h| h.config.id != active_id)
+        {
+            self.active = self
+                .hosts
+                .iter()
+                .position(|h| h.config.id == active_id)
+                .unwrap_or_else(|| self.home());
+            self.hosts[self.active]
+                .handle
+                .send(HostCommand::Visible(true));
         }
     }
 
@@ -226,6 +316,7 @@ impl Workspace {
 
     /// Bring panes in line with the active host's model after it changed.
     pub fn sync(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        self.reconcile_hosts(window, cx);
         self.refresh_keymap();
         self.handle_performs(window, cx);
         let model = self.model();
@@ -1396,5 +1487,7 @@ impl Render for Workspace {
             )
             .children(notice)
             .children(self.key_hint(&theme))
+            .children(self.render_find(&theme, cx))
+            .children(self.render_overlay(&theme, cx))
     }
 }
