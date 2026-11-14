@@ -46,7 +46,6 @@ when checked, and are built in this order; each moves to its section once it's d
 
 | Gap | Source |
 | --- | --- |
-| Ask before closing a tab, pane or session whose program is working, blocked, unread or just finished | preview.25 |
 | Tooltips on buttons, with their shortcuts | preview.9, 23 |
 | Hover cards for tabs and pane headers: each pane's program, activity and directory; click a pane to go to it | preview.14, 16 |
 | Mute Tab: no notifications, sounds or badge count from it; a crossed-out speaker; kept across launches | preview.24 |
@@ -100,6 +99,12 @@ when checked, and are built in this order; each moves to its section once it's d
 ## Behavior
 
 Working:
+
+- Closing busy work asks first: closing a pane or tab, or the other panes or tabs beside
+  one (from the actions, the tab's close button or the pane header's), asks when a program
+  in it is working, needs attention, failed, or finished without being seen. The question
+  names each program and what it's doing; clicking one goes to its pane, Enter closes and
+  Escape keeps them. Closing a session always asks, and names its busy programs too.
 
 - Braille (U+2800–28FF) and block elements (U+2580–259F) are drawn by rexia rather than
   taken from a font, as Ghostty does: braille as square dots on a 2 × 4 grid sized to the
