@@ -10,6 +10,7 @@ mod overlay;
 mod preferences;
 pub mod remote;
 pub mod server_status;
+mod ssh;
 pub mod tab_icons;
 mod toolbar;
 mod windows;
@@ -128,6 +129,8 @@ pub struct Workspace {
     reveal: toolbar::Reveal,
     highlight: highlight::Track,
     swipe: gestures::SwipeTracker,
+    /// The chosen SSH agent's status in words, and the socket it describes.
+    ssh_agent_status: Option<(Option<PathBuf>, String)>,
     server_report: server_status::ServerReportState,
     /// The last Tailscale call's error, the call under way, and whether turning it on
     /// lets tailnet members in.
@@ -211,6 +214,8 @@ impl Workspace {
         window: &mut Window,
         cx: &mut Context<Self>,
     ) -> Self {
+        // ssh:// hosts below connect with the chosen agent.
+        crate::rex::ssh_agent::choose(settings.ssh_agent.clone());
         let identity = Identity {
             label: settings.client_label.clone(),
             ..Default::default()
@@ -289,6 +294,7 @@ impl Workspace {
             reveal: Default::default(),
             highlight: Default::default(),
             swipe: Default::default(),
+            ssh_agent_status: None,
             server_report: Default::default(),
             tailscale_error: None,
             tailscale_busy: None,

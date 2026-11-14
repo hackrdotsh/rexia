@@ -500,6 +500,8 @@ pub struct Settings {
     /// Keys the user gave rexia's actions with Change Shortcut, replacing their defaults.
     /// An empty list leaves the action without a key.
     pub shortcuts: std::collections::BTreeMap<String, Vec<String>>,
+    /// The SSH agent socket ssh asks for keys for ssh:// hosts; none leaves it to ssh.
+    pub ssh_agent: Option<std::path::PathBuf>,
 }
 
 impl Default for Settings {
@@ -513,6 +515,7 @@ impl Default for Settings {
             last_host: None,
             last_session: None,
             shortcuts: Default::default(),
+            ssh_agent: None,
         }
     }
 }

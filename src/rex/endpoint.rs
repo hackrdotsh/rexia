@@ -78,6 +78,11 @@ impl SshTarget {
     /// The arguments for ssh: no prompts (there's no terminal to answer them), keepalives
     /// so a dead link is noticed, then the host and the command.
     pub fn ssh_args(&self) -> Vec<String> {
+        self.ssh_args_with(super::ssh_agent::chosen().as_deref())
+    }
+
+    /// ssh's arguments, telling it which agent to ask for keys when one was chosen.
+    pub fn ssh_args_with(&self, agent: Option<&std::path::Path>) -> Vec<String> {
         let mut args: Vec<String> = [
             "-T",
             "-o",
@@ -89,6 +94,16 @@ impl SshTarget {
         ]
         .map(String::from)
         .to_vec();
+        if let Some(agent) = agent {
+            let path = agent.display().to_string();
+            // ssh splits option values at spaces unless they're quoted.
+            let value = if path.contains(char::is_whitespace) {
+                format!("\"{path}\"")
+            } else {
+                path
+            };
+            args.extend(["-o".into(), format!("IdentityAgent={value}")]);
+        }
         if let Some(port) = self.port {
             args.extend(["-p".into(), port.to_string()]);
         }
@@ -163,8 +178,14 @@ type Stderr = std::sync::Arc<std::sync::Mutex<String>>;
 fn spawn_ssh(target: &SshTarget) -> Result<(SshStream, Stderr)> {
     use std::process::Stdio;
     let program = std::env::var("REXIA_SSH").unwrap_or_else(|_| "ssh".into());
-    let mut child = tokio::process::Command::new(&program)
-        .args(target.ssh_args())
+    let agent = super::ssh_agent::chosen();
+    let mut command = tokio::process::Command::new(&program);
+    // Programs ssh starts locally, such as a ProxyCommand, find the same agent.
+    if let Some(agent) = &agent {
+        command.env("SSH_AUTH_SOCK", agent);
+    }
+    let mut child = command
+        .args(target.ssh_args_with(agent.as_deref()))
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
@@ -386,8 +407,17 @@ mod tests {
         assert_eq!(target.port, Some(2222));
         assert_eq!(target.socket, None);
         assert_eq!(target.to_string(), "ssh://alice@build.example.com:2222");
-        let args = target.ssh_args();
+        let args = target.ssh_args_with(None);
         assert!(args.windows(2).any(|w| w == ["-p", "2222"]));
+        assert!(!args.iter().any(|a| a.starts_with("IdentityAgent")));
+        // A chosen agent goes to ssh as IdentityAgent, quoted when its path has spaces.
+        let with = target.ssh_args_with(Some(std::path::Path::new("/run/user/1000/gcr/ssh")));
+        assert!(
+            with.windows(2)
+                .any(|w| w == ["-o", "IdentityAgent=/run/user/1000/gcr/ssh"])
+        );
+        let spaced = target.ssh_args_with(Some(std::path::Path::new("/home/a b/agent.sock")));
+        assert!(spaced.contains(&"IdentityAgent=\"/home/a b/agent.sock\"".to_owned()));
         assert_eq!(args[args.len() - 2], "alice@build.example.com");
         assert_eq!(
             args.last().unwrap(),

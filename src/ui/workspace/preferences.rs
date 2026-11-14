@@ -72,7 +72,9 @@ pub struct SettingsPage {
     pub(super) ts_hostname: Entity<TextInput>,
     pub(super) ts_tags: Entity<TextInput>,
     pub(super) ts_control: Entity<TextInput>,
-    _subscriptions: [Subscription; 3],
+    /// A custom SSH agent socket; Enter uses it.
+    pub(super) ssh_socket: Entity<TextInput>,
+    _subscriptions: [Subscription; 4],
 }
 
 fn state_mut(settings: &mut Settings, state: ProgramState) -> &mut StateActivity {
@@ -208,10 +210,25 @@ impl Workspace {
                 ws.commit_settings_fields(cx);
             }
         };
+        let ssh_socket = cx.new(|cx| TextInput::new("/path/to/agent.sock", cx));
+        if let Some(socket) = &self.settings.ssh_agent {
+            let text = socket.display().to_string();
+            ssh_socket.update(cx, |input, cx| input.set_text(text, cx));
+        }
         let subscriptions = [
             cx.subscribe_in(&label, window, on_submit),
             cx.subscribe_in(&font, window, on_submit),
             cx.subscribe_in(&fallbacks, window, on_submit),
+            cx.subscribe_in(
+                &ssh_socket,
+                window,
+                |ws: &mut Workspace, input: &Entity<TextInput>, event: &InputEvent, _, cx| {
+                    if let InputEvent::Submit { .. } = event {
+                        let text = input.read(cx).text().trim().to_owned();
+                        ws.choose_ssh_agent((!text.is_empty()).then(|| text.into()), cx);
+                    }
+                },
+            ),
         ];
         // Keys go to the page, not the terminal underneath.
         window.focus(&self.focus, cx);
@@ -223,6 +240,7 @@ impl Workspace {
             ts_hostname: cx.new(|cx| TextInput::new("rex", cx)),
             ts_tags: cx.new(|cx| TextInput::new("tag:rex", cx)),
             ts_control: cx.new(|cx| TextInput::new("Tailscale's own", cx)),
+            ssh_socket,
             _subscriptions: subscriptions,
         }));
         cx.notify();
@@ -246,9 +264,13 @@ impl Workspace {
             return;
         };
         page.section = section;
-        // The Server section asks the server about itself each time it opens.
+        // The Server section asks the server about itself each time it opens, and the
+        // hosts section asks the SSH agent how it is.
         if section == Section::Server {
             self.refresh_server_report(cx);
+        }
+        if section == Section::Hosts {
+            self.refresh_ssh_agent_status(cx);
         }
         let Some(Overlay::Settings(page)) = &mut self.overlay else {
             return;
@@ -294,6 +316,7 @@ impl Workspace {
     }
 
     pub(super) fn apply_settings(&mut self, cx: &mut Context<Self>) {
+        crate::rex::ssh_agent::choose(self.settings.ssh_agent.clone());
         self.font = super::terminal_font(&self.settings);
         let font = self.font.clone();
         let terminal = &self.settings.terminal;
@@ -1384,6 +1407,7 @@ impl Workspace {
             }
             rows.push(line.into_any_element());
         }
+        rows.extend(self.ssh_rows(page, theme, cx));
         rows
     }
 
