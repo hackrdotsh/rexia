@@ -6,7 +6,7 @@ preview.19 server.
 
 ## Actions
 
-Rex for Mac lists 116 actions. rexia implements 102 of them under the same names, so
+Rex for Mac lists 116 actions. rexia implements 103 of them under the same names, so
 init.lua bindings, `rex do` and `client.perform` reach rexia the same way. It also adds
 three of its own: `client.sidebar.activity.toggle`, `.by_session` and `.by_priority`.
 Preview.30's Enable Cursor Shaders and Change Cursor Shader aren't in the published action
@@ -35,7 +35,7 @@ Not implemented yet:
 | --- | --- |
 | `client.theme.change`, `client.theme.import`, `client.appearance.switch_mode` | Not planned: colors follow Noctalia. |
 | `client.update.*` (7) | Not applicable: rexia ships through Nix. |
-| `client.onboarding`, `client.pair_device`, `client.permissions`, `client.quick_look` | macOS-specific or tied to Rex.app's installer. |
+| `client.pair_device`, `client.permissions`, `client.quick_look` | macOS-specific or tied to Rex.app's installer. |
 
 ## Settings
 
@@ -75,6 +75,13 @@ Not implemented yet:
 ## Behavior
 
 Working:
+
+- Open Onboarding Session… (`client.onboarding`) opens a session with the server's
+  onboarding block (`com.superlogical.onboarding`), or shows the one already open. The
+  server keeps its step, so every client showing it stays together; rexia draws its own
+  Linux steps: welcome, how rexia looks (tabs and pane spacing), keys (where init.lua is,
+  Change Shortcut), coding agents (Install Rex for Agents), and done (close the session).
+  It doesn't migrate other terminals' settings the way Rex for Mac's walkthrough does.
 
 - Panes laid out exactly as the server arranges them, with dividers, floating layers,
   zoom and minimized layers.
