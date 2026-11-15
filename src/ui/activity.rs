@@ -81,6 +81,11 @@ impl Tracker {
         self.unseen.contains(key)
     }
 
+    /// The panes holding attention the user hasn't seen.
+    pub fn unseen(&self) -> impl Iterator<Item = &PaneKey> {
+        self.unseen.iter()
+    }
+
     pub fn unseen_count(&self) -> usize {
         self.unseen.len()
     }

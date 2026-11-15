@@ -563,6 +563,13 @@ impl Workspace {
                     .ok_or_else(|| refused("No tab is open"))?;
                 self.request_close(super::close_guard::CloseTarget::Tab(id), cx);
             }
+            "client.tab.mute.toggle" => {
+                let id = window_view
+                    .as_ref()
+                    .map(|w| w.id().to_owned())
+                    .ok_or_else(|| refused("No tab is open"))?;
+                self.toggle_tab_mute(self.active, id, cx);
+            }
             "client.tab.close_others" => {
                 let keep = view
                     .as_ref()

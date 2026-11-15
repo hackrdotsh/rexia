@@ -167,12 +167,15 @@ impl Workspace {
         let focused = window.is_window_active();
         let settings = self.settings.notifications.clone();
         let models: Vec<HostModel> = self.hosts.iter().map(|h| h.handle.snapshot()).collect();
+        self.learn_tabs(&models);
         for (host, model) in models.iter().enumerate() {
             for change in self.tracker.update(host, model) {
                 let in_view =
                     focused && self.on_screen(host, &change.session, &change.block, model);
                 let toggles = settings.for_state(change.record.state);
+                // A muted tab keeps its dot but makes no noise.
                 if in_view
+                    || self.pane_muted(host, &change.block, model)
                     || !matches!(
                         change.record.state,
                         ProgramState::Blocked
@@ -246,7 +249,10 @@ impl Workspace {
             for note in notes {
                 let in_view =
                     focused && self.on_screen(host, &note.session_id, &note.block_id, model);
-                if in_view || !settings.terminal_notifications {
+                if in_view
+                    || !settings.terminal_notifications
+                    || self.pane_muted(host, &note.block_id, model)
+                {
                     continue;
                 }
                 if let Some(notifier) = &self.notifier {
@@ -283,7 +289,7 @@ impl Workspace {
         }
         if let Some(notifier) = &self.notifier {
             notifier.badge(if settings.badge {
-                self.tracker.unseen_count() as u32
+                self.badge_count() as u32
             } else {
                 0
             });

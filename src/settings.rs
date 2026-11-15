@@ -652,6 +652,9 @@ pub struct Settings {
     /// The origins rexia last started each host's server with (by host ID), and which
     /// server process that was, so changes since show as pending.
     pub applied_origins: std::collections::BTreeMap<String, AppliedOrigins>,
+    /// Muted tabs, by host ID: their window IDs. A muted tab sends no notifications or
+    /// sounds and adds nothing to the launcher badge.
+    pub muted_tabs: std::collections::BTreeMap<String, Vec<String>>,
 }
 
 /// Web client origins a server was started with.
@@ -682,6 +685,7 @@ impl Default for Settings {
             web_origins: Vec::new(),
             rex_location: None,
             applied_origins: Default::default(),
+            muted_tabs: Default::default(),
         }
     }
 }

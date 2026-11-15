@@ -56,6 +56,7 @@ icons![
     "settings",
     "terminal-2",
     "trash",
+    "volume-off",
     "world",
     "x",
 ];

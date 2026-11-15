@@ -15,6 +15,7 @@ mod highlight;
 pub mod hover_card;
 pub mod links;
 pub mod motion;
+mod mute;
 pub mod onboarding;
 mod overlay;
 mod preferences;
@@ -150,6 +151,11 @@ pub struct Workspace {
     /// Where tabs and pane headers were last drawn, by `tab:ID`, `side-tab:ID` and
     /// `header:BLOCK`.
     element_bounds: HashMap<String, Bounds<Pixels>>,
+    /// The tab each pane was last seen in, by host and block, for sessions whose layout
+    /// isn't loaded now.
+    known_tabs: HashMap<(usize, String), String>,
+    /// Sessions whose layout is being fetched to learn their panes' tabs.
+    fetching_tabs: HashSet<(usize, String)>,
     reveal: toolbar::Reveal,
     highlight: highlight::Track,
     swipe: gestures::SwipeTracker,
@@ -348,6 +354,8 @@ impl Workspace {
             area: Bounds::default(),
             notice_area: None,
             element_bounds: HashMap::new(),
+            known_tabs: HashMap::new(),
+            fetching_tabs: HashSet::new(),
             reveal: Default::default(),
             highlight: Default::default(),
             swipe: Default::default(),
@@ -490,6 +498,7 @@ impl Workspace {
         self.reconcile_hosts(window, cx);
         self.refresh_keymap();
         self.handle_performs(window, cx);
+        self.fetch_unknown_tabs(cx);
         self.process_activity(window);
         self.autobalance();
         let model = self.model();
@@ -921,6 +930,7 @@ impl Workspace {
                 let active = active_window.as_deref() == Some(window.id());
                 let label = titles::tab_title(window, model);
                 let activity = self.tab_mark(self.active, window, model);
+                let muted = self.tab_muted(self.active, window.id());
                 // Filling tabs show a background only when there's more than one.
                 let lone = fill && count < 2;
                 let (fg, bg) = if active && !lone {
@@ -954,6 +964,16 @@ impl Workspace {
                     .relative()
                     .child(self.track_bounds(format!("tab:{id}"), cx))
                     .on_click(cx.listener(move |ws, _, _, cx| ws.select_tab(select_id.clone(), cx)))
+                    .on_mouse_down(
+                        MouseButton::Right,
+                        cx.listener({
+                            let id = id.clone();
+                            move |ws, event: &gpui::MouseDownEvent, _, cx| {
+                                ws.open_tab_menu(id.clone(), event.position, cx);
+                                cx.stop_propagation();
+                            }
+                        }),
+                    )
                     .on_mouse_up(
                         MouseButton::Middle,
                         cx.listener(move |ws, _, _, cx| {
@@ -977,6 +997,7 @@ impl Workspace {
                             .text_size(px(13.))
                             .child(label),
                     )
+                    .when(muted, |d| d.child(muted_mark(fg, theme)))
                     .children(
                         activity.map(|(state, badge)| activity_mark(state, badge, active, theme)),
                     )
@@ -1185,9 +1206,22 @@ impl Workspace {
                                         .whitespace_nowrap()
                                         .child(titles::tab_title(window, &model)),
                                 )
+                                .when(self.tab_muted(index, window.id()), |d| {
+                                    d.child(muted_mark(theme.text_muted, theme))
+                                })
                                 .children(self.tab_mark(index, window, &model).map(
                                     |(state, badge)| activity_mark(state, badge, false, theme),
                                 ))
+                                .on_mouse_down(MouseButton::Right, {
+                                    let id = window_id.clone();
+                                    cx.listener(move |ws, event: &gpui::MouseDownEvent, _, cx| {
+                                        if index != ws.active {
+                                            ws.switch_host(index, cx);
+                                        }
+                                        ws.open_tab_menu(id.clone(), event.position, cx);
+                                        cx.stop_propagation();
+                                    })
+                                })
                                 .hoverable_tooltip(
                                     self.hover_card(
                                         hover_card::CardTarget::Tab(window_id.clone()),
@@ -1776,6 +1810,15 @@ fn divider_guide(divider: &view::Divider, theme: &Theme) -> AnyElement {
             .w(relative(rect.w as f32))
             .into_any_element()
     }
+}
+
+/// The crossed-out speaker a muted tab shows.
+fn muted_mark(color: Hsla, _theme: &Theme) -> AnyElement {
+    icon("volume-off")
+        .flex_none()
+        .size(px(13.))
+        .text_color(color.opacity(0.8))
+        .into_any_element()
 }
 
 pub(super) fn state_color(state: ProgramState, theme: &Theme) -> Hsla {

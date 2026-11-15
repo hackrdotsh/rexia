@@ -21,6 +21,16 @@ pub enum Command {
     OpenLink(String),
     Copy(String),
     ShowInFiles(PathBuf),
+    /// Something done to a tab, by its window ID.
+    Tab(TabCommand, String),
+}
+
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub enum TabCommand {
+    Rename,
+    Mute,
+    CloseOthers,
+    Close,
 }
 
 #[derive(Clone, Debug)]
@@ -182,6 +192,50 @@ impl Workspace {
         groups
     }
 
+    /// Right-click on a tab: rename, mute and close it, as Rex's tab menu does.
+    pub fn open_tab_menu(&mut self, window_id: String, at: Point<Pixels>, cx: &mut Context<Self>) {
+        let model = self.model();
+        let Some(session) = model.selected.clone() else {
+            return;
+        };
+        let tabs = model.view().map_or(0, |v| v.windows.len());
+        let muted = self.tab_muted(self.active, &window_id);
+        let item = |label: &str, command: TabCommand, action: &str, enabled: bool| Item {
+            label: label.to_owned(),
+            command: Command::Tab(command, window_id.clone()),
+            enabled,
+            shortcut: Some(self.shortcut_of(action)).filter(|s| !s.is_empty() && s != "None"),
+        };
+        let groups = vec![
+            vec![
+                item("Rename Tab…", TabCommand::Rename, "client.tab.rename", true),
+                item(
+                    if muted { "Unmute Tab" } else { "Mute Tab" },
+                    TabCommand::Mute,
+                    "client.tab.mute.toggle",
+                    true,
+                ),
+            ],
+            vec![
+                item(
+                    "Close Other Tabs",
+                    TabCommand::CloseOthers,
+                    "client.tab.close_others",
+                    tabs > 1,
+                ),
+                item("Close Tab", TabCommand::Close, "client.tab.close", true),
+            ],
+        ];
+        self.context_menu = Some(Box::new(ContextMenu {
+            session,
+            block: String::new(),
+            at,
+            groups,
+            highlighted: None,
+        }));
+        cx.notify();
+    }
+
     /// The menu's labels, in order, while it's open, for tests. Disabled ones end in `(off)`.
     pub fn context_menu_labels(&self) -> Option<Vec<String>> {
         let menu = self.context_menu.as_ref()?;
@@ -236,8 +290,34 @@ impl Workspace {
             Command::OpenLink(link) => self.open_link(link, cx),
             Command::Copy(text) => cx.write_to_clipboard(ClipboardItem::new_string(text)),
             Command::ShowInFiles(path) => self.show_in_files(path, cx),
+            Command::Tab(command, id) => self.tab_command(command, id, window, cx),
         }
         cx.notify();
+    }
+
+    fn tab_command(
+        &mut self,
+        command: TabCommand,
+        id: String,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        match command {
+            TabCommand::Rename => {
+                let model = self.model();
+                let label = model
+                    .view()
+                    .and_then(|v| v.window(&id))
+                    .map(|w| crate::ui::titles::tab_title(w, &model))
+                    .unwrap_or_default();
+                self.open_rename(super::overlay::RenameTarget::Window(id), label, window, cx);
+            }
+            TabCommand::Mute => self.toggle_tab_mute(self.active, id, cx),
+            TabCommand::CloseOthers => {
+                self.request_close(super::close_guard::CloseTarget::OtherTabs(id), cx)
+            }
+            TabCommand::Close => self.request_close(super::close_guard::CloseTarget::Tab(id), cx),
+        }
     }
 
     /// Show a file in the file manager, or open its folder when there's none to ask.

@@ -341,6 +341,13 @@ pub const ACTIONS: &[ActionDef] = &[
         []
     ),
     action!(
+        "client.tab.mute.toggle",
+        "Mute or Unmute Tab",
+        "Tab",
+        "mute unmute silence quiet notifications sounds badge tab",
+        []
+    ),
+    action!(
         "client.tab.close_others",
         "Close Other Tabs",
         "Tab",
