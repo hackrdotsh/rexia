@@ -327,6 +327,8 @@ pub struct TerminalPane {
     /// The mouse button a program is receiving reports for.
     reporting: Option<&'static str>,
     selecting: bool,
+    /// The cell a Ctrl-click went down on, to open its link when released there.
+    link_press: Option<(u16, u16)>,
     pub copy_on_select: bool,
     /// Corrections to program colors.
     pub colors: TextColors,
@@ -397,6 +399,7 @@ impl TerminalPane {
             requested: None,
             reporting: None,
             selecting: false,
+            link_press: None,
             copy_on_select: false,
             colors: TextColors::default(),
             padding_fill: PaddingFill::Off,
@@ -1043,23 +1046,10 @@ impl TerminalPane {
         );
         let at = self.cell_at(event.position);
         self.pointer = Some(at);
-        // Ctrl-click opens a program's OSC 8 link, as in Ghostty.
-        if event.button == MouseButton::Left
-            && event.modifiers.control
-            && !event.modifiers.shift
-            && let Some(pane) = self.pane()
-        {
-            let (x, y) = at;
-            cx.spawn(async move |this, cx| {
-                let link = pane
-                    .ask(|reply| PaneCommand::LinkAt { x, y, reply })
-                    .await
-                    .flatten();
-                if let Some(link) = link {
-                    let _ = this.update(cx, |_, cx| cx.emit(PaneEvent::OpenLink(link)));
-                }
-            })
-            .detach();
+        // Ctrl-click opens a program's OSC 8 link, as in Ghostty, once released on the same
+        // cell: Ctrl-drag picks the pane up instead.
+        if event.button == MouseButton::Left && event.modifiers.control && !event.modifiers.shift {
+            self.link_press = Some(at);
             return;
         }
         let button = match event.button {
@@ -1137,6 +1127,24 @@ impl TerminalPane {
             return;
         }
         let at = self.cell_at(event.position);
+        if let Some(pressed) = self.link_press.take()
+            && pressed == at
+            && event.button == MouseButton::Left
+            && let Some(pane) = self.pane()
+        {
+            let (x, y) = at;
+            cx.spawn(async move |this, cx| {
+                let link = pane
+                    .ask(|reply| PaneCommand::LinkAt { x, y, reply })
+                    .await
+                    .flatten();
+                if let Some(link) = link {
+                    let _ = this.update(cx, |_, cx| cx.emit(PaneEvent::OpenLink(link)));
+                }
+            })
+            .detach();
+            return;
+        }
         if let Some(button) = self.reporting.take() {
             self.mouse_report("release", Some(button), at, &event.modifiers);
             return;

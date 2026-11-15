@@ -8,6 +8,7 @@ pub mod close_guard;
 pub mod context_menu;
 mod cursor_shaders;
 mod developer;
+pub mod dragging;
 mod extras;
 mod filter;
 pub mod gestures;
@@ -151,11 +152,15 @@ pub struct Workspace {
     /// Where tabs and pane headers were last drawn, by `tab:ID`, `side-tab:ID` and
     /// `header:BLOCK`.
     element_bounds: HashMap<String, Bounds<Pixels>>,
+    /// The previous frame's, read while this frame's are being recorded.
+    drawn_bounds: HashMap<String, Bounds<Pixels>>,
     /// The tab each pane was last seen in, by host and block, for sessions whose layout
     /// isn't loaded now.
     known_tabs: HashMap<(usize, String), String>,
     /// Sessions whose layout is being fetched to learn their panes' tabs.
     fetching_tabs: HashSet<(usize, String)>,
+    /// A tab or pane pressed for dragging, and the drag once it moves.
+    moving: Option<dragging::Moving>,
     reveal: toolbar::Reveal,
     highlight: highlight::Track,
     swipe: gestures::SwipeTracker,
@@ -354,8 +359,10 @@ impl Workspace {
             area: Bounds::default(),
             notice_area: None,
             element_bounds: HashMap::new(),
+            drawn_bounds: HashMap::new(),
             known_tabs: HashMap::new(),
             fetching_tabs: HashSet::new(),
+            moving: None,
             reveal: Default::default(),
             highlight: Default::default(),
             swipe: Default::default(),
@@ -842,6 +849,15 @@ impl Workspace {
 
     fn on_mouse_move(&mut self, event: &MouseMoveEvent, _: &mut Window, cx: &mut Context<Self>) {
         self.track_pointer(event.position, cx);
+        if self.moving.is_some() {
+            if event.pressed_button != Some(MouseButton::Left) {
+                // The press ended somewhere we didn't hear about.
+                self.moving = None;
+                cx.notify();
+            } else if self.drag_moved(event.position, cx) {
+                return;
+            }
+        }
         let (fx, fy) = self.fraction(event.position);
         let start_fraction = match &self.drag {
             Some(Drag::Layer { start, .. }) => Some(self.fraction(*start)),
@@ -883,6 +899,9 @@ impl Workspace {
     }
 
     fn on_mouse_up(&mut self, _: &MouseUpEvent, _: &mut Window, cx: &mut Context<Self>) {
+        if self.drag_released(cx) {
+            return;
+        }
         match self.drag.take() {
             Some(Drag::Divider {
                 session, divider, ..
@@ -964,6 +983,15 @@ impl Workspace {
                     .relative()
                     .child(self.track_bounds(format!("tab:{id}"), cx))
                     .on_click(cx.listener(move |ws, _, _, cx| ws.select_tab(select_id.clone(), cx)))
+                    .on_mouse_down(
+                        MouseButton::Left,
+                        cx.listener({
+                            let id = id.clone();
+                            move |ws, event: &gpui::MouseDownEvent, _, _| {
+                                ws.press_for_drag(dragging::Grab::Tab(id.clone()), event.position)
+                            }
+                        }),
+                    )
                     .on_mouse_down(
                         MouseButton::Right,
                         cx.listener({
@@ -1212,6 +1240,17 @@ impl Workspace {
                                 .children(self.tab_mark(index, window, &model).map(
                                     |(state, badge)| activity_mark(state, badge, false, theme),
                                 ))
+                                .on_mouse_down(MouseButton::Left, {
+                                    let id = window_id.clone();
+                                    cx.listener(move |ws, event: &gpui::MouseDownEvent, _, _| {
+                                        if index == ws.active {
+                                            ws.press_for_drag(
+                                                dragging::Grab::Tab(id.clone()),
+                                                event.position,
+                                            );
+                                        }
+                                    })
+                                })
                                 .on_mouse_down(MouseButton::Right, {
                                     let id = window_id.clone();
                                     cx.listener(move |ws, event: &gpui::MouseDownEvent, _, cx| {
@@ -1447,9 +1486,23 @@ impl Workspace {
             let hover_block = pane.block_id.clone();
             let hover_session = session.clone();
             let pinch_block = pane.block_id.clone();
+            let grab_block = pane.block_id.clone();
             let card = div()
                 .id(SharedString::from(format!("card-{}", pane.block_id)))
                 .size_full()
+                // Ctrl-drag picks the pane up from anywhere over it.
+                .on_mouse_down(
+                    MouseButton::Left,
+                    cx.listener(move |ws, event: &gpui::MouseDownEvent, _, _| {
+                        let m = &event.modifiers;
+                        if m.control && !m.shift && !m.alt && !m.platform {
+                            ws.press_for_drag(
+                                dragging::Grab::Pane(grab_block.clone()),
+                                event.position,
+                            );
+                        }
+                    }),
+                )
                 .on_mouse_move(cx.listener(move |ws, _: &MouseMoveEvent, _, _| {
                     ws.focus_on_hover(&hover_session, &hover_block)
                 }))
@@ -1627,6 +1680,15 @@ impl Workspace {
                         status.map(|(state, badge)| activity_mark(state, badge, false, theme)),
                     ),
             );
+        if floating.is_none() {
+            let grab = block_id.to_owned();
+            header = header.on_mouse_down(
+                MouseButton::Left,
+                cx.listener(move |ws, event: &gpui::MouseDownEvent, _, _| {
+                    ws.press_for_drag(dragging::Grab::Pane(grab.clone()), event.position)
+                }),
+            );
+        }
         if let Some(layer) = floating {
             let layer_id = layer.to_owned();
             let session = session.to_owned();
@@ -1862,7 +1924,10 @@ impl Workspace {
     /// Where a tab (`tab:ID`, or `side-tab:ID` in the sidebar) or a pane header's title
     /// (`header:BLOCK`) was last drawn, in window coordinates.
     pub fn element_bounds(&self, key: &str) -> Option<Bounds<Pixels>> {
-        self.element_bounds.get(key).copied()
+        self.element_bounds
+            .get(key)
+            .or_else(|| self.drawn_bounds.get(key))
+            .copied()
     }
 
     /// Records where its parent is drawn under `key`; the parent must be `relative`.
@@ -1989,6 +2054,9 @@ impl Render for Workspace {
         if self.settings_changed.take() {
             self.share_settings(cx);
         }
+        // Tabs and headers record where they're drawn again this frame; until then, reads
+        // see the last frame's.
+        self.drawn_bounds = std::mem::take(&mut self.element_bounds);
         let theme = Theme::get(cx).clone();
         let model = self.model();
         let layout = self.settings.interface.toolbar_layout;
@@ -2155,6 +2223,7 @@ impl Render for Workspace {
             .children(self.render_overlay(&theme, cx))
             .children(self.render_uploads(&theme, cx))
             .children(self.render_context_menu(&theme, cx))
+            .children(self.render_drag(&theme))
             .children(self.render_ssh_question(&theme, cx))
     }
 }

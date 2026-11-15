@@ -113,6 +113,10 @@ impl Workspace {
             }
             return;
         }
+        if event.keystroke.key == "escape" && self.cancel_drag(cx) {
+            cx.stop_propagation();
+            return;
+        }
         if self.context_menu_key(&event.keystroke.key, window, cx) {
             cx.stop_propagation();
             return;
@@ -815,27 +819,7 @@ impl Workspace {
             "pane.move_to_new_tab" => {
                 let block = need_block()?;
                 let session = need_session()?;
-                let local = self.host().handle.endpoint.is_local();
-                let host = self.host().handle.clone();
-                // A new tab starts with a shell; the pane moves in beside it and the shell closes.
-                cx.spawn(async move |_, _| {
-                    let Ok(created) = host
-                        .request("session.new_window", json!({"session_id": session, "layout": shell_layout_for(local, None), "focus": true}))
-                        .await
-                    else {
-                        return;
-                    };
-                    let Some(placeholder) = created["block_ids"][0].as_str().map(str::to_owned) else { return };
-                    if host
-                        .request("session.move_block", json!({"session_id": session, "block_id": block, "anchor_block_id": placeholder}))
-                        .await
-                        .is_ok()
-                    {
-                        let _ = host.request("block.close", json!({"session_id": session, "block_id": placeholder})).await;
-                        let _ = host.request("session.focus_block", json!({"session_id": session, "block_id": block})).await;
-                    }
-                })
-                .detach();
+                self.move_pane_to_new_tab(session, block, None, cx);
             }
             "pane.copy_id" => cx.write_to_clipboard(ClipboardItem::new_string(need_block()?)),
             "pane.paste"
