@@ -8,7 +8,8 @@ preview.19 server.
 
 Rex for Mac lists 116 actions. rexia implements 104 of them under the same names, so
 init.lua bindings, `rex do` and `client.perform` reach rexia the same way. It also adds
-three of its own: `client.sidebar.activity.toggle`, `.by_session` and `.by_priority`.
+four of its own: `client.sidebar.activity.toggle`, `.by_session` and `.by_priority`, and
+`client.tab.mute.toggle` (Rex for Mac has Mute Tab only in the tab's menu).
 Preview.30's Enable Cursor Shaders and Change Cursor Shader aren't in the published action
 list yet, so rexia names them `client.cursor_shader.toggle` and `client.cursor_shader.change`
 (with an optional `shader`, such as `{"shader": "blaze"}`).
@@ -46,7 +47,6 @@ when checked, and are built in this order; each moves to its section once it's d
 
 | Gap | Source |
 | --- | --- |
-| Mute Tab: no notifications, sounds or badge count from it; a crossed-out speaker; kept across launches | preview.24 |
 | Dragging: tabs to reorder, a pane onto another tab, between tabs for a new tab, Ctrl-drag from anywhere in a pane | preview.14, 16, 29 |
 | Sidebar width: drag to resize, remembered | preview.12 |
 | Double-click a tab or a pane's title to rename it | preview.15, 27 |
@@ -97,6 +97,14 @@ when checked, and are built in this order; each moves to its section once it's d
 ## Behavior
 
 Working:
+
+- Mute Tab: right-clicking a tab, in the tab bar or the sidebar, opens its menu (Rename
+  Tab, Mute Tab, Close Other Tabs, Close Tab). A muted tab shows a crossed-out speaker and
+  keeps its status mark, but its programs send no desktop notifications (status reports or
+  their own OSC 9 and 777), play no sounds and add nothing to the launcher badge. Mutes are
+  saved with rexia's settings, so they last across launches, and they hold for tabs in
+  sessions that aren't on screen: rexia asks the server where those panes sit. Mute or
+  Unmute Tab is also in the palette (`client.tab.mute.toggle`).
 
 - Hover cards: resting the pointer on a tab, in the tab bar or the sidebar, shows a card
   with each of its panes: its program and title, what each program reporting in it says
