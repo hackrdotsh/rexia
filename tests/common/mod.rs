@@ -127,6 +127,19 @@ pub fn shot_dir() -> PathBuf {
     dir
 }
 
+/// Settings with one host, `test`, at `address`, showing `session`.
+pub fn test_settings(address: &str, session: &str) -> Settings {
+    Settings {
+        hosts: vec![HostConfig {
+            id: "test".into(),
+            label: "flareon".into(),
+            endpoint: address.into(),
+        }],
+        last_session: Some(session.into()),
+        ..Default::default()
+    }
+}
+
 pub struct Harness {
     pub cx: HeadlessAppContext,
     pub window: WindowHandle<Workspace>,
@@ -136,15 +149,11 @@ pub struct Harness {
 impl Harness {
     /// A workspace window attached to `address`, showing `session`.
     pub fn open(address: &str, session: &str, width: f32, height: f32) -> Self {
-        let settings = Settings {
-            hosts: vec![HostConfig {
-                id: "test".into(),
-                label: "flareon".into(),
-                endpoint: address.into(),
-            }],
-            last_session: Some(session.into()),
-            ..Default::default()
-        };
+        Self::open_with(test_settings(address, session), width, height)
+    }
+
+    /// A workspace window with these settings, as rexia launched with them would be.
+    pub fn open_with(settings: Settings, width: f32, height: f32) -> Self {
         let mut cx = HeadlessAppContext::with_platform(
             Arc::new(gpui_wgpu::CosmicTextSystem::new("DM Sans")),
             Arc::new(Assets),
