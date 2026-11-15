@@ -46,7 +46,6 @@ when checked, and are built in this order; each moves to its section once it's d
 
 | Gap | Source |
 | --- | --- |
-| Hover cards for tabs and pane headers: each pane's program, activity and directory; click a pane to go to it | preview.14, 16 |
 | Mute Tab: no notifications, sounds or badge count from it; a crossed-out speaker; kept across launches | preview.24 |
 | Dragging: tabs to reorder, a pane onto another tab, between tabs for a new tab, Ctrl-drag from anywhere in a pane | preview.14, 16, 29 |
 | Sidebar width: drag to resize, remembered | preview.12 |
@@ -98,6 +97,13 @@ when checked, and are built in this order; each moves to its section once it's d
 ## Behavior
 
 Working:
+
+- Hover cards: resting the pointer on a tab, in the tab bar or the sidebar, shows a card
+  with each of its panes: its program and title, what each program reporting in it says
+  (sub-agents on their own lines, with their state, message and progress), a terminal
+  progress bar, and its directory. Clicking a pane in the card goes to it, switching tabs.
+  Resting on a pane header's title shows that pane's card. Cards follow the panes while
+  they're open, and stay open while the pointer moves into them.
 
 - Tooltips on buttons: resting the pointer on a button for half a second names what it
   does, with the keys bound to it in the keymap in use (so a shortcut changed with Change
