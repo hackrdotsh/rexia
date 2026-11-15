@@ -41,11 +41,14 @@ fn settings(h: &mut Harness, change: impl FnOnce(&mut Settings) + 'static) {
 
 /// Run a command in the focused pane's shell and wait for its prompt to come back.
 fn run(h: &mut Harness, command: &str, marker: &str) {
-    h.type_text(&format!("{command}; echo {marker}"));
+    // The marker is printed in two halves, so only the output matches it: a long prompt
+    // can wrap the typed line, and the shell may redraw over the wrapped part.
+    let (first, second) = marker.split_once('-').expect("a marker with a hyphen");
+    h.type_text(&format!("{command}; printf '%s-%s\\n' {first} {second}"));
     h.press("enter");
     let marker = marker.to_owned();
     h.wait("the command", |m| {
-        (focused_text(m).matches(&marker).count() >= 2).then_some(())
+        focused_text(m).contains(&marker).then_some(())
     });
 }
 
