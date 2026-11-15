@@ -47,7 +47,6 @@ when checked, and are built in this order; each moves to its section once it's d
 
 | Gap | Source |
 | --- | --- |
-| Dragging: tabs to reorder, a pane onto another tab, between tabs for a new tab, Ctrl-drag from anywhere in a pane | preview.14, 16, 29 |
 | Sidebar width: drag to resize, remembered | preview.12 |
 | Double-click a tab or a pane's title to rename it | preview.15, 27 |
 | Hold Ctrl to show each tab's shortcut | preview.16 |
@@ -97,6 +96,14 @@ when checked, and are built in this order; each moves to its section once it's d
 ## Behavior
 
 Working:
+
+- Dragging: a tab dragged in the tab bar or the sidebar moves to where the bar between
+  tabs shows. A pane picked up by its header, or with Ctrl held anywhere over it (Rex for
+  Mac's ⌘-drag), drops beside another pane on the side that lights up, onto another tab to
+  move into it, or between tabs (or after the last) to become a tab of its own. A drag
+  starts once the pointer moves a few pixels, carries the tab's or pane's title, and
+  Escape cancels it. Ctrl-click still opens a link, on release over the same cell, so a
+  Ctrl-drag that starts on one doesn't open it.
 
 - Mute Tab: right-clicking a tab, in the tab bar or the sidebar, opens its menu (Rename
   Tab, Mute Tab, Close Other Tabs, Close Tab). A muted tab shows a crossed-out speaker and
