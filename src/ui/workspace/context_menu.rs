@@ -316,7 +316,7 @@ impl Workspace {
         cx.notify();
     }
 
-    fn tab_command(
+    pub(super) fn tab_command(
         &mut self,
         command: TabCommand,
         id: String,

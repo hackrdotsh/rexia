@@ -168,6 +168,8 @@ pub struct Workspace {
     sidebar_resizing: Option<sidebar_width::Resizing>,
     /// Change Shortcut came from the Shortcuts page, so it goes back there after.
     shortcut_return: bool,
+    /// The tab a click started on, if it was already selected then.
+    tab_selected_at_press: Option<String>,
     sidebar_drag_width: Option<f32>,
     reveal: toolbar::Reveal,
     highlight: highlight::Track,
@@ -373,6 +375,7 @@ impl Workspace {
             moving: None,
             sidebar_resizing: None,
             shortcut_return: false,
+            tab_selected_at_press: None,
             sidebar_drag_width: None,
             reveal: Default::default(),
             highlight: Default::default(),
@@ -716,6 +719,30 @@ impl Workspace {
         .detach();
     }
 
+    /// The first press of a click on a tab notes whether it was already selected, so a
+    /// double-click renames only a tab that was; one that wasn't just gets selected.
+    fn tab_pressed(&mut self, id: &str, selected: bool, clicks: usize) {
+        if clicks <= 1 {
+            self.tab_selected_at_press = selected.then(|| id.to_owned());
+        }
+    }
+
+    /// A click on a tab selects it; a double-click on the tab that was already selected
+    /// renames it.
+    fn tab_clicked(
+        &mut self,
+        id: String,
+        clicks: usize,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        if clicks >= 2 && self.tab_selected_at_press.as_deref() == Some(id.as_str()) {
+            self.tab_command(context_menu::TabCommand::Rename, id, window, cx);
+        } else {
+            self.select_tab(id, cx);
+        }
+    }
+
     pub fn select_tab(&mut self, window_id: String, _: &mut Context<Self>) {
         let Some(session) = self.session_id() else {
             return;
@@ -1003,12 +1030,17 @@ impl Workspace {
                     .hoverable_tooltip(self.hover_card(hover_card::CardTarget::Tab(id.clone()), cx))
                     .relative()
                     .child(self.track_bounds(format!("tab:{id}"), cx))
-                    .on_click(cx.listener(move |ws, _, _, cx| ws.select_tab(select_id.clone(), cx)))
+                    .on_click(
+                        cx.listener(move |ws, event: &gpui::ClickEvent, window, cx| {
+                            ws.tab_clicked(select_id.clone(), event.click_count(), window, cx)
+                        }),
+                    )
                     .on_mouse_down(
                         MouseButton::Left,
                         cx.listener({
                             let id = id.clone();
                             move |ws, event: &gpui::MouseDownEvent, _, _| {
+                                ws.tab_pressed(&id, active, event.click_count);
                                 ws.press_for_drag(dragging::Grab::Tab(id.clone()), event.position)
                             }
                         }),
@@ -1341,6 +1373,11 @@ impl Workspace {
                                 .on_mouse_down(MouseButton::Left, {
                                     let id = window_id.clone();
                                     cx.listener(move |ws, event: &gpui::MouseDownEvent, _, _| {
+                                        ws.tab_pressed(
+                                            &id,
+                                            active && index == ws.active,
+                                            event.click_count,
+                                        );
                                         if index == ws.active {
                                             ws.press_for_drag(
                                                 dragging::Grab::Tab(id.clone()),
@@ -1367,9 +1404,16 @@ impl Workspace {
                                 )
                                 .relative()
                                 .child(self.track_bounds(format!("side-tab:{window_id}"), cx))
-                                .on_click(cx.listener(move |ws, _, _, cx| {
-                                    ws.select_tab(window_id.clone(), cx)
-                                })),
+                                .on_click(cx.listener(
+                                    move |ws, event: &gpui::ClickEvent, window, cx| {
+                                        ws.tab_clicked(
+                                            window_id.clone(),
+                                            event.click_count(),
+                                            window,
+                                            cx,
+                                        )
+                                    },
+                                )),
                         );
                     }
                 }
@@ -1764,6 +1808,20 @@ impl Workspace {
                     )
                     .relative()
                     .child(self.track_bounds(format!("header:{block_id}"), cx))
+                    // A double-click on the title renames the pane.
+                    .on_click({
+                        let (block, label) = (block_id.to_owned(), label.clone());
+                        cx.listener(move |ws, event: &gpui::ClickEvent, window, cx| {
+                            if event.click_count() >= 2 {
+                                ws.open_rename(
+                                    overlay::RenameTarget::Block(block.clone()),
+                                    label.clone(),
+                                    window,
+                                    cx,
+                                );
+                            }
+                        })
+                    })
                     .child(icon(titles::program_icon(state)).size(px(14.)))
                     .child(
                         div()
