@@ -28,6 +28,7 @@ pub mod shortcuts_page;
 pub mod sidebar_width;
 mod ssh;
 pub mod ssh_questions;
+pub mod tab_hints;
 pub mod tab_icons;
 mod toolbar;
 pub mod uploads;
@@ -170,6 +171,10 @@ pub struct Workspace {
     shortcut_return: bool,
     /// The tab a click started on, if it was already selected then.
     tab_selected_at_press: Option<String>,
+    /// Holding the Go to Tab modifier: the wait before the hints show, and whether they do.
+    tab_hint_wait: Option<Task<()>>,
+    tab_hints_shown: bool,
+    tab_hint_generation: u64,
     sidebar_drag_width: Option<f32>,
     reveal: toolbar::Reveal,
     highlight: highlight::Track,
@@ -376,6 +381,9 @@ impl Workspace {
             sidebar_resizing: None,
             shortcut_return: false,
             tab_selected_at_press: None,
+            tab_hint_wait: None,
+            tab_hints_shown: false,
+            tab_hint_generation: 0,
             sidebar_drag_width: None,
             reveal: Default::default(),
             highlight: Default::default(),
@@ -1079,6 +1087,7 @@ impl Workspace {
                             .child(label),
                     )
                     .when(muted, |d| d.child(muted_mark(fg, theme)))
+                    .children(self.tab_hint_chip(index + 1, active, theme))
                     .children(
                         activity.map(|(state, badge)| activity_mark(state, badge, active, theme)),
                     )
@@ -1298,7 +1307,7 @@ impl Workspace {
                     ),
                 );
                 if selected && let Some(view) = model.views.get(&session.session_id) {
-                    for window in &view.windows {
+                    for (number, window) in view.windows.iter().enumerate() {
                         let active = view.active_window_id.as_deref() == Some(window.id());
                         let window_id = window.id().to_owned();
                         list = list.child(
@@ -1335,6 +1344,7 @@ impl Workspace {
                                         .whitespace_nowrap()
                                         .child(titles::tab_title(window, &model)),
                                 )
+                                .children(self.tab_hint_chip(number + 1, false, theme))
                                 .when(self.tab_muted(index, window.id()), |d| {
                                     d.child(muted_mark(theme.text_muted, theme))
                                 })
@@ -2372,6 +2382,11 @@ impl Render for Workspace {
             .text_color(theme.text)
             .font_family(theme.ui_font.clone())
             .capture_key_down(cx.listener(Self::on_key_down))
+            .on_modifiers_changed(
+                cx.listener(|ws, event: &gpui::ModifiersChangedEvent, _, cx| {
+                    ws.tab_hint_modifiers_changed(event.modifiers, cx)
+                }),
+            )
             .on_mouse_move(cx.listener(Self::on_mouse_move))
             .on_scroll(cx.listener(|ws, event, _, cx| ws.on_swipe(event, cx)))
             .on_mouse_up(MouseButton::Left, cx.listener(Self::on_mouse_up))
