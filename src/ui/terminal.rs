@@ -22,6 +22,16 @@ use gpui::{
 use serde_json::json;
 use std::{collections::HashMap, sync::Arc};
 
+gpui::actions!(
+    terminal,
+    [
+        /// A key went to the terminal: handling this hides the pointer until the mouse
+        /// moves, as GPUI does for keys an action takes. GPUI hides it by itself only for
+        /// keys that type a character, not Return, Backspace, arrows or Ctrl combinations.
+        HidePointer
+    ]
+);
+
 /// Links a click opens without asking: web, mail and local files. Other schemes could
 /// start programs, so the workspace decides about them.
 pub fn openable(link: &str) -> bool {
@@ -367,6 +377,8 @@ pub struct TerminalPane {
     pub blink: Option<std::time::Duration>,
     /// The blinking cursor's current phase.
     blink_on: bool,
+    /// Keys sent to the terminal that asked GPUI to hide the pointer.
+    pointer_hidden: usize,
     /// Whether the last paint drew a blinking cursor, which the blink timer then toggles.
     blinking: bool,
     /// Typing keeps the cursor solid until this moment.
@@ -423,6 +435,7 @@ impl TerminalPane {
             force_cursor: None,
             blink: None,
             blink_on: true,
+            pointer_hidden: 0,
             blinking: false,
             hold_until: std::time::Instant::now(),
             drawn_cursor: None,
@@ -858,6 +871,12 @@ impl TerminalPane {
             pane.send(PaneCommand::ClearSelection);
             pane.send(PaneCommand::Scroll(Scroll::Bottom));
         }
+    }
+
+    /// How many keys sent to the terminal have hidden the pointer, for tests: the test
+    /// platform doesn't track the pointer itself.
+    pub fn pointer_hides(&self) -> usize {
+        self.pointer_hidden
     }
 
     pub fn send_key(&mut self, event: &KeyDownEvent, cx: &mut Context<Self>) -> bool {
@@ -1755,11 +1774,13 @@ impl Render for TerminalPane {
             .overflow_hidden()
             .bg(background)
             .cursor(gpui::CursorStyle::IBeam)
-            .on_key_down(cx.listener(|pane, event: &KeyDownEvent, _, cx| {
+            .on_key_down(cx.listener(|pane, event: &KeyDownEvent, window, cx| {
                 if pane.send_key(event, cx) {
                     cx.stop_propagation();
+                    window.dispatch_action(Box::new(HidePointer), cx);
                 }
             }))
+            .on_action(cx.listener(|pane, _: &HidePointer, _, _| pane.pointer_hidden += 1))
             .on_mouse_down(MouseButton::Left, cx.listener(Self::on_mouse_down))
             .on_mouse_down(MouseButton::Right, cx.listener(Self::on_mouse_down))
             // Files dragged in from other apps. GPUI's on_drop misses a drop that follows
