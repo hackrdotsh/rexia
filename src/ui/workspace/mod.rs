@@ -178,6 +178,8 @@ pub struct Workspace {
     tab_hint_generation: u64,
     /// Each host's Tailscale as rexia last saw it, for its notifications.
     tailscale_seen: HashMap<usize, tailscale_notes::Seen>,
+    /// The pane focus follows mouse asked the server to focus, until it answers.
+    hover_asked: Option<String>,
     /// The terminal font family's faces, read from fontconfig when the family changes.
     font_faces: Option<(String, Vec<fonts::Face>)>,
     sidebar_drag_width: Option<f32>,
@@ -398,6 +400,7 @@ impl Workspace {
             tab_hints_shown: false,
             tab_hint_generation: 0,
             tailscale_seen: HashMap::new(),
+            hover_asked: None,
             font_faces,
             sidebar_drag_width: None,
             reveal: Default::default(),
@@ -663,7 +666,11 @@ impl Workspace {
         {
             let handle = pane.read(cx).focus_handle(cx);
             window.focus(&handle, cx);
-            self.focused = focused;
+            self.focused = focused.clone();
+        }
+        // The server answered the hover's request, or focus went elsewhere since.
+        if self.hover_asked.is_some() && focused == self.hover_asked {
+            self.hover_asked = None;
         }
         if let Some(id) = model.selected.clone()
             && self.settings.last_session.as_ref() != Some(&id)
@@ -694,6 +701,7 @@ impl Workspace {
         self.active = host;
         self.panes.clear();
         self.focused = None;
+        self.hover_asked = None;
         self.modes.clear();
         self.pending.clear();
         self.hosts[host].handle.send(HostCommand::Visible(true));
@@ -879,7 +887,7 @@ impl Workspace {
         if !self.settings.interface.focus_follows_mouse
             || self.drag.is_some()
             || self.overlay.is_some()
-            || self.focused.as_deref() == Some(block)
+            || self.hover_asked.as_deref() == Some(block)
         {
             return;
         }
@@ -891,8 +899,9 @@ impl Workspace {
         if focused.as_deref() == Some(block) {
             return;
         }
-        // Only ask once per pane until the server answers.
-        self.focused = Some(block.to_owned());
+        // Only ask once per pane until the server answers. This mustn't touch
+        // `self.focused`: the answer moves keyboard focus only when it differs from that.
+        self.hover_asked = Some(block.to_owned());
         self.call(
             "session.focus_block",
             json!({"session_id": session, "block_id": block}),
