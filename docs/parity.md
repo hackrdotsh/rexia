@@ -86,6 +86,10 @@ still need an account-owned test. The automated checks use an isolated Rex serve
 
 Working:
 
+- Settings → Client & Hosts lets you choose, change, or clear a local image for each
+  host. Icons appear next to host names in the Sessions sidebar. GIFs play only for
+  the selected host in the focused Rexia window; otherwise they show the first frame.
+
 - Tab icon stacks keep the focused pane's icon fully visible in front. The second icon
   peeks out by 12.5% of the front tile's width, and each later icon by 7.5%. The rear
   icons are vertically centered and scale down to 90%, 80%, 70%, and 60%.

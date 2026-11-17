@@ -13,6 +13,7 @@ mod extras;
 mod filter;
 pub mod gestures;
 mod highlight;
+mod host_icons;
 pub mod hover_card;
 pub mod links;
 pub mod motion;
@@ -1266,7 +1267,16 @@ impl Workspace {
                     .flex()
                     .items_center()
                     .justify_between()
-                    .child(heading(host.config.label.clone(), theme))
+                    .child(
+                        heading("", theme)
+                            .flex()
+                            .items_center()
+                            .children(
+                                self.host_icon(&host.config.id, index == self.active)
+                                    .map(|icon| div().mr(px(6.)).child(icon)),
+                            )
+                            .child(host.config.label.clone()),
+                    )
                     .child(
                         small_icon_button(
                             SharedString::from(format!("host-new-{index}")),

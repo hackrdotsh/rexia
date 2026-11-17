@@ -137,6 +137,7 @@ impl Workspace {
         self.settings.interface = other.interface.clone();
         self.settings.terminal = other.terminal.clone();
         self.settings.notifications = other.notifications.clone();
+        self.settings.host_icons = other.host_icons.clone();
         self.settings.client_label = other.client_label.clone();
         self.apply_settings(cx);
         cx.notify();

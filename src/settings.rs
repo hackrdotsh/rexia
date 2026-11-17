@@ -667,6 +667,9 @@ pub struct Settings {
     pub hosts: Vec<HostConfig>,
     /// The order hosts are listed in, by ID, once someone moves one.
     pub host_order: Vec<String>,
+    /// Local image paths keyed by stable host ID; never sent to the Rex server.
+    #[serde(skip_serializing_if = "std::collections::BTreeMap::is_empty")]
+    pub host_icons: std::collections::BTreeMap<String, PathBuf>,
     /// The label this client shows in `rex client ls`.
     pub client_label: Option<String>,
     pub interface: InterfaceSettings,
@@ -713,6 +716,7 @@ impl Default for Settings {
         Self {
             hosts: vec![HostConfig::local()],
             host_order: Vec::new(),
+            host_icons: Default::default(),
             client_label: None,
             interface: InterfaceSettings::default(),
             terminal: TerminalSettings::default(),

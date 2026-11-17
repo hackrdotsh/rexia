@@ -1952,8 +1952,50 @@ impl Workspace {
                         theme.overlay(0.2)
                     }))
             };
+            let id = host.config.id.clone();
+            let has_icon = self.settings.host_icons.contains_key(&id);
+            let preview = self.host_icon(&id, false).unwrap_or_else(|| {
+                icon("server")
+                    .size(px(16.))
+                    .text_color(theme.text_muted)
+                    .into_any_element()
+            });
+            let choose_id = id.clone();
             let mut line = row(format!("host-{index}"), &host.config.label, &detail, theme)
-                .child(icon("server").size(px(16.)).text_color(theme.text_muted))
+                .child(preview)
+                .child(
+                    button(
+                        format!("host-icon-{index}"),
+                        if has_icon {
+                            "Change Icon…"
+                        } else {
+                            "Choose Icon…"
+                        },
+                        false,
+                        theme,
+                    )
+                    .on_click(cx.listener(move |ws, _, window, cx| {
+                        ws.choose_host_icon(choose_id.clone(), window, cx)
+                    })),
+                )
+                .when(has_icon, |line| {
+                    line.child(
+                        button(
+                            format!("host-icon-clear-{index}"),
+                            "Clear Icon",
+                            false,
+                            theme,
+                        )
+                        .on_click(cx.listener(move |ws, _, _, cx| {
+                            ws.update_settings(
+                                |settings| {
+                                    settings.host_icons.remove(&id);
+                                },
+                                cx,
+                            )
+                        })),
+                    )
+                })
                 .child(arrow(
                     format!("host-up-{index}"),
                     "chevron-up",
