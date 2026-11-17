@@ -47,7 +47,6 @@ when checked, and are built in this order; each moves to its section once it's d
 
 | Gap | Source |
 | --- | --- |
-| Hold Ctrl to show each tab's shortcut | preview.16 |
 | Tailscale notifications: sign-in needed, device approval needed, failures | Notifications › System Notifications |
 | Terminal font style (an installed face such as Light) and weight | Terminal › Typography |
 | Quick Look every link on screen, stepping with the arrow keys; files on remote hosts downloaded first; Ctrl-click a remote file link saves a copy under ~/Downloads/Rex/HOST and opens it | preview.28, 29 |
@@ -94,6 +93,12 @@ when checked, and are built in this order; each moves to its section once it's d
 ## Behavior
 
 Working:
+
+- Hold the Go to Tab modifier (Alt by default, where Rex for Mac uses Command) to see
+  each tab's key on it, in the tab bar and the sidebar. The keys come from the keymap, so a
+  configuration that rebinds them shows its own keys, or none. They wait 400 ms so Alt
+  combinations typed in a terminal don't flash them, and go away at any other key or when
+  the modifier is let go.
 
 - Double-click to rename: the selected tab, in the tab bar or the sidebar, and a pane's
   title in its header. A double-click on a tab that wasn't selected only selects it, as
