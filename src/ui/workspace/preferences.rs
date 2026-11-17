@@ -987,6 +987,38 @@ impl Workspace {
                 theme,
                 cx,
             ),
+            self.stepper_row(
+                "active-pane-opacity",
+                "Active pane background opacity",
+                "The selected pane while this window is focused. Text and controls stay readable.",
+                format!("{:.0}%", i.active_pane_opacity * 100.),
+                |s| {
+                    let steps = (s.interface.active_pane_opacity * 20.).round();
+                    s.interface.active_pane_opacity = (steps - 1.).max(0.) / 20.;
+                },
+                |s| {
+                    let steps = (s.interface.active_pane_opacity * 20.).round();
+                    s.interface.active_pane_opacity = (steps + 1.).min(20.) / 20.;
+                },
+                theme,
+                cx,
+            ),
+            self.stepper_row(
+                "inactive-pane-opacity",
+                "Inactive pane background opacity",
+                "Other panes, including every pane in an unfocused window. Blur depends on your compositor.",
+                format!("{:.0}%", i.inactive_pane_opacity * 100.),
+                |s| {
+                    let steps = (s.interface.inactive_pane_opacity * 20.).round();
+                    s.interface.inactive_pane_opacity = (steps - 1.).max(0.) / 20.;
+                },
+                |s| {
+                    let steps = (s.interface.inactive_pane_opacity * 20.).round();
+                    s.interface.inactive_pane_opacity = (steps + 1.).min(20.) / 20.;
+                },
+                theme,
+                cx,
+            ),
             self.toggle_row(
                 "highlight",
                 "Highlight active pane edges",

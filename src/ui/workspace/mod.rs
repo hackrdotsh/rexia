@@ -304,9 +304,6 @@ pub fn terminal_font(settings: &Settings) -> TerminalFont {
     font
 }
 
-/// How much of a faded pane's content the background sheet over it hides.
-pub const FADED_SHEET: f32 = 0.4;
-
 impl Workspace {
     pub fn new(
         settings: Settings,
@@ -1543,6 +1540,7 @@ impl Workspace {
                 .flex()
                 .items_center()
                 .justify_center()
+                .bg(theme.background)
                 .text_color(theme.text_muted)
                 .child(tracker)
                 .child(message)
@@ -1613,6 +1611,19 @@ impl Workspace {
             let block = window.block(&pane.block_id).cloned().unwrap_or_default();
             let state = model.blocks.get(&pane.block_id);
             let is_focused = focused.as_deref() == Some(pane.block_id.as_str());
+            let opacity = self
+                .settings
+                .interface
+                .pane_opacity(is_focused, self.window_active);
+            let faded_header =
+                (fade_header && !is_focused) || window_fade.is_some_and(|(header, _)| header);
+            let faded_content =
+                (fade_content && !is_focused) || window_fade.is_some_and(|(_, content)| content);
+            if let Some(terminal) = &terminal {
+                terminal.update(cx, |pane, cx| {
+                    pane.set_appearance(opacity, faded_content, cx)
+                });
+            }
             let floating = pane.floating.clone();
             let header_fill = self
                 .settings
@@ -1631,6 +1642,8 @@ impl Workspace {
                     &session,
                     rect,
                     header_fill,
+                    opacity,
+                    faded_header,
                     theme,
                     cx,
                 )
@@ -1642,10 +1655,6 @@ impl Workspace {
             } else {
                 theme.border
             };
-            let faded_header =
-                (fade_header && !is_focused) || window_fade.is_some_and(|(header, _)| header);
-            let faded_content =
-                (fade_content && !is_focused) || window_fade.is_some_and(|(_, content)| content);
             let card = div()
                 .size_full()
                 .flex()
@@ -1656,33 +1665,19 @@ impl Workspace {
                     d.border(theme.border_width).border_color(border)
                 })
                 .when(floating.is_some() && theme.popup_shadows, |d| d.shadow_lg())
-                .bg(theme.background)
                 .group(SharedString::from(format!("pane-{}", pane.block_id)))
-                .children(header.map(|header| {
-                    div()
-                        .flex_none()
-                        .when(faded_header, |d| d.opacity(0.55))
-                        .child(header)
-                }))
+                .children(header.map(|header| div().flex_none().child(header)))
                 .child(
                     div()
                         .flex_1()
                         .min_h_0()
                         .relative()
+                        .when(terminal.is_none(), |d| {
+                            d.bg(theme.background.opacity(opacity))
+                        })
                         .child(match &terminal {
                             Some(terminal) => terminal.clone().into_any_element(),
                             None => self.render_onboarding(&session, &pane.block_id, theme, cx),
-                        })
-                        // A sheet of the terminal's background over it, rather than
-                        // opacity: GPUI fades each cell's background and glyph apart, so
-                        // they'd show through each other, as half-block pictures do.
-                        .when(faded_content, |d| {
-                            let under = terminal
-                                .as_ref()
-                                .and_then(|t| t.read(cx).background())
-                                .map(|bg| Hsla::from(gpui::rgb(bg)))
-                                .unwrap_or(theme.background);
-                            d.child(div().absolute().inset_0().bg(under.opacity(FADED_SHEET)))
                         }),
                 );
             let bordered = theme.card_borders || floating.is_some();
@@ -1830,6 +1825,8 @@ impl Workspace {
         session: &str,
         rect: Rect,
         fill: Option<u32>,
+        opacity: f32,
+        faded: bool,
         theme: &Theme,
         cx: &mut Context<Self>,
     ) -> AnyElement {
@@ -1863,7 +1860,7 @@ impl Workspace {
             .gap(px(6.))
             .h(px(28.))
             .px(px(8.))
-            .bg(surface)
+            .when(faded, |d| d.opacity(0.55))
             .border_b(theme.border_width)
             .border_color(theme.border)
             .text_size(px(12.))
@@ -1961,7 +1958,7 @@ impl Workspace {
         }
         let (zoom_id, float_id, close_id, split_id) =
             (id.clone(), id.clone(), id.clone(), id.clone());
-        header
+        let header = header
             .child(
                 small_icon_button(
                     SharedString::from(format!("split-{block_id}")),
@@ -2022,6 +2019,19 @@ impl Workspace {
                 )
                 .tooltip(self.tip("pane.close", None)),
             )
+            .into_any_element();
+        let surface = if faded {
+            theme.background.blend(surface.opacity(0.55))
+        } else {
+            surface
+        };
+        div()
+            .bg(surface.opacity(opacity))
+            .when(hover_only, |d| {
+                d.bg(theme.background.opacity(opacity))
+                    .group_hover(group, |d| d.bg(surface.opacity(opacity)))
+            })
+            .child(header)
             .into_any_element()
     }
 
@@ -2303,6 +2313,12 @@ impl Render for Workspace {
             .detach();
         }
         self.window_active = window.is_window_active();
+        let translucent = self.settings.interface.translucent_panes();
+        window.set_background_appearance(if translucent {
+            gpui::WindowBackgroundAppearance::Blurred
+        } else {
+            gpui::WindowBackgroundAppearance::Opaque
+        });
         if self.settings_changed.take() {
             self.share_settings(cx);
         }
@@ -2351,6 +2367,7 @@ impl Render for Workspace {
                     .flex_none()
                     .w(px(sidebar_width))
                     .h_full()
+                    .bg(theme.background)
                     .when(layout == ToolbarLayout::Right, |d| {
                         d.border_l(theme.border_width)
                     })
@@ -2464,7 +2481,7 @@ impl Render for Workspace {
             .relative()
             .flex()
             .flex_col()
-            .bg(theme.background)
+            .when(!translucent, |d| d.bg(theme.background))
             .text_color(theme.text)
             .font_family(theme.ui_font.clone())
             .capture_key_down(cx.listener(Self::on_key_down))

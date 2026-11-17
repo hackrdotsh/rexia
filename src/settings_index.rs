@@ -134,6 +134,16 @@ const NAMES: &[(&str, &str, &str)] = &[
     ("interface.pane_style", "pane-style", "Pane style"),
     ("interface.pane_headers", "pane-headers", "Pane headers"),
     (
+        "interface.active_pane_opacity",
+        "active-pane-opacity",
+        "Active pane background opacity",
+    ),
+    (
+        "interface.inactive_pane_opacity",
+        "inactive-pane-opacity",
+        "Inactive pane background opacity",
+    ),
+    (
         "interface.highlight_active_pane",
         "highlight",
         "Highlight active pane edges",
@@ -520,6 +530,7 @@ pub fn number_range(path: &str) -> Option<(f64, f64, f64)> {
         "interface.sidebar_width" => (180., 480., 10.),
         "interface.tab_icons" => (0., 5., 1.),
         "interface.highlight_opacity" => (0.2, 1., 0.1),
+        "interface.active_pane_opacity" | "interface.inactive_pane_opacity" => (0., 1., 0.05),
         "terminal.font_size" => (6., 72., 1.),
         "terminal.font_weight" => (100., 900., 100.),
         "terminal.line_height" => (0.8, 2., 0.05),
@@ -566,6 +577,41 @@ pub fn set(settings: &Settings, path: &str, value: Value) -> Result<Settings, St
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn pane_opacity_validates_persists_and_resets() {
+        let defaults = Settings::default();
+        assert!(!defaults.interface.translucent_panes());
+        for path in [
+            "interface.active_pane_opacity",
+            "interface.inactive_pane_opacity",
+        ] {
+            for bad in [-0.1, 1.1] {
+                assert!(set(&defaults, path, json!(bad)).is_err());
+            }
+            for value in [0., 0.45, 1.] {
+                let changed = set(&defaults, path, json!(value)).unwrap();
+                let saved = toml::to_string(&changed).unwrap();
+                let loaded: Settings = toml::from_str(&saved).unwrap();
+                assert_eq!(super::value(&loaded, path), json!(value as f32));
+                let reset = set(&loaded, path, find(path).unwrap().default).unwrap();
+                assert_eq!(reset.interface, defaults.interface);
+            }
+        }
+        assert_eq!(
+            search("active pane background opacity")[0].path,
+            "interface.active_pane_opacity"
+        );
+        let mut settings = defaults.interface;
+        settings.active_pane_opacity = 0.75;
+        settings.inactive_pane_opacity = 0.25;
+        assert_eq!(settings.pane_opacity(true, true), 0.75);
+        assert_eq!(settings.pane_opacity(false, true), 0.25);
+        assert_eq!(settings.pane_opacity(true, false), 0.25);
+        assert_eq!(settings.pane_opacity(false, false), 0.25);
+        settings.active_pane_opacity = f32::NAN;
+        assert_eq!(settings.pane_opacity(true, true), 1.);
+    }
 
     #[test]
     fn index_covers_simple_preferences_and_round_trips_values() {

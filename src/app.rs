@@ -101,9 +101,15 @@ pub fn open_workspace(
     setup: impl FnOnce(&mut Workspace, &mut gpui::Window, &mut gpui::Context<Workspace>) + 'static,
 ) -> anyhow::Result<gpui::WindowHandle<Workspace>> {
     let bounds = Bounds::centered(None, size(px(1280.), px(800.)), cx);
+    let window_background = if settings.interface.translucent_panes() {
+        gpui::WindowBackgroundAppearance::Blurred
+    } else {
+        gpui::WindowBackgroundAppearance::Opaque
+    };
     cx.open_window(
         WindowOptions {
             window_bounds: Some(WindowBounds::Windowed(bounds)),
+            window_background,
             titlebar: Some(TitlebarOptions {
                 title: Some("rexia".into()),
                 ..Default::default()

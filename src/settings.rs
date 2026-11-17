@@ -446,6 +446,9 @@ pub struct InterfaceSettings {
     pub tab_icons: u8,
     pub pane_style: PaneStyle,
     pub pane_headers: PaneHeaders,
+    /// Background alpha, from 0 (clear) to 1 (opaque); foregrounds stay readable.
+    pub active_pane_opacity: f32,
+    pub inactive_pane_opacity: f32,
     pub highlight_active_pane: bool,
     pub highlight_color: HighlightColor,
     /// How strongly the highlight draws, from 0.2 to 1.
@@ -482,6 +485,8 @@ impl Default for InterfaceSettings {
             tab_icons: 3,
             pane_style: PaneStyle::Comfortable,
             pane_headers: PaneHeaders::Always,
+            active_pane_opacity: 1.,
+            inactive_pane_opacity: 1.,
             highlight_active_pane: true,
             highlight_color: HighlightColor::Accent,
             highlight_opacity: 1.0,
@@ -493,6 +498,25 @@ impl Default for InterfaceSettings {
             activity_view: false,
             activity_by_priority: false,
         }
+    }
+}
+
+impl InterfaceSettings {
+    pub fn pane_opacity(&self, selected: bool, window_active: bool) -> f32 {
+        let value = if selected && window_active {
+            self.active_pane_opacity
+        } else {
+            self.inactive_pane_opacity
+        };
+        if value.is_finite() {
+            value.clamp(0., 1.)
+        } else {
+            1.
+        }
+    }
+
+    pub fn translucent_panes(&self) -> bool {
+        self.pane_opacity(true, true) < 1. || self.pane_opacity(false, true) < 1.
     }
 }
 
@@ -766,6 +790,8 @@ mod tests {
         let partial = Settings::load(&path).unwrap();
         assert_eq!(partial.interface.pane_headers, PaneHeaders::Hidden);
         assert!(partial.interface.sidebar);
+        assert_eq!(partial.interface.active_pane_opacity, 1.);
+        assert_eq!(partial.interface.inactive_pane_opacity, 1.);
         assert_eq!(partial.hosts.len(), 1, "the local host is always there");
         std::fs::write(&path, "[notifications.done]\nsound = false\n").unwrap();
         let quiet = Settings::load(&path).unwrap();

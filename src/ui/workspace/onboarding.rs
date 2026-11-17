@@ -173,7 +173,6 @@ impl Workspace {
             .gap(px(14.))
             .p(px(28.))
             .overflow_y_scroll()
-            .bg(theme.background)
             .text_color(theme.text)
             .child(
                 div()

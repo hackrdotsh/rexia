@@ -86,7 +86,7 @@ still need an account-owned test. The automated checks use an isolated Rex serve
 
 Working:
 
-- Settings search (`Ctrl+F` in Settings) and the command palette share an index of 85
+- Settings search (`Ctrl+F` in Settings) and the command palette share an index of 86
   client preferences. Search matches names, sections, groups and setting paths; arrows
   and Enter open a result's editor. Changed settings have Reset controls, including
   text fields and per-state notification settings. Reset restores inheritance for
@@ -118,8 +118,16 @@ Working:
 - The pointer hides while typing in a terminal, for every key the terminal takes (Return,
   Backspace, arrows and Ctrl combinations too, not only characters), until the mouse moves.
 
-- Fade inactive panes dims a pane's content as one picture, under a sheet of the terminal's
-  background, so half-block pictures (fastfetch logos) keep their colors apart when faded.
+- Separate active and inactive pane background opacity controls default to 100%.
+  The selected pane uses the active value only while its window is focused; all other
+  panes use the inactive value. Terminal colors, explicit cell backgrounds, padding,
+  and pane headers become translucent without fading text, cursors, or controls.
+  The sidebar and toolbar stay opaque. Blur is requested where the compositor exposes
+  a supported protocol; transparency does not guarantee blur.
+
+- Fade inactive panes mixes content colors toward the terminal background without
+  changing background opacity. Half-block pictures (fastfetch logos) keep their colors
+  apart when faded, including over a translucent pane.
 
 - With focus follows mouse, the pane under the pointer takes keyboard focus as well as the
   highlight: what you type goes to the pane the pointer moved onto.

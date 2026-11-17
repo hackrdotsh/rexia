@@ -161,8 +161,101 @@ fn padding_fills(
     fills
 }
 
+/// Cut a rectangle out without overlapping the remaining pieces.
+fn outside(area: Bounds<Pixels>, cut: Bounds<Pixels>) -> Vec<Bounds<Pixels>> {
+    let cut = area.intersect(&cut);
+    if cut.size.width <= px(0.) || cut.size.height <= px(0.) {
+        return vec![area];
+    }
+    let right = area.origin.x + area.size.width;
+    let bottom = area.origin.y + area.size.height;
+    let x = cut.origin.x + cut.size.width;
+    let y = cut.origin.y + cut.size.height;
+    [
+        Bounds::new(
+            area.origin,
+            size(area.size.width, cut.origin.y - area.origin.y),
+        ),
+        Bounds::new(point(area.origin.x, y), size(area.size.width, bottom - y)),
+        Bounds::new(
+            point(area.origin.x, cut.origin.y),
+            size(cut.origin.x - area.origin.x, cut.size.height),
+        ),
+        Bounds::new(point(x, cut.origin.y), size(right - x, cut.size.height)),
+    ]
+    .into_iter()
+    .filter(|b| b.size.width > px(0.) && b.size.height > px(0.))
+    .collect()
+}
+
+/// A disjoint background plane. Explicit cells follow below-background images;
+/// defaults and padding precede them, matching the terminal graphics protocol.
+fn background_fills(
+    frame: &Frame,
+    mode: PaddingFill,
+    bounds: Bounds<Pixels>,
+    origin: Point<Pixels>,
+    cell: CellSize,
+) -> Vec<(Bounds<Pixels>, u32, bool)> {
+    let rows = frame.lines.len().min(frame.rows as usize);
+    let grid = Bounds::new(
+        origin,
+        size(
+            cell.width * f32::from(frame.cols),
+            cell.height * rows as f32,
+        ),
+    );
+    let mut unfilled = outside(bounds, grid);
+    let mut fills = Vec::new();
+    for (area, rgb) in padding_fills(frame, mode, bounds, origin, cell) {
+        let area = bounds.intersect(&area);
+        if area.size.width <= px(0.) || area.size.height <= px(0.) {
+            continue;
+        }
+        unfilled = unfilled
+            .into_iter()
+            .flat_map(|b| outside(b, area))
+            .collect();
+        fills.push((area, rgb, false));
+    }
+    fills.extend(unfilled.into_iter().map(|area| (area, frame.bg, false)));
+    for (row, cells) in frame.lines.iter().take(rows).enumerate() {
+        let mut start = 0;
+        while start < frame.cols as usize {
+            let bg = cells.get(start).and_then(|c| c.bg);
+            let mut end = start + 1;
+            while end < frame.cols as usize && cells.get(end).and_then(|c| c.bg) == bg {
+                end += 1;
+            }
+            let area = Bounds::new(
+                origin + point(cell.width * start as f32, cell.height * row as f32),
+                size(cell.width * (end - start) as f32, cell.height),
+            );
+            fills.push((area, bg.unwrap_or(frame.bg), bg.is_some()));
+            start = end;
+        }
+    }
+    fills
+}
+
+const INACTIVE_DIM: f32 = 0.4;
+
+/// Dim RGB rather than alpha, so the desktop never leaks through glyphs or sprites.
+fn dim_color(value: Hsla, background: Hsla, dimmed: bool) -> Hsla {
+    if !dimmed {
+        return value;
+    }
+    let mut value = gpui::Rgba::from(value);
+    let background = gpui::Rgba::from(background);
+    let amount = INACTIVE_DIM;
+    value.r += (background.r - value.r) * amount;
+    value.g += (background.g - value.g) * amount;
+    value.b += (background.b - value.b) * amount;
+    value.into()
+}
+
 /// One image's part, as GPUI draws it: the source rectangle cut out, in BGRA.
-fn texture(placement: &Placement) -> Option<Arc<RenderImage>> {
+fn texture(placement: &Placement, dim: Option<u32>) -> Option<Arc<RenderImage>> {
     let pixels = &placement.pixels;
     let [x, y, w, h] = placement.source;
     let (x, y) = (x.min(pixels.width), y.min(pixels.height));
@@ -175,7 +268,13 @@ fn texture(placement: &Placement) -> Option<Arc<RenderImage>> {
         let start = (row as usize * pixels.width as usize + x as usize) * 4;
         let line = pixels.rgba.get(start..start + w as usize * 4)?;
         for p in line.as_chunks::<4>().0 {
-            bgra.extend_from_slice(&[p[2], p[1], p[0], p[3]]);
+            let channel = |v: u8, shift: u32| {
+                dim.map_or(v, |rgb| {
+                    let background = ((rgb >> shift) & 255) as f32;
+                    (f32::from(v) + (background - f32::from(v)) * INACTIVE_DIM).round() as u8
+                })
+            };
+            bgra.extend_from_slice(&[channel(p[2], 0), channel(p[1], 8), channel(p[0], 16), p[3]]);
         }
     }
     let buffer = image::RgbaImage::from_raw(w, h, bgra)?;
@@ -322,6 +421,9 @@ pub struct CellSize {
 pub struct TerminalPane {
     /// Kitty graphics ready to draw, by image, generation and the part shown.
     textures: HashMap<(u32, u64, [u32; 4]), Arc<RenderImage>>,
+    texture_dim: Option<u32>,
+    background_opacity: f32,
+    dimmed: bool,
     host: HostHandle,
     pub session_id: String,
     pub block_id: String,
@@ -392,6 +494,14 @@ pub struct TerminalPane {
 }
 
 impl TerminalPane {
+    pub fn set_appearance(&mut self, opacity: f32, dimmed: bool, cx: &mut Context<Self>) {
+        if self.background_opacity != opacity || self.dimmed != dimmed {
+            self.background_opacity = opacity;
+            self.dimmed = dimmed;
+            cx.notify();
+        }
+    }
+
     pub fn new(
         host: HostHandle,
         session_id: String,
@@ -400,6 +510,9 @@ impl TerminalPane {
         cx: &mut Context<Self>,
     ) -> Self {
         Self {
+            background_opacity: 1.,
+            dimmed: false,
+            texture_dim: None,
             host,
             session_id,
             block_id,
@@ -508,6 +621,13 @@ impl TerminalPane {
         frame: Option<&Frame>,
         window: &mut Window,
     ) -> Vec<(Placement, Arc<RenderImage>)> {
+        let dim = frame.filter(|_| self.dimmed).map(|f| f.bg);
+        if self.texture_dim != dim {
+            for (_, stale) in self.textures.drain() {
+                let _ = window.drop_image(stale);
+            }
+            self.texture_dim = dim;
+        }
         let placements = frame.map(|f| f.images.as_slice()).unwrap_or_default();
         let mut live = HashMap::with_capacity(placements.len());
         let mut drawn = Vec::with_capacity(placements.len());
@@ -523,7 +643,7 @@ impl TerminalPane {
                 .or_else(|| live.get(&key).cloned())
             {
                 Some(texture) => texture,
-                None => match texture(placement) {
+                None => match texture(placement, dim) {
                     Some(texture) => texture,
                     None => continue,
                 },
@@ -671,6 +791,7 @@ impl TerminalPane {
             default_fg: frame.fg,
             default_bg: frame.bg,
             ansi: frame.ansi,
+            dimmed: self.dimmed,
         };
         Some(look.text_color(cell.fg, cell.bg))
     }
@@ -1321,6 +1442,7 @@ struct Look {
     default_fg: u32,
     default_bg: u32,
     ansi: [u32; 16],
+    dimmed: bool,
 }
 
 impl Look {
@@ -1375,7 +1497,7 @@ fn segments(
     for (col, cell) in cells.iter().enumerate() {
         let col = col as u16;
         let mut fg = color(look.text_color(cell.fg, cell.bg));
-        let mut bg = cell.bg.map(color);
+        let mut bg = None;
         let mut selected = false;
         if cell.has(flags::CURRENT_MATCH) {
             bg = Some(palette.current_bg);
@@ -1390,6 +1512,8 @@ fn segments(
         if cell.has(flags::FAINT) {
             fg.a *= 0.6;
         }
+        fg = dim_color(fg, color(look.default_bg), look.dimmed);
+        bg = bg.map(|bg| dim_color(bg, color(look.default_bg), look.dimmed));
         if let Some(bg) = bg {
             match backgrounds.last_mut() {
                 Some((_, end, last, was)) if *end == col && *last == bg && *was == selected => {
@@ -1462,6 +1586,9 @@ impl Render for TerminalPane {
         let background = frame
             .as_ref()
             .map_or(color(theme.terminal.background), |f| color(f.bg));
+        let opacity = self.background_opacity.clamp(0., 1.);
+        let dimmed = self.dimmed;
+        let dim = move |value| dim_color(value, background, dimmed);
         let entity = cx.entity();
         let terminal_font = self.terminal_font();
         let font_size = px(self.font.pixels());
@@ -1497,8 +1624,8 @@ impl Render for TerminalPane {
         let padding_fill = self.padding_fill;
         let scroll_shift = self.scroll_offset();
         let anchor = self.anchor;
-        let cursor_color = color(theme.terminal.cursor);
-        let cursor_text = color(theme.terminal.cursor_text);
+        let cursor_color = dim(color(theme.terminal.cursor));
+        let cursor_text = dim(color(theme.terminal.cursor_text));
         // Only a focused pane's cursor blinks, and only if its program asks.
         let cursor = frame.as_ref().and_then(|f| f.cursor);
         self.blinking = focused && self.blink.is_some() && cursor.is_some_and(|c| c.blinking);
@@ -1515,7 +1642,7 @@ impl Render for TerminalPane {
         if trail.is_some() {
             window.request_animation_frame();
         }
-        let accent = theme.primary;
+        let accent = dim(theme.primary);
         let preedit = self.preedit.clone().filter(|p| !p.is_empty() && focused);
         let focus_handle = self.focus.clone();
         let images = self.image_textures(frame.as_deref(), window);
@@ -1543,17 +1670,17 @@ impl Render for TerminalPane {
                     gpui::ElementInputHandler::new(bounds, entity.clone()),
                     cx,
                 );
-                window.paint_quad(fill(bounds, background));
-                let Some(frame) = frame else { return };
+                let Some(frame) = frame else {
+                    window.paint_quad(fill(bounds, background.opacity(opacity)));
+                    return;
+                };
                 let shift = anchor_shift(anchor, bounds, padding, cell, Some(frame.rows));
                 // The grid starts on a device pixel, so its cells do too.
                 let scale = window.scale_factor();
                 let snap = |v: Pixels| px((f32::from(v) * scale).round() / scale);
                 let origin = bounds.origin + padding + point(px(0.), scroll_shift + shift);
                 let origin = point(snap(origin.x), snap(origin.y));
-                for (area, rgb) in padding_fills(&frame, padding_fill, bounds, origin, cell) {
-                    window.paint_quad(fill(area, color(rgb)));
-                }
+                let backgrounds = background_fills(&frame, padding_fill, bounds, origin, cell);
                 // Kitty graphics draw in three layers around the cell backgrounds and text.
                 let paint_images = |layer: Layer, window: &mut Window| {
                     for (placement, texture) in images.iter().filter(|(p, _)| p.layer == layer) {
@@ -1585,9 +1712,20 @@ impl Render for TerminalPane {
                     default_fg: frame.fg,
                     default_bg: frame.bg,
                     ansi: frame.ansi,
+                    dimmed,
                 };
                 window.with_content_mask(Some(gpui::ContentMask { bounds }), |window| {
+                    for &(area, rgb, explicit) in &backgrounds {
+                        if !explicit {
+                            window.paint_quad(fill(area, dim(color(rgb)).opacity(opacity)));
+                        }
+                    }
                     paint_images(Layer::BelowBackground, window);
+                    for &(area, rgb, explicit) in &backgrounds {
+                        if explicit {
+                            window.paint_quad(fill(area, dim(color(rgb)).opacity(opacity)));
+                        }
+                    }
                     let mut rows = Vec::with_capacity(frame.lines.len());
                     let mut drawn = Vec::new();
                     for (row, cells) in frame.lines.iter().enumerate() {
@@ -1680,6 +1818,7 @@ impl Render for TerminalPane {
                             .cursor
                             .and_then(|c| c.color)
                             .map(super::theme::color)
+                            .map(dim)
                             .unwrap_or(cursor_color);
                         crate::ui::cursor_trail::paint_trail(
                             window,
@@ -1698,6 +1837,7 @@ impl Render for TerminalPane {
                         let color = cursor
                             .color
                             .map(super::theme::color)
+                            .map(dim)
                             .unwrap_or(cursor_color);
                         match shape {
                             CursorShape::Block => {
@@ -1760,7 +1900,7 @@ impl Render for TerminalPane {
                     // a wide character taking two, as the terminal will lay it out.
                     if let (Some(text), Some(cursor)) = (preedit.clone(), frame.cursor) {
                         use unicode_width::UnicodeWidthChar;
-                        let fg = super::theme::color(frame.fg);
+                        let fg = dim(super::theme::color(frame.fg));
                         let mut col = cursor.x;
                         for c in text.chars() {
                             let cells = c.width().unwrap_or(0).max(1) as u16;
@@ -1815,7 +1955,6 @@ impl Render for TerminalPane {
             .size_full()
             .relative()
             .overflow_hidden()
-            .bg(background)
             .cursor(gpui::CursorStyle::IBeam)
             .on_key_down(cx.listener(|pane, event: &KeyDownEvent, window, cx| {
                 if pane.send_key(event, cx) {
@@ -2182,6 +2321,7 @@ mod tests {
             default_fg: 0xeeeeee,
             default_bg: 0x000000,
             ansi: [0; 16],
+            dimmed: false,
         }
     }
 
@@ -2225,10 +2365,58 @@ mod tests {
         row[0].bg = Some(0x101010);
         row[1].bg = Some(0x101010);
         let (_, backgrounds, _) = segments(&row, &look());
-        assert_eq!(backgrounds.len(), 3);
-        assert!(!backgrounds[0].3 && backgrounds[1].3 && !backgrounds[2].3);
-        assert_eq!((backgrounds[0].0, backgrounds[0].1), (0, 2));
-        assert_eq!(backgrounds[1].2, color(0x333333));
-        assert_eq!(backgrounds[2].2, color(0x555555));
+        assert_eq!(backgrounds.len(), 2);
+        assert!(backgrounds[0].3 && !backgrounds[1].3);
+        assert_eq!((backgrounds[0].0, backgrounds[0].1), (2, 3));
+        assert_eq!(backgrounds[0].2, color(0x333333));
+        assert_eq!(backgrounds[1].2, color(0x555555));
+    }
+
+    #[test]
+    fn background_plane_covers_each_pixel_once() {
+        let mut frame = frame_with(&[&[None, None, None], &[None, None, None]], true);
+        frame.lines[0][0].bg = Some(0xff0000);
+        frame.lines[1][1].bg = Some(0x0000ff);
+        let bounds = Bounds::new(point(px(0.), px(0.)), size(px(80.), px(65.)));
+        let cell = CellSize {
+            width: px(10.),
+            height: px(12.),
+        };
+        for mode in [
+            PaddingFill::Off,
+            PaddingFill::Automatic,
+            PaddingFill::Always,
+        ] {
+            for origin in [
+                point(px(8.), px(6.)),
+                point(px(8.), px(-3.)),
+                point(px(8.), px(23.)),
+            ] {
+                let fills = background_fills(&frame, mode, bounds, origin, cell);
+                for y in 0..65 {
+                    for x in 0..80 {
+                        let at = point(px(x as f32 + 0.5), px(y as f32 + 0.5));
+                        let count = fills.iter().filter(|(b, _, _)| b.contains(&at)).count();
+                        assert_eq!(count, 1, "{mode:?} at {origin:?}: pixel {x},{y}");
+                    }
+                }
+                let at = origin + point(px(5.), px(5.));
+                assert!(
+                    fills
+                        .iter()
+                        .any(|(b, rgb, explicit)| b.contains(&at) && *rgb == 0xff0000 && *explicit)
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn dimming_preserves_foreground_alpha() {
+        let mut look = look();
+        look.dimmed = true;
+        let (_, _, sprites) = segments(&[cell("▀", 0)], &look);
+        let fg = gpui::Rgba::from(sprites[0].2);
+        assert_eq!(fg.a, 1.);
+        assert!((fg.r - 0.6).abs() < 0.001);
     }
 }

@@ -22,18 +22,17 @@ fn numbers(line: &str, marker: &str) -> Vec<u32> {
         .unwrap_or_default()
 }
 
-#[test]
-fn fractional_scale_survives_surface_enter() {
+fn wayland_trace(settings_text: &str, name: &str) -> Option<String> {
     let Ok(compositor) = std::env::var("REXIA_TEST_UMBRIEL") else {
         eprintln!("skipped: set REXIA_TEST_UMBRIEL to test actual Wayland scaling");
-        return;
+        return None;
     };
     let dir = tempfile::tempdir().unwrap();
     let root = dir.path();
     let trace = root.join("wayland.log");
     let launcher = root.join("launch.sh");
     let settings = root.join("settings.toml");
-    fs::write(&settings, "[interface]\nsidebar = false\n").unwrap();
+    fs::write(&settings, settings_text).unwrap();
     fs::write(
         &launcher,
         format!(
@@ -94,6 +93,47 @@ fn fractional_scale_survives_surface_enter() {
         fs::read_to_string(root.join("errors.log")).unwrap()
     );
     let trace = fs::read_to_string(trace).unwrap();
+    if let Ok(directory) = std::env::var("REXIA_SHOT_DIR") {
+        fs::create_dir_all(&directory).unwrap();
+        fs::write(
+            std::path::Path::new(&directory).join(format!("{name}-wayland.log")),
+            &trace,
+        )
+        .unwrap();
+    }
+    Some(trace)
+}
+
+#[test]
+fn translucent_windows_clear_the_opaque_region() {
+    let Some(trace) = wayland_trace(
+        "[interface]\nsidebar = false\nactive_pane_opacity = 0.5\ninactive_pane_opacity = 0.25\n",
+        "opacity",
+    ) else {
+        return;
+    };
+    assert!(
+        trace.contains(".set_opaque_region(nil)"),
+        "translucent window was advertised as opaque"
+    );
+    if trace.contains("ext_background_effect_manager_v1") {
+        assert!(trace.contains(".set_blur_region("));
+        println!("ext-background-effect blur requested");
+    } else if trace.contains("org_kde_kwin_blur_manager") {
+        assert!(trace.contains(".create(new id org_kde_kwin_blur"));
+        println!("KDE blur requested");
+    } else {
+        println!(
+            "compositor exposes no blur protocol; transparency request verified, blur unsupported"
+        );
+    }
+}
+
+#[test]
+fn fractional_scale_survives_surface_enter() {
+    let Some(trace) = wayland_trace("[interface]\nsidebar = false\n", "scale") else {
+        return;
+    };
     let (_, after_scale) = trace
         .split_once("preferred_scale(180)")
         .expect("compositor must supply the 150% scale");

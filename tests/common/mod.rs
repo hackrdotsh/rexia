@@ -163,10 +163,26 @@ impl Harness {
         width: f32,
         height: f32,
     ) -> Self {
+        Self::open_with_renderer(
+            settings,
+            path,
+            width,
+            height,
+            gpui_platform::current_headless_renderer,
+        )
+    }
+
+    pub fn open_with_renderer(
+        settings: Settings,
+        path: Option<PathBuf>,
+        width: f32,
+        height: f32,
+        renderer: impl Fn() -> anyhow::Result<Option<Box<dyn gpui::PlatformHeadlessRenderer>>> + 'static,
+    ) -> Self {
         let mut cx = HeadlessAppContext::with_platform(
             Arc::new(gpui_wgpu::CosmicTextSystem::new("DM Sans")),
             Arc::new(Assets),
-            gpui_platform::current_headless_renderer,
+            renderer,
         );
         cx.update(|cx| cx.set_global(Theme::from_noctalia(&noctalia::load())));
         let window = cx
