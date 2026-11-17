@@ -284,7 +284,18 @@ impl Render for TextInput {
         let theme = Theme::get(cx).clone();
         let focused = self.focus.is_focused(window);
         let primary = theme.primary;
-        let cursor = move || div().flex_none().w(px(1.5)).h(px(18.)).bg(primary);
+        // Anchor the caret between text runs without adding to their width.
+        let cursor = move || {
+            div().relative().flex_none().w(px(0.)).h(px(18.)).child(
+                div()
+                    .absolute()
+                    .left_0()
+                    .top_0()
+                    .w(px(1.5))
+                    .h_full()
+                    .bg(primary),
+            )
+        };
         let mut line = div()
             .flex()
             .items_center()
