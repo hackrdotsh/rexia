@@ -80,8 +80,16 @@ fn sidebar_resizes_by_its_edge_and_remembers() {
     assert!((after - before - 100.).abs() < 1.5, "the panes moved over");
     h.screenshot("sidebar-wide");
 
+    // The edge reaches over the border: a press just inside the panes grabs it too, and
+    // under the pointer it shows a line.
+    h.input(PlatformInput::MouseMove(MouseMoveEvent {
+        position: point(px(362.), px(400.)),
+        pressed_button: None,
+        modifiers: Modifiers::default(),
+    }));
+    h.screenshot("sidebar-edge-hover");
     // It stops at its widest.
-    down(&mut h, 357., 1);
+    down(&mut h, 362., 1);
     drag_to(&mut h, 1000.);
     up(&mut h, 1000.);
     println!("dragged far: {}", saved(&mut h));
