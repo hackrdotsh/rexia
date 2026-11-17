@@ -13,7 +13,6 @@ use crate::{
         actions,
         components::{dot, icon_button},
         fuzzy,
-        icons::icon,
         input::{InputEvent, TextInput},
         theme::Theme,
         titles,
@@ -1535,6 +1534,12 @@ impl Workspace {
                 };
                 let kind = list.kind;
                 let choice = item.choice.clone();
+                let terminal_colors = match &choice {
+                    Choice::Block { host, block, .. } => self.hosts.get(*host).and_then(|host| {
+                        crate::ui::program_icons::pane_colors(&host.handle.snapshot(), block)
+                    }),
+                    _ => None,
+                };
                 Some(
                     div()
                         .id(SharedString::from(format!("item-{position}")))
@@ -1548,11 +1553,13 @@ impl Workspace {
                         .when(selected, |d| d.bg(theme.primary))
                         .when(!selected, |d| d.hover(|d| d.bg(theme.overlay(0.06))))
                         .text_color(fg)
-                        .child(icon(item.icon).size(px(16.)).text_color(if selected {
-                            fg
-                        } else {
-                            theme.primary
-                        }))
+                        .child(crate::ui::program_icons::render_icon(
+                            item.icon,
+                            20.,
+                            if selected { fg } else { theme.primary },
+                            theme,
+                            terminal_colors,
+                        ))
                         .child(
                             div()
                                 .flex()

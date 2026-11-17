@@ -118,7 +118,7 @@ fn tab_icons_count_color_and_follow_programs() {
     assert_eq!(seen[2], (vec![true; 3], vec![false]));
     assert_eq!(seen[3], (vec![false; 3], vec![false]));
 
-    // The shell icon theme: the accent tile for a colored shell.
+    // Shell icons follow the terminal, including when an old config requests an accent tile.
     settings(&mut h, |s| {
         s.interface.tab_icon_color = TabIconColor::Always;
         s.interface.shell_icon_theme = ShellIconTheme::Accent;
@@ -128,8 +128,22 @@ fn tab_icons_count_color_and_follow_programs() {
     assert_eq!(shell.program, Program::Shell);
     assert_eq!(
         icon_look(shell, ShellIconTheme::Accent, theme.text, &theme).tile,
-        Some(theme.primary)
+        Some(rexia::ui::theme::color(shell.terminal_colors.unwrap().1))
     );
+
+    // OSC defaults belong to this pane, not the global theme or another pane.
+    h.type_text("printf '\\033]10;#b6c7d8\\007\\033]11;#203040\\007'");
+    h.press("enter");
+    h.wait_ui("pane-specific shell colors", |ws| {
+        let items = ws.tab_icon_list(&first_tab, false, &ws.model());
+        (items.first()?.terminal_colors == Some((0xb6c7d8, 0x203040))).then_some(())
+    });
+    let items = icons(&mut h, &first_tab, false);
+    assert_ne!(items[0].terminal_colors, items[1].terminal_colors);
+    let look = icon_look(items[0], ShellIconTheme::Default, theme.text, &theme);
+    assert_eq!(look.glyph, rexia::ui::theme::color(0xb6c7d8));
+    assert_eq!(look.tile, Some(rexia::ui::theme::color(0x203040)));
+    h.screenshot("tab-icons-pane-colors");
 
     // A program in the focused pane changes its icon, first in the stack.
     h.type_text("top");
@@ -139,7 +153,7 @@ fn tab_icons_count_color_and_follow_programs() {
         (first.program != Program::Shell).then_some(first.program)
     });
     println!("running top: {program:?}");
-    assert_eq!(program, Program::Monitor);
+    assert_eq!(program.icon(), "programs/shell-top");
     settings(&mut h, |s| {
         s.interface.shell_icon_theme = ShellIconTheme::Default
     });
@@ -147,5 +161,47 @@ fn tab_icons_count_color_and_follow_programs() {
     settings(&mut h, |s| s.interface.toolbar_layout = ToolbarLayout::Left);
     h.screenshot("tab-icons-vertical");
     h.press("q");
+    h.wait_ui("shell after top exits", |ws| {
+        (ws.tab_icon_list(&first_tab, false, &ws.model())
+            .first()?
+            .program
+            == Program::Shell)
+            .then_some(())
+    });
+
+    // A tiny test executable supplies a real process identity without
+    // invoking a paid agent or requiring any third-party CLI installation.
+    let directory = tempfile::tempdir().unwrap();
+    let executable = directory.path().join("codex");
+    let source = directory.path().join("fixture.c");
+    std::fs::write(
+        &source,
+        "#include <unistd.h>\nint main(void) { sleep(30); return 0; }\n",
+    )
+    .unwrap();
+    assert!(
+        std::process::Command::new("cc")
+            .arg(&source)
+            .arg("-o")
+            .arg(&executable)
+            .status()
+            .unwrap()
+            .success()
+    );
+    h.type_text(&format!("env '{}'", executable.display()));
+    h.press("enter");
+    h.wait("Codex's OpenAI tile", |model| {
+        let state = model.blocks.get(&first)?;
+        (Program::of(Some(state)).icon() == "programs/codex").then_some(())
+    });
+    h.screenshot("tab-icons-codex-openai");
+    h.press("ctrl-c");
+    h.wait_ui("shell after Codex exits", |ws| {
+        (ws.tab_icon_list(&first_tab, false, &ws.model())
+            .first()?
+            .program
+            == Program::Shell)
+            .then_some(())
+    });
     drop(sessions);
 }

@@ -4,11 +4,7 @@
 use super::{Workspace, state_color};
 use crate::{
     rex::{activity::ProgramState, host::HostModel},
-    ui::{
-        icons::icon,
-        theme::Theme,
-        titles::{self, Program},
-    },
+    ui::{icons::icon, theme::Theme, titles},
 };
 use gpui::{
     AnyView, App, Bounds, Context, Entity, Hsla, Pixels, SharedString, Subscription, WeakEntity,
@@ -46,7 +42,7 @@ struct PaneInfo {
     block_id: String,
     title: String,
     icon: &'static str,
-    program: Program,
+    colors: Option<(u32, u32)>,
     focused: bool,
     directory: Option<String>,
     /// What each program reporting in it says: who, its state, its words, and progress.
@@ -124,7 +120,7 @@ fn panes_of(target: &CardTarget, model: &HostModel, local: bool) -> (String, Vec
             let title = titles::pane_title(block, state);
             Some(PaneInfo {
                 icon: titles::program_icon(state),
-                program: Program::of(state),
+                colors: crate::ui::program_icons::pane_colors(model, &id),
                 focused: window.focused_block_id.as_deref() == Some(id.as_str()),
                 directory: state
                     .and_then(|s| s.pwd.as_deref().or(s.process.cwd.as_deref()))
@@ -299,7 +295,6 @@ impl Render for HoverCard {
             )
             .absolute()
             .size_full();
-            let color = crate::ui::theme::color(theme.terminal.ansi[pane.program.ansi()]);
             let mut row = div()
                 .id(SharedString::from(format!("card-pane-{block}")))
                 .relative()
@@ -315,7 +310,13 @@ impl Render for HoverCard {
                         .flex()
                         .items_center()
                         .gap(px(8.))
-                        .child(icon(pane.icon).size(px(14.)).text_color(color))
+                        .child(crate::ui::program_icons::render_icon(
+                            pane.icon,
+                            18.,
+                            theme.text,
+                            &theme,
+                            pane.colors,
+                        ))
                         .child(
                             div()
                                 .flex_1()

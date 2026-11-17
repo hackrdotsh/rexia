@@ -435,7 +435,18 @@ impl Workspace {
                     .rounded(theme.radius_small())
                     .cursor_pointer()
                     .hover(|d| d.bg(theme.overlay(0.06)))
-                    .child(icon(row.icon).size(px(16.)).text_color(theme.primary))
+                    .child(crate::ui::program_icons::render_icon(
+                        row.icon,
+                        20.,
+                        theme.primary,
+                        theme,
+                        self.hosts.get(row.host).and_then(|host| {
+                            crate::ui::program_icons::pane_colors(
+                                &host.handle.snapshot(),
+                                &row.block,
+                            )
+                        }),
+                    ))
                     .child(
                         div()
                             .flex()

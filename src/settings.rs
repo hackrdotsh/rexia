@@ -440,6 +440,7 @@ pub struct InterfaceSettings {
     /// Spread or pinch over a pane to zoom or restore it, and swipe for the sidebar.
     pub trackpad_gestures: bool,
     pub tab_icon_color: TabIconColor,
+    /// Legacy preference retained for config compatibility; shell icons now follow their pane.
     pub shell_icon_theme: ShellIconTheme,
     /// How many pane icons a tab shows: up to three in vertical tabs, five in horizontal.
     pub tab_icons: u8,

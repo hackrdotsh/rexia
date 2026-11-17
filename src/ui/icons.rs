@@ -1,4 +1,4 @@
-//! Tabler icons, the set Noctalia uses, compiled into the binary.
+//! Bundled Tabler interface icons and sourced program artwork.
 use gpui::{AssetSource, SharedString, Svg, prelude::*, svg};
 use std::borrow::Cow;
 
@@ -73,6 +73,12 @@ impl AssetSource for Assets {
                 .iter()
                 .find(|(icon, _)| *icon == name)
                 .map(|(_, bytes)| Cow::Borrowed(*bytes))
+                .or_else(|| {
+                    crate::ui::program_icons::PROGRAMS
+                        .iter()
+                        .find(|program| program.icon == name)
+                        .map(|program| Cow::Borrowed(program.svg.as_bytes()))
+                })
         }))
     }
 
@@ -80,12 +86,17 @@ impl AssetSource for Assets {
         Ok(ICONS
             .iter()
             .map(|(name, _)| SharedString::from(format!("icons/{name}.svg")))
+            .chain(
+                crate::ui::program_icons::PROGRAMS
+                    .iter()
+                    .map(|program| SharedString::from(format!("icons/{}.svg", program.icon))),
+            )
             .filter(|p| p.starts_with(path))
             .collect())
     }
 }
 
-/// An icon by its Tabler name, sized like text.
+/// An interface or program icon, sized like text.
 pub fn icon(name: &'static str) -> Svg {
     svg().path(format!("icons/{name}.svg")).flex_none()
 }
@@ -101,6 +112,16 @@ mod tests {
             assert!(bytes.starts_with(b"<svg"), "{name}");
         }
         assert!(Assets.load("icons/nope.svg").unwrap().is_none());
-        assert_eq!(Assets.list("icons/").unwrap().len(), ICONS.len());
+        for program in crate::ui::program_icons::PROGRAMS {
+            let bytes = Assets
+                .load(&format!("icons/{}.svg", program.icon))
+                .unwrap()
+                .unwrap();
+            assert_eq!(bytes.as_ref(), program.svg.as_bytes());
+        }
+        assert_eq!(
+            Assets.list("icons/").unwrap().len(),
+            ICONS.len() + crate::ui::program_icons::PROGRAMS.len()
+        );
     }
 }

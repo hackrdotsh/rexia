@@ -492,6 +492,11 @@ impl TerminalPane {
         Some(self.frame()?.bg)
     }
 
+    pub fn default_colors(&self) -> Option<(u32, u32)> {
+        let frame = self.frame()?;
+        Some((frame.fg, frame.bg))
+    }
+
     /// The color the pane header takes to match the program, while the padding fills.
     pub fn header_fill(&self) -> Option<u32> {
         top_fill(&*self.frame()?, self.padding_fill)

@@ -349,7 +349,12 @@ pub fn entries() -> Vec<Entry> {
             for (key, value) in object {
                 walk(value, &format!("{path}.{key}"), section, entries);
             }
-        } else if !value.is_array() && path != "interface.vertical_side" {
+        } else if !value.is_array()
+            && !matches!(
+                path,
+                "interface.vertical_side" | "interface.shell_icon_theme"
+            )
+        {
             let named = NAMES.iter().find(|(key, _, _)| *key == path);
             let id = named
                 .map(|(_, id, _)| (*id).to_owned())

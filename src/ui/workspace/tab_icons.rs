@@ -5,7 +5,6 @@ use crate::{
     settings::{InterfaceSettings, ShellIconTheme, TabIconColor},
     ui::{
         icons::icon,
-        text_color::luminance,
         theme::{Theme, color},
         titles::Program,
     },
@@ -22,6 +21,8 @@ pub struct TabIcon {
     pub program: Program,
     /// Whether it draws in its program's colors.
     pub colored: bool,
+    /// Current terminal foreground/background, including OSC color changes.
+    pub terminal_colors: Option<(u32, u32)>,
 }
 
 /// How an icon draws: its glyph's color, and the tile behind it when colored.
@@ -62,44 +63,30 @@ pub fn tab_icons(
                     TabIconColor::ActiveTabs => selected,
                     TabIconColor::Never => false,
                 },
+                terminal_colors: crate::ui::program_icons::pane_colors(model, block),
             }
         })
         .collect()
 }
 
-/// Dark or light, whichever reads on `tile`.
-fn readable_on(tile: u32) -> Hsla {
-    if luminance(tile) > 0.35 {
-        gpui::hsla(0., 0., 0.08, 1.)
-    } else {
-        gpui::hsla(0., 0., 0.96, 1.)
-    }
-}
-
 /// How `item` draws on a tab whose text is `text`. Colored icons sit on a tile of their
 /// program's color, so they read on any tab background; plain ones take the tab's text color.
-pub fn icon_look(item: TabIcon, shell: ShellIconTheme, text: Hsla, theme: &Theme) -> IconLook {
+pub fn icon_look(item: TabIcon, _shell: ShellIconTheme, text: Hsla, theme: &Theme) -> IconLook {
     if !item.colored {
         return IconLook {
             glyph: text,
             tile: None,
         };
     }
-    let rgb = |tile: u32| IconLook {
-        glyph: readable_on(tile),
-        tile: Some(color(tile)),
-    };
-    match (item.program, shell) {
-        (Program::Shell, ShellIconTheme::Default) => rgb(0x1e1e1e),
-        (Program::Shell, ShellIconTheme::Theme) => IconLook {
-            glyph: color(theme.terminal.foreground),
-            tile: Some(color(theme.terminal.background)),
-        },
-        (Program::Shell, ShellIconTheme::Accent) => IconLook {
-            glyph: theme.on_primary,
-            tile: Some(theme.primary),
-        },
-        (program, _) => rgb(theme.terminal.ansi[program.ansi()]),
+    let (fg, bg) =
+        crate::ui::program_icons::colors(item.program.icon(), theme, item.terminal_colors)
+            .unwrap_or_else(|| {
+                let bg = theme.terminal.ansi[item.program.ansi()];
+                (crate::ui::program_icons::tile::foreground(bg), bg)
+            });
+    IconLook {
+        glyph: color(fg),
+        tile: Some(color(bg)),
     }
 }
 
@@ -123,14 +110,14 @@ pub fn render_icons(
             .items_center()
             .justify_center()
             .size(px(tile))
-            .rounded(theme.radius_small())
+            .rounded(px(tile * 0.24))
             .when_some(look.tile, |d, bg| d.bg(bg))
             .when(index > 0, |d| {
                 d.ml(px(if look.tile.is_some() { -3. } else { 1. }))
             })
             .child(
                 icon(item.program.icon())
-                    .size(px(size))
+                    .size(px(if item.colored { tile * 0.72 } else { size }))
                     .text_color(look.glyph),
             )
     });
@@ -192,6 +179,7 @@ mod tests {
         let shell = |colored| TabIcon {
             program: Program::Shell,
             colored,
+            terminal_colors: Some((0xaabbcc, 0x112233)),
         };
         assert_eq!(
             icon_look(shell(false), ShellIconTheme::Accent, text, &theme),
@@ -201,18 +189,20 @@ mod tests {
             }
         );
         let accent = icon_look(shell(true), ShellIconTheme::Accent, text, &theme);
-        assert_eq!(accent.tile, Some(theme.primary));
+        assert_eq!(accent.tile, Some(color(0x112233)));
+        assert_eq!(accent.glyph, color(0xaabbcc));
         let themed = icon_look(shell(true), ShellIconTheme::Theme, text, &theme);
-        assert_eq!(themed.tile, Some(color(theme.terminal.background)));
-        assert_eq!(themed.glyph, color(theme.terminal.foreground));
+        assert_eq!(themed.tile, Some(color(0x112233)));
+        assert_eq!(themed.glyph, color(0xaabbcc));
         let artwork = icon_look(shell(true), ShellIconTheme::Default, text, &theme);
-        assert_eq!(artwork.tile, Some(color(0x1e1e1e)));
+        assert_eq!(artwork.tile, Some(color(0x112233)));
         let git = TabIcon {
             program: Program::Git,
             colored: true,
+            terminal_colors: None,
         };
         let git = icon_look(git, ShellIconTheme::Accent, text, &theme);
-        assert_eq!(git.tile, Some(color(theme.terminal.ansi[9])));
+        assert_eq!(git.tile, Some(color(0xc03d2c)));
     }
 
     #[test]

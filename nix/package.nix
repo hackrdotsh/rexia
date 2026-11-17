@@ -59,6 +59,8 @@ rustPlatform.buildRustPackage {
       ../assets
       ../resources
       ../vendor
+      # The catalog's unit test checks coverage against the requested names.
+      ../tests/fixtures/program-icons.txt
     ];
   };
 
@@ -91,6 +93,10 @@ rustPlatform.buildRustPackage {
     install -Dm644 resources/dev.hackr.rexia.svg \
       $out/share/icons/hicolor/scalable/apps/dev.hackr.rexia.svg
     install -Dm644 resources/noctalia/rexia.toml $out/share/rexia/noctalia/rexia.toml
+    install -d $out/share/doc/rexia/program-icons
+    cp assets/programs/README.md assets/programs/SOURCES.md assets/programs/catalog.json \
+      $out/share/doc/rexia/program-icons/
+    cp -r assets/programs/licenses $out/share/doc/rexia/program-icons/
     wrapProgram $out/bin/rexia \
       --prefix LD_LIBRARY_PATH : ${lib.makeLibraryPath runtimeLibraries}
   '';

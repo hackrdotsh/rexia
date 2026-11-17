@@ -2,8 +2,7 @@
 //! Colors, corners, borders and fonts aren't here: they follow Noctalia.
 use super::{Workspace, overlay::Overlay};
 use crate::settings::{
-    AnimationStyle, AppLinks, SelectionColor, ShellIconTheme, SidebarGesture, SidebarTextSize,
-    TabIconColor,
+    AnimationStyle, AppLinks, SelectionColor, SidebarGesture, SidebarTextSize, TabIconColor,
 };
 use crate::{
     rex::stream::CursorShape,
@@ -884,20 +883,6 @@ impl Workspace {
                 ],
                 i.tab_icon_color,
                 |s, v| s.interface.tab_icon_color = v,
-                theme,
-                cx,
-            ),
-            self.choice_row(
-                "shell-icon-theme",
-                "Shell icon theme",
-                "A colored shell icon's own artwork, the terminal theme's colors, or the accent.",
-                &[
-                    (ShellIconTheme::Default, "Default"),
-                    (ShellIconTheme::Theme, "Theme"),
-                    (ShellIconTheme::Accent, "Accent"),
-                ],
-                i.shell_icon_theme,
-                |s, v| s.interface.shell_icon_theme = v,
                 theme,
                 cx,
             ),

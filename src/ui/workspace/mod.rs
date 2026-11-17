@@ -1893,7 +1893,15 @@ impl Workspace {
                             }
                         })
                     })
-                    .child(icon(titles::program_icon(state)).size(px(14.)))
+                    .child(crate::ui::program_icons::render_icon(
+                        titles::program_icon(state),
+                        18.,
+                        muted,
+                        theme,
+                        self.panes
+                            .get(block_id)
+                            .and_then(|pane| pane.read(cx).default_colors()),
+                    ))
                     .child(
                         div()
                             .flex_1()

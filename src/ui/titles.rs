@@ -120,6 +120,7 @@ pub enum Program {
     Remote,
     Agent,
     Monitor,
+    Known(&'static super::program_icons::ProgramIcon),
 }
 
 impl Program {
@@ -128,6 +129,35 @@ impl Program {
             .and_then(|s| s.process.name.as_deref())
             .unwrap_or_default()
             .to_ascii_lowercase();
+        let known = super::program_icons::find(&name);
+        // Scripts report their own effective_app while the foreground process can
+        // still be a shell or runtime. Specific foreground tools beat stale reports.
+        let wrapper = known.is_none_or(|program| {
+            matches!(program.id, "shell" | "node" | "python" | "bun" | "ruby")
+        });
+        if wrapper
+            && let Some(program) = state
+                .into_iter()
+                .flat_map(|state| state.records.values())
+                .filter(|record| !matches!(record.state, ProgramState::Idle | ProgramState::Done))
+                .filter_map(|record| {
+                    Some((
+                        record.state,
+                        super::program_icons::find(record.app.as_deref()?)?,
+                    ))
+                })
+                .max_by_key(|(state, _)| *state)
+                .map(|(_, program)| program)
+        {
+            return Self::Known(program);
+        }
+        if let Some(program) = known {
+            return if program.id == "shell" {
+                Self::Shell
+            } else {
+                Self::Known(program)
+            };
+        }
         match name.as_str() {
             "git" | "lazygit" | "tig" | "jj" => Self::Git,
             "nvim" | "vim" | "vi" | "hx" | "helix" | "nano" | "emacs" | "kak" => Self::Editor,
@@ -138,15 +168,16 @@ impl Program {
         }
     }
 
-    /// Its Tabler icon.
+    /// Its original program icon, or a generic category icon for unknown tools.
     pub fn icon(self) -> &'static str {
         match self {
-            Self::Shell => "terminal-2",
-            Self::Git => "brand-git",
+            Self::Shell => "programs/shell",
+            Self::Git => "programs/git",
             Self::Editor => "file-code",
             Self::Remote => "world",
             Self::Agent => "command",
             Self::Monitor => "layout-grid",
+            Self::Known(program) => program.icon,
         }
     }
 
@@ -160,11 +191,16 @@ impl Program {
             Self::Remote => 12,
             Self::Agent => 13,
             Self::Monitor => 14,
+            Self::Known(program) => program.ansi,
         }
+    }
+
+    pub fn is_shell(self) -> bool {
+        matches!(self, Self::Shell) || matches!(self, Self::Known(program) if program.is_shell())
     }
 }
 
-/// A Tabler icon for the program running in a pane.
+/// The icon for the program running in a pane.
 pub fn program_icon(state: Option<&BlockState>) -> &'static str {
     Program::of(state).icon()
 }
@@ -209,7 +245,7 @@ mod tests {
             ..Default::default()
         };
         assert_eq!(pane_title(&block("b", ""), Some(&idle)), "rexia");
-        assert_eq!(program_icon(Some(&state)), "file-code");
+        assert_eq!(program_icon(Some(&state)), "programs/neovim");
     }
 
     #[test]
@@ -252,5 +288,38 @@ mod tests {
             ..window
         };
         assert_eq!(tab_title(&renamed, &model), "build");
+    }
+
+    #[test]
+    fn specific_processes_and_wrapped_apps_select_distinct_icons() {
+        let mut state = BlockState::default();
+        for (command, icon) in [
+            ("claude", "claude-code"),
+            ("co", "co-codes"),
+            ("gojo", "gojo"),
+            ("/usr/bin/btop", "btop"),
+            ("jj", "jj"),
+        ] {
+            state.process.name = Some(command.into());
+            assert_eq!(Program::of(Some(&state)).icon(), format!("programs/{icon}"));
+        }
+        state.process.name = Some("node".into());
+        state.records.insert(
+            "agent".into(),
+            StatusRecord {
+                state: ProgramState::Working,
+                app: Some("OpenCode".into()),
+                ..Default::default()
+            },
+        );
+        assert_eq!(Program::of(Some(&state)).icon(), "programs/opencode");
+        state.process.name = Some("/usr/bin/node".into());
+        assert_eq!(Program::of(Some(&state)).icon(), "programs/opencode");
+        state.process.name = Some("gojo".into());
+        assert_eq!(Program::of(Some(&state)).icon(), "programs/gojo");
+        state.records.clear();
+        state.process.name = Some("unknown-tool".into());
+        state.title = Some(("Claude Code - my project".into(), None));
+        assert_eq!(Program::of(Some(&state)), Program::Shell);
     }
 }

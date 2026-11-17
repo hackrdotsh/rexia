@@ -1,0 +1,158 @@
+.Net
+Amp
+Android
+Antigravity
+Apple Container
+Azure
+Bat
+Bazel
+Boundary
+Browser
+btop
+Buck
+Buildkite
+Bun
+Caddy
+Charm
+Clang
+Claude Code
+Cloudflare
+Coder
+Codex
+Consul
+Copilot
+Crush
+Cua
+Cursor
+D2
+Dart
+Datadog
+DBCLI
+Delta
+Depot
+Devin
+Docker
+Droid
+DuckDB
+E2B
+Elixir
+Emacs
+Expo
+Flutter
+Foundation Models
+fx
+Gemini
+Git
+Git Butler
+Git Changes
+GitHub
+GitLab
+Gnu
+Go
+Goose
+Gradle
+Grok
+Helix
+Hermes
+Heroku
+Homebrew
+Homey
+htop
+Hugging Face
+Hunk
+IBM Bob
+Inspector
+JJ
+Julia
+Junie
+Jupyter
+K9s
+Kakoune
+Kimi
+Kiro
+Kubernetes
+Llama
+Maki
+Mastra
+Meta
+Micro
+Minimal
+Mise
+Mistral
+Modal
+Mole
+Moon
+Nano
+Nanoc
+Neovim
+Nextflow
+Nix
+Node
+Nomad
+Notion
+Ollama
+omp
+OpenClaw
+OpenCode
+Opscope
+OrbStack
+Oxide
+Pack
+Packer
+PHP
+Pi
+Pixi
+pnpm
+Podman
+Poolside
+Porter
+Postgres
+Prime Agent
+Proto
+Proton Drive
+Proton Pass
+Python
+Railway
+Rclone
+Redis
+Render
+Rex
+Ruby
+Rust
+Sail
+Sanity
+Shell
+Shell - caffeinate
+Shell - container
+Shell - log
+Shell - sleep
+Shell - top
+Shopify
+Snowflake
+Sofka
+SQLite
+Stripe
+Sublime
+Swift
+Tailscale
+Tart
+Task
+Terraform
+Tessl
+Tilt
+Turborepo
+Unreal Engine
+uv
+Vagrant
+Vakna
+Vault
+Vercel
+Vim
+Vite
+Vite+
+Waypoint
+Xcode
+Yazi
+Zig
+co.codes
+Gojo
