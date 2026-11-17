@@ -1254,7 +1254,7 @@ impl Workspace {
     fn render_sidebar(&self, theme: &Theme, cx: &mut Context<Self>) -> AnyElement {
         let (session_text, tab_text, tab_height) =
             self.settings.interface.sidebar_text_size.metrics();
-        let mut list = div().flex().flex_col().gap(px(2.));
+        let mut list = div().flex().flex_col().gap(px(8.));
         for (index, host) in self.hosts.iter().enumerate() {
             let model = host.handle.snapshot();
             let status = match &model.connection {
@@ -1262,34 +1262,41 @@ impl Workspace {
                 crate::rex::host::Connection::Connecting => Some("Connecting…".to_owned()),
                 crate::rex::host::Connection::Disconnected(reason) => Some(reason.clone()),
             };
-            list = list.child(
-                div()
-                    .flex()
-                    .items_center()
-                    .justify_between()
-                    .child(
-                        heading("", theme)
-                            .flex()
-                            .items_center()
-                            .children(
-                                self.host_icon(&host.config.id, index == self.active)
-                                    .map(|icon| div().mr(px(6.)).child(icon)),
-                            )
-                            .child(host.config.label.clone()),
-                    )
-                    .child(
-                        small_icon_button(
-                            SharedString::from(format!("host-new-{index}")),
-                            "plus",
-                            theme.text_muted,
-                            theme,
-                            cx.listener(move |ws, _, _, cx| ws.new_session(index, cx)),
+            let mut group = div()
+                .flex()
+                .flex_col()
+                .gap(px(2.))
+                .p(px(4.))
+                .rounded(theme.radius())
+                .bg(theme.surface)
+                .child(
+                    div()
+                        .flex()
+                        .items_center()
+                        .justify_between()
+                        .child(
+                            heading("", theme)
+                                .flex()
+                                .items_center()
+                                .children(
+                                    self.host_icon(&host.config.id, index == self.active)
+                                        .map(|icon| div().mr(px(6.)).child(icon)),
+                                )
+                                .child(host.config.label.clone()),
                         )
-                        .tooltip(self.tip("session.new", None)),
-                    ),
-            );
+                        .child(
+                            small_icon_button(
+                                SharedString::from(format!("host-new-{index}")),
+                                "plus",
+                                theme.text_muted,
+                                theme,
+                                cx.listener(move |ws, _, _, cx| ws.new_session(index, cx)),
+                            )
+                            .tooltip(self.tip("session.new", None)),
+                        ),
+                );
             if let Some(status) = status {
-                list = list.child(
+                group = group.child(
                     div()
                         .px(px(10.))
                         .pb(px(4.))
@@ -1308,7 +1315,7 @@ impl Workspace {
                     .get(&session.session_id)
                     .map(|v| v.windows.len())
                     .unwrap_or(0);
-                list = list.child(
+                group = group.child(
                     list_row(
                         SharedString::from(format!("session-{index}-{}", session.session_id)),
                         selected,
@@ -1395,7 +1402,7 @@ impl Workspace {
                     for (number, window) in view.windows.iter().enumerate() {
                         let active = view.active_window_id.as_deref() == Some(window.id());
                         let window_id = window.id().to_owned();
-                        list = list.child(
+                        group = group.child(
                             div()
                                 .id(SharedString::from(format!("side-tab-{window_id}")))
                                 .group("side-tab")
@@ -1418,9 +1425,9 @@ impl Workspace {
                                     self.settings.interface.shell_icon_theme,
                                     if active { theme.text } else { theme.text_muted },
                                     if active {
-                                        theme.background.blend(theme.overlay(0.1))
+                                        theme.surface.blend(theme.overlay(0.1))
                                     } else {
-                                        theme.background
+                                        theme.surface
                                     },
                                     13.,
                                     theme,
@@ -1518,6 +1525,7 @@ impl Workspace {
                     }
                 }
             }
+            list = list.child(group);
         }
         let combined = self.settings.interface.activity_below_sessions;
         let sessions = div()

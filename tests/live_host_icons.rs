@@ -79,6 +79,8 @@ fn sidebar_host_gif_only_animates_for_the_selected_host_in_the_focused_window() 
         std::thread::sleep(Duration::from_millis(20));
     }
 
+    harness.screenshot("sidebar-host-surfaces");
+
     let _other_window = harness
         .cx
         .open_window(size(px(100.), px(100.)), |window, cx| {
