@@ -19,6 +19,8 @@ pub enum Command {
     /// One of rexia's actions, or a block action the server knows (Clear, Reset).
     Run(&'static str),
     OpenLink(String),
+    QuickLook,
+    DownloadFile(String),
     Copy(String),
     ShowInFiles(PathBuf),
     /// Something done to a tab, by its window ID.
@@ -156,7 +158,7 @@ impl Workspace {
             Some(Under::Web(link)) => {
                 here.push(item("Open Link", Command::OpenLink(link.clone()), true));
                 here.push(item("Copy Link", Command::Copy(link), true));
-                here.push(item("Quick Look", Command::Run("client.quick_look"), true));
+                here.push(item("Quick Look", Command::QuickLook, true));
             }
             Some(Under::Path(path)) => {
                 let found = local.then(|| quick_look::resolve(&path, cwd)).flatten();
@@ -172,7 +174,11 @@ impl Workspace {
                         true,
                     ));
                     here.push(item("Show in Files", Command::ShowInFiles(full), true));
-                    here.push(item("Quick Look", Command::Run("client.quick_look"), true));
+                    here.push(item("Quick Look", Command::QuickLook, true));
+                } else if !local {
+                    here.push(item("Open File", Command::DownloadFile(path.clone()), true));
+                    here.push(item("Copy Path", Command::Copy(path), true));
+                    here.push(item("Quick Look", Command::QuickLook, true));
                 } else {
                     here.push(item("Copy Path", Command::Copy(path), true));
                 }
@@ -306,6 +312,12 @@ impl Workspace {
                 }
             }
             Command::OpenLink(link) => self.open_link(link, cx),
+            Command::QuickLook => {
+                if let Err(error) = self.quick_look_one(cx) {
+                    self.notice = Some(error);
+                }
+            }
+            Command::DownloadFile(path) => self.show_quick_target(Under::Path(path), false, cx),
             Command::Copy(text) => cx.write_to_clipboard(ClipboardItem::new_string(text)),
             Command::ShowInFiles(path) => self.show_in_files(path, cx),
             Command::Tab(command, id) => self.tab_command(command, id, window, cx),

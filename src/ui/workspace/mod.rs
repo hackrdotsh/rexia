@@ -202,6 +202,10 @@ pub struct Workspace {
     /// The bus GNOME's previewer is on, if not the session bus, and what Quick Look showed.
     preview_bus: Option<String>,
     quick_looks: Vec<quick_look::Shown>,
+    download_directory: Option<std::path::PathBuf>,
+    preview_generation: u64,
+    preview_cancel: Option<std::sync::Arc<std::sync::atomic::AtomicBool>>,
+    quick_preview: Option<quick_look::Preview>,
     /// Onboarding walkthroughs' steps as the server last answered rexia, by block, and
     /// the blocks already asked.
     onboarding: HashMap<String, (u64, String)>,
@@ -420,6 +424,10 @@ impl Workspace {
             ssh_open: None,
             preview_bus: None,
             quick_looks: Vec::new(),
+            download_directory: None,
+            preview_generation: 0,
+            preview_cancel: None,
+            quick_preview: None,
             onboarding: HashMap::new(),
             onboarding_asked: Default::default(),
             origin_error: None,
@@ -642,6 +650,16 @@ impl Workspace {
                 let block = key.clone();
                 cx.subscribe(&pane, move |ws, _, event: &PaneEvent, cx| match event {
                     PaneEvent::OpenLink(link) => ws.open_link(link.clone(), cx),
+                    PaneEvent::OpenPath(path) => ws.show_quick_target(
+                        crate::quick_look::Target::Path(path.clone()),
+                        false,
+                        cx,
+                    ),
+                    PaneEvent::QuickLook => {
+                        if let Err(error) = ws.quick_look_one(cx) {
+                            ws.notice = Some(error);
+                        }
+                    }
                     PaneEvent::ContextMenu { position, cell } => {
                         ws.open_context_menu(block.clone(), *position, *cell, cx)
                     }
@@ -2447,6 +2465,7 @@ impl Render for Workspace {
             .children(self.render_find(&theme, cx))
             .children(self.render_overlay(&theme, cx))
             .children(self.render_uploads(&theme, cx))
+            .children(self.render_quick_look(&theme, cx))
             .children(self.render_context_menu(&theme, cx))
             .children(self.render_drag(&theme))
             .children(self.render_ssh_question(&theme, cx))

@@ -87,6 +87,10 @@ impl Workspace {
         }
         // Any other key: the tab hints were a modifier on its way to a combination.
         self.cancel_tab_hints(cx);
+        if self.quick_look_key(&event.keystroke.key, cx) {
+            cx.stop_propagation();
+            return;
+        }
         // Palettes and dialogs take keys first; their fields edit and Esc closes them. The key
         // that opened a list closes it again.
         if let Some(kind) = self.list_kind() {

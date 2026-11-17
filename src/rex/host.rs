@@ -248,6 +248,10 @@ pub enum PaneCommand {
         y: u16,
         reply: oneshot::Sender<Option<String>>,
     },
+    LinksAt {
+        cells: Vec<(u16, u16)>,
+        reply: oneshot::Sender<Vec<Option<String>>>,
+    },
     Search(Option<String>),
     SearchStep {
         older: bool,
@@ -1655,6 +1659,9 @@ async fn stream(
                             PaneCommand::Copy(reply) => { let _ = reply.send(terminal.selection_text()?); }
                             PaneCommand::Text(reply) => { let _ = reply.send(terminal.text().ok()); }
                             PaneCommand::LinkAt { x, y, reply } => { let _ = reply.send(terminal.link_at(x, y)); }
+                            PaneCommand::LinksAt { cells, reply } => {
+                                let _ = reply.send(cells.into_iter().map(|(x, y)| terminal.link_at(x, y)).collect());
+                            }
                             PaneCommand::Search(needle) => terminal.search(needle.as_deref())?,
                             PaneCommand::SearchStep { older } => terminal.search_step(older)?,
                             PaneCommand::Prompt(direction) => { terminal.jump_to_prompt(direction)?; }

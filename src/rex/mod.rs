@@ -3,6 +3,7 @@ pub mod activity;
 pub mod askpass;
 pub mod client;
 pub mod data;
+pub mod download;
 pub mod endpoint;
 pub mod host;
 pub mod images;

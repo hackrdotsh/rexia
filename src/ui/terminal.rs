@@ -43,6 +43,8 @@ pub fn openable(link: &str) -> bool {
 pub enum PaneEvent {
     /// A program's link was ctrl+clicked.
     OpenLink(String),
+    OpenPath(String),
+    QuickLook,
     /// A paste that could run a command before it's read, waiting for a yes.
     ConfirmPaste(String),
     /// Files for a terminal on another machine, to upload there.
@@ -1073,6 +1075,10 @@ impl TerminalPane {
         );
         let at = self.cell_at(event.position);
         self.pointer = Some(at);
+        if event.button == MouseButton::Left && event.modifiers.control && event.modifiers.shift {
+            cx.emit(PaneEvent::QuickLook);
+            return;
+        }
         // Ctrl-click opens a program's OSC 8 link, as in Ghostty, once released on the same
         // cell: Ctrl-drag picks the pane up instead.
         if event.button == MouseButton::Left && event.modifiers.control && !event.modifiers.shift {
@@ -1160,6 +1166,23 @@ impl TerminalPane {
             && let Some(pane) = self.pane()
         {
             let (x, y) = at;
+            let frame = self.frame();
+            let line = frame
+                .as_ref()
+                .map(|f| f.line_text(usize::from(y)))
+                .unwrap_or_default();
+            let text_column = frame
+                .as_ref()
+                .and_then(|f| f.lines.get(usize::from(y)))
+                .map(|cells| {
+                    cells
+                        .iter()
+                        .take(usize::from(x))
+                        .filter(|c| !c.has(flags::SPACER))
+                        .map(|c| c.text.chars().count().max(1))
+                        .sum()
+                })
+                .unwrap_or(usize::from(x));
             cx.spawn(async move |this, cx| {
                 let link = pane
                     .ask(|reply| PaneCommand::LinkAt { x, y, reply })
@@ -1167,6 +1190,12 @@ impl TerminalPane {
                     .flatten();
                 if let Some(link) = link {
                     let _ = this.update(cx, |_, cx| cx.emit(PaneEvent::OpenLink(link)));
+                } else if let Some(target) = crate::quick_look::target_at(&line, text_column) {
+                    let event = match target {
+                        crate::quick_look::Target::Web(link) => PaneEvent::OpenLink(link),
+                        crate::quick_look::Target::Path(path) => PaneEvent::OpenPath(path),
+                    };
+                    let _ = this.update(cx, |_, cx| cx.emit(event));
                 }
             })
             .detach();
