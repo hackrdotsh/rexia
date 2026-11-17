@@ -91,7 +91,9 @@ fn highlight_color_strength_motion_and_window_fade() {
     h.pump();
     common::request(&control, "session.focus_block", focus(&second)).unwrap();
     let (from, to) = h.wait_ui("the highlight to move", |ws| {
-        ws.highlight_motion().filter(|(from, to)| from != to)
+        // A prior split or left-focus animation can still be present until sync.
+        ws.highlight_motion()
+            .filter(|(from, to)| from != to && to.x > 0.)
     });
     println!("highlight moves from {from:?} to {to:?}");
     assert!(to.x > from.x, "to the pane on the right");
