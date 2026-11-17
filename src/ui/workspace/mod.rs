@@ -23,6 +23,7 @@ mod preferences;
 pub mod quick_look;
 pub mod remote;
 pub mod server_status;
+pub mod sessions;
 pub mod sidebar_width;
 mod ssh;
 pub mod ssh_questions;
@@ -1205,6 +1206,53 @@ impl Workspace {
                                 })
                                 .child(windows.to_string()),
                         )
+                    })
+                    // Close, shown while the pointer is on the row.
+                    .child(
+                        div()
+                            .invisible()
+                            .group_hover("session-row", |d| d.visible())
+                            .child(
+                                small_icon_button(
+                                    SharedString::from(format!("session-close-{index}-{id}")),
+                                    "x",
+                                    if selected {
+                                        theme.on_primary
+                                    } else {
+                                        theme.text_muted
+                                    },
+                                    theme,
+                                    {
+                                        let id = id.clone();
+                                        cx.listener(move |ws, _, window, cx| {
+                                            cx.stop_propagation();
+                                            ws.close_session(index, id.clone(), window, cx)
+                                        })
+                                    },
+                                )
+                                .tooltip(self.tip("session.close", None)),
+                            ),
+                    )
+                    .relative()
+                    .group("session-row")
+                    .child(self.track_bounds(format!("session:{index}:{id}"), cx))
+                    .on_mouse_down(MouseButton::Left, {
+                        let id = id.clone();
+                        cx.listener(move |ws, event: &gpui::MouseDownEvent, window, cx| {
+                            if event.click_count >= 2 {
+                                ws.rename_session(index, id.clone(), window, cx);
+                                cx.stop_propagation();
+                            } else {
+                                ws.press_session_for_drag(index, id.clone(), event.position);
+                            }
+                        })
+                    })
+                    .on_mouse_down(MouseButton::Right, {
+                        let id = id.clone();
+                        cx.listener(move |ws, event: &gpui::MouseDownEvent, _, cx| {
+                            ws.open_session_menu(index, id.clone(), event.position, cx);
+                            cx.stop_propagation();
+                        })
                     })
                     .on_click(
                         cx.listener(move |ws, _, _, cx| ws.select_session(index, id.clone(), cx)),

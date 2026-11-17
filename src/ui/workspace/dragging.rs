@@ -21,6 +21,8 @@ pub enum Grab {
     Tab(String),
     /// A pane, by its block ID.
     Pane(String),
+    /// A session in the sidebar: its host and ID.
+    Session(usize, String),
 }
 
 pub(super) struct Moving {
@@ -51,6 +53,8 @@ pub enum Landing {
     NewTab(Option<String>),
     /// The pane goes beside this one, on this side.
     Beside { anchor: String, side: Side },
+    /// The session goes just before this one of its host's, or last.
+    SessionBefore(Option<String>),
 }
 
 /// A tab on screen and where it's drawn, in order.
@@ -74,6 +78,49 @@ impl Workspace {
             at,
             active: false,
         });
+    }
+
+    /// A press on a session row that may become a drag to reorder it.
+    pub(super) fn press_session_for_drag(&mut self, host: usize, id: String, at: Point<Pixels>) {
+        self.moving = Some(Moving {
+            grab: Grab::Session(host, id.clone()),
+            session: id,
+            start: at,
+            at,
+            active: false,
+        });
+    }
+
+    /// The session rows of `host` where they're drawn, in order.
+    fn session_spots(&self, host: usize) -> Vec<(String, Bounds<Pixels>)> {
+        self.session_order(host)
+            .into_iter()
+            .filter_map(|id| {
+                let bounds = self.element_bounds(&format!("session:{host}:{id}"))?;
+                Some((id, bounds))
+            })
+            .collect()
+    }
+
+    /// Where a dragged session would go: before the first row whose middle is below the
+    /// pointer, among its own host's rows.
+    fn session_landing(&self, host: usize, at: Point<Pixels>) -> Option<Landing> {
+        let spots = self.session_spots(host);
+        let first = spots.first()?.1;
+        let last = spots.last()?.1;
+        let slack = px(16.);
+        let over = at.x >= first.left() - slack
+            && at.x <= first.right() + slack
+            && at.y >= first.top() - slack
+            && at.y <= last.bottom() + slack;
+        if !over {
+            return None;
+        }
+        let before = spots
+            .iter()
+            .find(|(_, b)| at.y < b.center().y)
+            .map(|(id, _)| id.clone());
+        Some(Landing::SessionBefore(before))
     }
 
     /// The pointer moved with a press held: the drag starts or follows it. Returns whether a
@@ -145,6 +192,9 @@ impl Workspace {
     }
 
     fn landing(&self, grab: &Grab, at: Point<Pixels>) -> Option<Landing> {
+        if let Grab::Session(host, _) = grab {
+            return self.session_landing(*host, at);
+        }
         let spots = self.tab_spots();
         // Over the tab strip: its row (or column), with some room either side.
         let over_strip = spots.first().is_some_and(|first| {
@@ -171,6 +221,8 @@ impl Workspace {
             }
         };
         match grab {
+            // Handled above, among the session rows.
+            Grab::Session(..) => None,
             Grab::Tab(tab) => {
                 if !over_strip {
                     return None;
@@ -281,6 +333,9 @@ impl Workspace {
         };
         let session = moving.session;
         match (moving.grab, landing) {
+            (Grab::Session(host, id), Landing::SessionBefore(before)) => {
+                self.place_session(host, &id, before)
+            }
             (Grab::Tab(tab), Landing::TabBefore(before)) => {
                 let mut payload = json!({"session_id": session, "window_id": tab});
                 if let Some(before) = before {
@@ -385,9 +440,13 @@ impl Workspace {
     /// The dragged thing under the pointer, and where it would land.
     pub(super) fn render_drag(&self, theme: &Theme) -> Option<AnyElement> {
         let moving = self.moving.as_ref().filter(|m| m.active)?;
+        if let Grab::Session(host, id) = &moving.grab {
+            return self.render_session_drag(*host, id, moving.at, theme);
+        }
         let model = self.model();
         let view = model.view()?;
         let title = match &moving.grab {
+            Grab::Session(..) => String::new(),
             Grab::Tab(id) => view
                 .window(id)
                 .map(|w| titles::tab_title(w, &model))
@@ -467,7 +526,7 @@ impl Workspace {
                         .bg(theme.primary.opacity(0.18))
                         .into_any_element()
                 }),
-            None => None,
+            Some(Landing::SessionBefore(_)) | None => None,
         };
         let chip = div()
             .absolute()
@@ -497,6 +556,86 @@ impl Workspace {
                     .left_0()
                     .size_full()
                     .children(indicator)
+                    .child(chip),
+            )
+            .with_priority(3)
+            .into_any_element(),
+        )
+    }
+
+    /// A session being dragged: a line where it would go, and its name by the pointer.
+    fn render_session_drag(
+        &self,
+        host: usize,
+        id: &str,
+        at: Point<Pixels>,
+        theme: &Theme,
+    ) -> Option<AnyElement> {
+        let label = self
+            .hosts
+            .get(host)?
+            .handle
+            .snapshot()
+            .sessions
+            .iter()
+            .find(|s| s.session_id == id)
+            .map(|s| s.label.clone())
+            .unwrap_or_default();
+        let spots = self.session_spots(host);
+        let line = match self.session_landing(host, at) {
+            Some(Landing::SessionBefore(before)) => {
+                let (bounds, y) = match before {
+                    Some(before) => {
+                        let b = spots.iter().find(|(s, _)| *s == before)?.1;
+                        (b, b.top())
+                    }
+                    None => {
+                        let b = spots.last()?.1;
+                        (b, b.bottom())
+                    }
+                };
+                Some(
+                    div()
+                        .absolute()
+                        .left(bounds.left())
+                        .top(y - px(2.))
+                        .w(bounds.size.width)
+                        .h(px(3.))
+                        .rounded_full()
+                        .bg(theme.primary)
+                        .into_any_element(),
+                )
+            }
+            _ => None,
+        };
+        let chip = div()
+            .absolute()
+            .left(at.x + px(12.))
+            .top(at.y + px(10.))
+            .max_w(px(260.))
+            .px(px(10.))
+            .py(px(5.))
+            .rounded(theme.radius_small())
+            .bg(theme.surface_high)
+            .when(theme.popup_borders, |d| {
+                d.border(theme.border_width).border_color(theme.border)
+            })
+            .when(theme.popup_shadows, |d| d.shadow_md())
+            .font_family(theme.ui_font.clone())
+            .text_size(px(12.))
+            .text_color(theme.text)
+            .overflow_hidden()
+            .text_ellipsis()
+            .whitespace_nowrap()
+            .child(label);
+        Some(
+            deferred(
+                div()
+                    .absolute()
+                    .top_0()
+                    .left_0()
+                    .size_full()
+                    .children(line)
                     .child(chip),
             )
             .with_priority(3)

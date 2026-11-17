@@ -23,6 +23,8 @@ pub enum Command {
     ShowInFiles(PathBuf),
     /// Something done to a tab, by its window ID.
     Tab(TabCommand, String),
+    /// Something done to a session: on this host, by its ID.
+    Session(super::sessions::SessionCommand, usize, String),
 }
 
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -39,7 +41,7 @@ pub struct Item {
     pub command: Command,
     pub enabled: bool,
     /// The action's shortcut, when it has one.
-    shortcut: Option<String>,
+    pub(super) shortcut: Option<String>,
 }
 
 pub struct ContextMenu {
@@ -52,6 +54,17 @@ pub struct ContextMenu {
 }
 
 impl ContextMenu {
+    /// A menu about `session` (not a pane), shown at `at`.
+    pub(super) fn new(session: String, at: Point<Pixels>, groups: Vec<Vec<Item>>) -> Self {
+        Self {
+            session,
+            block: String::new(),
+            at,
+            groups,
+            highlighted: None,
+        }
+    }
+
     fn items(&self) -> impl Iterator<Item = &Item> {
         self.groups.iter().flatten()
     }
@@ -296,6 +309,9 @@ impl Workspace {
             Command::Copy(text) => cx.write_to_clipboard(ClipboardItem::new_string(text)),
             Command::ShowInFiles(path) => self.show_in_files(path, cx),
             Command::Tab(command, id) => self.tab_command(command, id, window, cx),
+            Command::Session(command, host, id) => {
+                self.session_command(command, host, id, window, cx)
+            }
         }
         cx.notify();
     }

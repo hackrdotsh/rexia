@@ -1063,6 +1063,19 @@ impl Workspace {
         self.close_overlay(window, cx);
     }
 
+    /// What the rename dialog is renaming, while it's open, for tests: `session ID`,
+    /// `tab ID` or `pane ID`.
+    pub fn renaming(&self) -> Option<String> {
+        match &self.overlay {
+            Some(Overlay::Dialog(Dialog::Rename { target, .. })) => Some(match target {
+                RenameTarget::Session(id) => format!("session {id}"),
+                RenameTarget::Window(id) => format!("tab {id}"),
+                RenameTarget::Block(id) => format!("pane {id}"),
+            }),
+            _ => None,
+        }
+    }
+
     /// The open confirmation's title, for tests.
     pub fn confirm_title(&self) -> Option<String> {
         match &self.overlay {
