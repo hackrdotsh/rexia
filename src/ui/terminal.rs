@@ -89,8 +89,8 @@ fn top_fill(frame: &Frame, mode: PaddingFill) -> Option<u32> {
 
 /// Areas of the padding around the grid and the program colors that fill them: each edge
 /// cell's background reaches out to the pane's edge, as Ghostty's `window-padding-color =
-/// extend` does. Automatic fills only while a full-screen program runs, and only along
-/// edges of one color.
+/// extend` does. Primary-screen edges must be uniform to avoid stretching colorful
+/// shell prompts. Automatic also requires the alternate screen and uniform edges.
 fn padding_fills(
     frame: &Frame,
     mode: PaddingFill,
@@ -98,11 +98,11 @@ fn padding_fills(
     origin: Point<Pixels>,
     cell: CellSize,
 ) -> Vec<(Bounds<Pixels>, u32)> {
-    let automatic = match mode {
+    let uniform_edges = match mode {
         PaddingFill::Off => return Vec::new(),
         PaddingFill::Automatic if !frame.alternate_screen => return Vec::new(),
         PaddingFill::Automatic => true,
-        PaddingFill::Always => false,
+        PaddingFill::Always => !frame.alternate_screen,
     };
     let (cols, rows) = (
         frame.cols as usize,
@@ -125,9 +125,8 @@ fn padding_fills(
             size((x1 - x0).max(px(0.)), (y1 - y0).max(px(0.))),
         )
     };
-    // An Automatic edge fills only if its cells share one color.
     let edge = |colors: Vec<u32>| -> Option<Vec<u32>> {
-        (!automatic || uniform(colors.iter().copied()).is_some()).then_some(colors)
+        (!uniform_edges || uniform(colors.iter().copied()).is_some()).then_some(colors)
     };
     let mut fills = Vec::new();
     if let Some(colors) = edge((0..cols).map(|c| cell_bg(frame, 0, c)).collect()) {
@@ -2084,6 +2083,26 @@ mod tests {
     }
 
     #[test]
+    fn mixed_shell_prompt_colors_do_not_extend_into_padding() {
+        let red = Some(0xc02020);
+        let blue = Some(0x2040c0);
+        let prompt = [None, red, blue, None];
+        let frame = frame_with(&[&prompt, &[None; 4], &prompt], false);
+        let fills = padding_fills(
+            &frame,
+            PaddingFill::Always,
+            Bounds::new(point(px(0.), px(0.)), size(px(60.), px(80.))),
+            point(px(10.), px(10.)),
+            CellSize {
+                width: px(10.),
+                height: px(20.),
+            },
+        );
+        assert!(!fills.is_empty());
+        assert!(fills.iter().all(|(_, color)| *color == frame.bg));
+    }
+
+    #[test]
     fn padding_takes_edge_colors_as_chosen() {
         let blue = Some(0x2040c0);
         let red = Some(0xc02020);
@@ -2107,11 +2126,13 @@ mod tests {
         assert!(colors(&editor, PaddingFill::Off).is_empty());
         assert_eq!(colors(&editor, PaddingFill::Automatic), vec![0x2040c0]);
         assert_eq!(top_fill(&editor, PaddingFill::Automatic), Some(0x2040c0));
-        // A shell: Automatic leaves it alone; Always extends each edge cell.
+        // A shell: Automatic leaves it alone; Always extends only uniform edges.
         let shell = frame_with(&[&[red, None], &[blue, None]], false);
         assert!(colors(&shell, PaddingFill::Automatic).is_empty());
+        assert_eq!(colors(&shell, PaddingFill::Always), vec![0x000000]);
+        let fullscreen = frame_with(&[&[red, None], &[blue, None]], true);
         assert_eq!(
-            colors(&shell, PaddingFill::Always),
+            colors(&fullscreen, PaddingFill::Always),
             vec![0x000000, 0x2040c0, 0xc02020]
         );
         // Mixed edges don't fill in Automatic, even full screen.

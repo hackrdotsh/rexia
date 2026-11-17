@@ -57,6 +57,35 @@ fn padding_fills_with_program_colors() {
         (!focused_text(m).trim().is_empty()).then_some(())
     });
 
+    let directory = tempfile::tempdir().unwrap();
+    let prompt = directory.path().join("prompt.sh");
+    std::fs::write(&prompt, concat!(
+        "printf '\\033[0m\\033[2J\\033[HLEFT \\033[48;2;200;40;40m PROMPT_COLOR_TEST \\033[0m RIGHT'\n",
+        "printf '\\033[999;1HLEFT \\033[48;2;200;40;40m PROMPT_COLOR_TEST \\033[0m RIGHT'\n",
+        "sleep 60\n"
+    )).unwrap();
+    settings(&mut h, |s| {
+        s.terminal.padding_fill = PaddingFill::Always;
+        s.terminal.padding_x = 16.;
+        s.terminal.padding_y = 16.;
+    });
+    h.type_text(&format!("sh {}", prompt.display()));
+    h.press("enter");
+    h.wait("mixed primary-screen prompt", |model| {
+        focused_text(model)
+            .contains("PROMPT_COLOR_TEST")
+            .then_some(())
+    });
+    h.screenshot("padding-mixed-prompt");
+    let (prompt_colors, _) =
+        h.cx.update(|cx| h.window.read(cx).unwrap().focused_padding_fill(cx))
+            .unwrap();
+    assert!(
+        !prompt_colors.contains(&RED),
+        "prompt color leaked into padding: {prompt_colors:06x?}"
+    );
+    h.press("ctrl-c");
+
     // A shell clears its screen red: Always extends the edge cells into the padding.
     h.type_text(r"printf '\033[48;2;200;40;40m\033[2J\033[0m'");
     h.press("enter");
