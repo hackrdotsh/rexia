@@ -62,6 +62,10 @@ fn padding_fills_with_program_colors() {
     std::fs::write(&prompt, concat!(
         "printf '\\033[0m\\033[2J\\033[HLEFT \\033[48;2;200;40;40m PROMPT_COLOR_TEST \\033[0m RIGHT'\n",
         "printf '\\033[999;1HLEFT \\033[48;2;200;40;40m PROMPT_COLOR_TEST \\033[0m RIGHT'\n",
+        "read -r advance\n",
+        "printf '\\033[48;2;200;40;40m\\033[2J\\033[0m'\n",
+        "read -r advance\n",
+        "printf '\\033[?1049h\\033[48;2;40;60;200m\\033[2J\\033[H'\n",
         "sleep 60\n"
     )).unwrap();
     settings(&mut h, |s| {
@@ -84,10 +88,7 @@ fn padding_fills_with_program_colors() {
         !prompt_colors.contains(&RED),
         "prompt color leaked into padding: {prompt_colors:06x?}"
     );
-    h.press("ctrl-c");
-
-    // A shell clears its screen red: Always extends the edge cells into the padding.
-    h.type_text(r"printf '\033[48;2;200;40;40m\033[2J\033[0m'");
+    // Advance the waiting script, rather than racing the shell's redraw after Ctrl+C.
     h.press("enter");
     settings(&mut h, |s| s.terminal.padding_fill = PaddingFill::Always);
     let (always, _) = wait_fill(&mut h, "red padding", |colors, _| colors.contains(&RED));
@@ -97,15 +98,7 @@ fn padding_fills_with_program_colors() {
     let (automatic, _) = wait_fill(&mut h, "no fill", |colors, _| colors.is_empty());
     println!("shell, Automatic: {automatic:06x?}");
 
-    // A full-screen program paints itself blue: its color fills the padding and the header.
-    // It runs from a script so the typed command stays short.
-    let script = std::env::temp_dir().join(format!("rexia-padding-{}.sh", std::process::id()));
-    std::fs::write(
-        &script,
-        "printf '\\033[?1049h\\033[48;2;40;60;200m\\033[2J\\033[H'\nsleep 60\n",
-    )
-    .unwrap();
-    h.type_text(&format!("sh {}", script.display()));
+    // The next phase enters the alternate screen, filling the padding and header blue.
     h.press("enter");
     let (colors, header) = wait_fill(&mut h, "blue padding", |colors, header| {
         colors == [BLUE] && header == Some(BLUE)
@@ -117,6 +110,5 @@ fn padding_fills_with_program_colors() {
     let (off, header) = wait_fill(&mut h, "no fill", |colors, _| colors.is_empty());
     println!("full screen, Off: padding {off:06x?}, header {header:06x?}");
     assert_eq!(header, None);
-    let _ = std::fs::remove_file(&script);
     drop(sessions);
 }
