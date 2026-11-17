@@ -2205,7 +2205,6 @@ impl Render for Workspace {
                     Some(bar) => column.child(bar).child(content),
                     None => column.child(content),
                 };
-                let column = column.child(self.render_sidebar_edge(layout, cx));
                 // Sliding in or out, the sidebar's width grows or shrinks; its contents stay
                 // their width and are cut off.
                 Some(match slide {
@@ -2233,12 +2232,17 @@ impl Render for Workspace {
                 None
             };
         let panes = self.render_panes(&model, &theme, cx);
-        let row = div().flex().flex_1().min_h_0();
+        let row = div().relative().flex().flex_1().min_h_0();
+        // The sidebar's edge goes over both sides of the border, drawn after the panes so
+        // its pane side can be grabbed too. Not while the sidebar slides.
+        let edge = (sidebar.is_some() && slide.is_none())
+            .then(|| self.render_sidebar_edge(layout, sidebar_width, cx));
         let body = match sidebar {
             Some(side) if layout == ToolbarLayout::Right => row.child(panes).child(side),
             Some(side) => row.child(side).child(panes),
             None => row.child(panes),
-        };
+        }
+        .children(edge);
         if self.notice.is_none() {
             self.notice_area = None;
         }

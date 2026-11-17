@@ -10,6 +10,8 @@ use gpui::{
 pub const DEFAULT: f32 = 260.;
 pub const MIN: f32 = 180.;
 pub const MAX: f32 = 480.;
+/// Half the edge's width: it reaches this far into the sidebar and into the panes.
+const HALF: f32 = 4.;
 
 /// A drag of the sidebar's edge: where it started and the width then.
 pub struct Resizing {
@@ -25,22 +27,40 @@ impl Workspace {
             .clamp(MIN, MAX)
     }
 
-    /// The handle on the sidebar's edge beside the panes.
+    /// The handle on the sidebar's edge beside the panes: 8 pixels across the border, with
+    /// a line in the accent color under the pointer and while it's dragged.
     pub(super) fn render_sidebar_edge(
         &self,
         layout: ToolbarLayout,
+        width: f32,
         cx: &mut Context<Self>,
     ) -> AnyElement {
+        let theme = cx.global::<crate::ui::theme::Theme>().clone();
         let right_side = layout == ToolbarLayout::Right;
+        let at = px(width - HALF);
+        let dragging = self.sidebar_resizing.is_some();
         div()
             .id("sidebar-edge")
+            .group("sidebar-edge")
             .absolute()
             .top_0()
             .bottom_0()
-            .w(px(5.))
-            .when(right_side, |d| d.left_0())
-            .when(!right_side, |d| d.right_0())
+            .w(px(HALF * 2.))
+            .when(right_side, |d| d.right(at))
+            .when(!right_side, |d| d.left(at))
+            .flex()
+            .justify_center()
             .cursor(CursorStyle::ResizeLeftRight)
+            .child(
+                div()
+                    .w(px(2.))
+                    .h_full()
+                    .when(!dragging, |d| {
+                        d.invisible()
+                            .group_hover("sidebar-edge", |d| d.visible().bg(theme.primary))
+                    })
+                    .when(dragging, |d| d.bg(theme.primary)),
+            )
             .on_mouse_down(
                 MouseButton::Left,
                 cx.listener(|ws, event: &MouseDownEvent, _, cx| {
@@ -55,6 +75,7 @@ impl Workspace {
                         start: event.position.x,
                         width: ws.sidebar_width(),
                     });
+                    cx.notify();
                 }),
             )
             .into_any_element()
