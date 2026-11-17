@@ -22,7 +22,10 @@ pub fn group(path: &str) -> &'static str {
             "active-pane"
         } else if field.starts_with("toolbar") || field == "tabs_fill" {
             "toolbar"
-        } else if field.starts_with("sidebar") || field == "trackpad_gestures" {
+        } else if field.starts_with("sidebar")
+            || field.starts_with("activity_")
+            || field == "trackpad_gestures"
+        {
             "sidebar"
         } else if matches!(field, "focus_follows_mouse" | "autobalance_splits") {
             "splits-focus"
@@ -125,6 +128,11 @@ const NAMES: &[(&str, &str, &str)] = &[
         "interface.activity_view",
         "activity-view",
         "Show activity in the sidebar",
+    ),
+    (
+        "interface.activity_below_sessions",
+        "activity-below-sessions",
+        "Show Activity below Sessions",
     ),
     (
         "interface.activity_by_priority",

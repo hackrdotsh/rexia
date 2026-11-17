@@ -462,6 +462,8 @@ pub struct InterfaceSettings {
     pub autobalance_splits: bool,
     /// Show the activity filter in the sidebar instead of sessions.
     pub activity_view: bool,
+    /// Include Activity under the Sessions list.
+    pub activity_below_sessions: bool,
     /// Sort the activity filter by urgency instead of grouping it by session.
     pub activity_by_priority: bool,
 }
@@ -496,6 +498,7 @@ impl Default for InterfaceSettings {
             focus_follows_mouse: false,
             autobalance_splits: true,
             activity_view: false,
+            activity_below_sessions: false,
             activity_by_priority: false,
         }
     }

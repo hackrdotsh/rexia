@@ -952,6 +952,15 @@ impl Workspace {
                 cx,
             ),
             self.toggle_row(
+                "activity-below-sessions",
+                "Show Activity below Sessions",
+                "Applies in the Sessions view.",
+                |s| s.interface.activity_below_sessions,
+                |s, v| s.interface.activity_below_sessions = v,
+                theme,
+                cx,
+            ),
+            self.toggle_row(
                 "activity-priority",
                 "Sort activity by priority",
                 "Most urgent first, instead of grouped by session.",

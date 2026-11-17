@@ -1553,6 +1553,9 @@ impl Workspace {
                     d.child(self.render_filter_results(theme, cx))
                 }
             })
+            .when(self.settings.interface.activity_below_sessions, |d| {
+                d.child(self.render_sidebar_activity(true, theme, cx))
+            })
             .into_any_element()
     }
 
@@ -2404,7 +2407,7 @@ impl Render for Workspace {
         let sidebar =
             if self.settings.interface.sidebar || slide.is_some_and(|(showing, _)| !showing) {
                 let content = if self.settings.interface.activity_view {
-                    self.render_activity_sidebar(&theme, cx)
+                    self.render_sidebar_activity(false, &theme, cx)
                 } else {
                     self.render_sidebar(&theme, cx)
                 };

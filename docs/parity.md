@@ -86,6 +86,10 @@ still need an account-owned test. The automated checks use an isolated Rex serve
 
 Working:
 
+- **Settings → Interface → Show Activity below Sessions** adds the Activity list
+  beneath the existing Sessions list, in the same scrollable sidebar. The Activity-only
+  view and its grouping controls are still available.
+
 - Settings → Client & Hosts lets you choose, change, or clear a local image for each
   host. Icons appear next to host names in the Sessions sidebar. GIFs play only for
   the selected host in the focused Rexia window; otherwise they show the first frame.

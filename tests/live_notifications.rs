@@ -43,7 +43,14 @@ fn background_attention_notifies_badges_and_clicks_through() {
     let control = common::connect(&address);
     let sessions = Sessions::create(&control, "rexia-notify");
     let session = sessions.ids[0].clone();
-    let mut h = Harness::open(&address, &session, 1280., 800.);
+    let directory = tempfile::tempdir().unwrap();
+    let settings_path = directory.path().join("settings.toml");
+    let mut h = Harness::open_with_path(
+        common::test_settings(&address, &session),
+        Some(settings_path.clone()),
+        1280.,
+        800.,
+    );
     h.attach_desktop(&desktop.address);
     h.activate();
     h.wait("a prompt", |m| {
@@ -107,10 +114,45 @@ fn background_attention_notifies_badges_and_clicks_through() {
     assert_eq!(marks, vec![None, Some("Question")]);
     assert_eq!(h.workspace(|ws| ws.unseen_attention()), 1);
 
-    // The activity view lists the program that needs the user.
+    // The combined layout puts Activity below Sessions and persists the choice.
+    assert!(h.workspace(|ws| ws.element_bounds("activity-below-sessions").is_none()));
+    let window = h.window;
+    h.cx.update(|cx| {
+        window
+            .update(cx, |ws, _, cx| {
+                ws.update_settings(|s| s.interface.activity_below_sessions = true, cx);
+            })
+            .unwrap();
+    });
+    let tab_id = h
+        .host
+        .snapshot()
+        .view()
+        .unwrap()
+        .active_window()
+        .unwrap()
+        .id()
+        .to_owned();
+    let (tab, activity) = h.wait_ui("Sessions with Activity below", |ws| {
+        Some((
+            ws.element_bounds(&format!("side-tab:{tab_id}"))?,
+            ws.element_bounds("activity-below-sessions")?,
+        ))
+    });
+    assert!(activity.origin.y >= tab.origin.y + tab.size.height);
+    assert!(
+        rexia::settings::Settings::load(&settings_path)
+            .unwrap()
+            .interface
+            .activity_below_sessions
+    );
+    h.screenshot("notify-activity-below-sessions");
+
+    // The standalone Activity view still works.
     h.run("client.sidebar.activity.toggle", json!({}));
     assert!(h.workspace(|ws| ws.settings.interface.activity_view));
     h.screenshot("notify-activity");
+    assert!(h.workspace(|ws| ws.element_bounds("activity-below-sessions").is_none()));
 
     // Clicking the notification shows its tab, which counts as seeing it.
     desktop.click(note.id);

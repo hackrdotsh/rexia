@@ -409,8 +409,9 @@ impl Workspace {
         rows
     }
 
-    pub(super) fn render_activity_sidebar(
+    pub(super) fn render_sidebar_activity(
         &self,
+        below_sessions: bool,
         theme: &Theme,
         cx: &mut Context<Self>,
     ) -> AnyElement {
@@ -503,14 +504,26 @@ impl Workspace {
             );
         }
         div()
-            .id("sidebar")
+            .id(if below_sessions {
+                "sidebar-activity-section"
+            } else {
+                "sidebar"
+            })
             .flex()
             .flex_col()
-            .flex_1()
-            .min_h_0()
-            .p(px(10.))
+            .relative()
             .gap(px(6.))
-            .overflow_y_scroll()
+            .when(below_sessions, |d| {
+                d.flex_none()
+                    .mt(px(8.))
+                    .pt(px(10.))
+                    .border_t(theme.border_width)
+                    .border_color(theme.overlay(0.12))
+                    .child(self.track_bounds("activity-below-sessions".into(), cx))
+            })
+            .when(!below_sessions, |d| {
+                d.flex_1().min_h_0().p(px(10.)).overflow_y_scroll()
+            })
             .child(
                 div()
                     .flex()
@@ -549,13 +562,20 @@ impl Workspace {
                     .child(
                         small_icon_button(
                             "activity-close",
-                            "server",
+                            if below_sessions { "x" } else { "server" },
                             theme.text_muted,
                             theme,
-                            cx.listener(|ws, _, _, cx| {
-                                ws.settings.interface.activity_view = false;
-                                ws.save_settings();
-                                cx.notify();
+                            cx.listener(move |ws, _, _, cx| {
+                                ws.update_settings(
+                                    |s| {
+                                        if below_sessions {
+                                            s.interface.activity_below_sessions = false;
+                                        } else {
+                                            s.interface.activity_view = false;
+                                        }
+                                    },
+                                    cx,
+                                );
                             }),
                         )
                         .tooltip(self.tip("client.sidebar.activity.toggle", Some("Hide Activity"))),
