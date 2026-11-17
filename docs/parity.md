@@ -96,6 +96,9 @@ Working:
 
 - Braille draws with Ghostty's dot size and spacing: spare pixels widen the margins and the
   gaps between dots before the dots grow, so btop's graphs look as they do in Ghostty.
+- Terminal cells round to the nearest device pixel, as Ghostty's do, so a font's cell is
+  the same size in both (DepartureMono 11 pt at 1.5×: 14 × 28) and braille stays evenly
+  spaced across rows.
 
 - The pointer hides while typing in a terminal, for every key the terminal takes (Return,
   Backspace, arrows and Ctrl combinations too, not only characters), until the mouse moves.
