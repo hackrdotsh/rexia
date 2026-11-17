@@ -50,7 +50,6 @@ when checked, and are built in this order; each moves to its section once it's d
 | Quick Look every link on screen, stepping with the arrow keys; files on remote hosts downloaded first; Ctrl-click a remote file link saves a copy under ~/Downloads/Rex/HOST and opens it | preview.28, 29 |
 | Settings search, `rex://settings/...` links to a group or setting, reset buttons on changed settings, every simple setting as a palette row | preview.20, 25, 28 |
 | Typing a host's address in the palette offers to add it | preview.29 |
-| Stop retrying an ssh host after three refused logins or host keys, saying what to check | preview.29 |
 
 ## Settings
 
@@ -90,6 +89,10 @@ when checked, and are built in this order; each moves to its section once it's d
 ## Behavior
 
 Working:
+
+- An ssh host whose key ssh doesn't trust, or that refuses the login, three times in a row
+  stops retrying; the host's status says what to check (`ssh-keygen -R HOST` for a changed
+  key; the account, authorized_keys, ssh-agent and password for a login) until Retry.
 
 - Braille draws with Ghostty's dot size and spacing: spare pixels widen the margins and the
   gaps between dots before the dots grow, so btop's graphs look as they do in Ghostty.
