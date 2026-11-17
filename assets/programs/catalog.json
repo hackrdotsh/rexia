@@ -1,0 +1,3111 @@
+[
+  {
+    "id": "dotnet",
+    "name": ".Net",
+    "commands": [
+      "dotnet"
+    ],
+    "ansi": 13,
+    "background": "512bd4",
+    "foreground": null,
+    "kind": "brand",
+    "asset": "dotnet.svg",
+    "source": "https://raw.githubusercontent.com/simple-icons/simple-icons/17cd4ee07612198a1d8777a060d4100423762a8b/icons/dotnet.svg",
+    "license": "CC0-1.0",
+    "notes": "Original SVG; displayed as a monochrome mask.",
+    "original_source": "https://github.com/dotnet/brand/blob/c7d0f51b8ec59531332d05fb27a5b758a7a3d689/logo/dotnet-logo.svg",
+    "guidelines": "https://github.com/dotnet/brand/blob/c7d0f51b8ec59531332d05fb27a5b758a7a3d689/dotnet-styleGuide-2024.pdf",
+    "original_sha256": "3b7e1243fb2389116b0a5237c9f07e82f6d2eb18ee40bd232f28abccd7956993",
+    "sha256": "3b7e1243fb2389116b0a5237c9f07e82f6d2eb18ee40bd232f28abccd7956993"
+  },
+  {
+    "id": "amp",
+    "name": "Amp",
+    "commands": [
+      "amp"
+    ],
+    "ansi": 11,
+    "background": "e84142",
+    "foreground": null,
+    "kind": "brand",
+    "asset": "amp.svg",
+    "source": "https://raw.githubusercontent.com/lobehub/lobe-icons/34270bc208d7122778dc00b30bd460f97ea03216/packages/static-svg/icons/amp.svg",
+    "license": "MIT",
+    "notes": "Original SVG; displayed as a monochrome mask.",
+    "original_source": null,
+    "guidelines": null,
+    "original_sha256": "aa6d3fd2fed46e5bd3fdf0e80adab9ed22cbe48e8aa9cd6ea5f7a3ffffc606b1",
+    "sha256": "aa6d3fd2fed46e5bd3fdf0e80adab9ed22cbe48e8aa9cd6ea5f7a3ffffc606b1"
+  },
+  {
+    "id": "android",
+    "name": "Android",
+    "commands": [
+      "adb",
+      "emulator",
+      "sdkmanager"
+    ],
+    "ansi": 10,
+    "background": "3ddc84",
+    "foreground": null,
+    "kind": "brand",
+    "asset": "android.svg",
+    "source": "https://raw.githubusercontent.com/simple-icons/simple-icons/17cd4ee07612198a1d8777a060d4100423762a8b/icons/android.svg",
+    "license": "CC-BY-3.0",
+    "notes": "Original SVG; displayed as a monochrome mask.",
+    "original_source": "https://partnermarketinghub.withgoogle.com/brands/android/visual-identity/visual-identity/logo-lock-ups",
+    "guidelines": "https://developer.android.com/distribute/marketing-tools/brand-guidelines#brand-android",
+    "original_sha256": "ff571c5e21163f07dd7176d4670411344f55409d36eb6346b402210ad7c02c4b",
+    "sha256": "ff571c5e21163f07dd7176d4670411344f55409d36eb6346b402210ad7c02c4b"
+  },
+  {
+    "id": "antigravity",
+    "name": "Antigravity",
+    "commands": [
+      "antigravity"
+    ],
+    "ansi": 13,
+    "background": "4285f4",
+    "foreground": null,
+    "kind": "brand",
+    "asset": "antigravity.svg",
+    "source": "https://raw.githubusercontent.com/lobehub/lobe-icons/34270bc208d7122778dc00b30bd460f97ea03216/packages/static-svg/icons/antigravity.svg",
+    "license": "MIT",
+    "notes": "Original SVG; displayed as a monochrome mask.",
+    "original_source": null,
+    "guidelines": null,
+    "original_sha256": "43f551fd125c17fb54c8c74eb461924fb97f32bb64ac89f73bb73852753a6461",
+    "sha256": "43f551fd125c17fb54c8c74eb461924fb97f32bb64ac89f73bb73852753a6461"
+  },
+  {
+    "id": "apple-container",
+    "name": "Apple Container",
+    "commands": [
+      "container"
+    ],
+    "ansi": 14,
+    "background": "647189",
+    "foreground": null,
+    "kind": "brand",
+    "asset": "apple-container.svg",
+    "source": "https://raw.githubusercontent.com/apple/container/16e8d488ee1d9ede35ab9cf21b9973ffdc9361b3/assets/Containerization-Logo.png",
+    "license": "Apache-2.0",
+    "notes": "Monochrome trace of the published raster, selecting foreground detail rather than its opaque background; original preserved.",
+    "original_source": null,
+    "guidelines": null,
+    "original_sha256": "3f92caa40ce01d43a8169decbcf2469356d76c40ab6383241340c7305ddfa8dd",
+    "sha256": "386f6243a5d09b6e650553f81d79ba0f7e3a36261216a2245055b4604ffa8ce2"
+  },
+  {
+    "id": "azure",
+    "name": "Azure",
+    "commands": [
+      "az",
+      "azd"
+    ],
+    "ansi": 12,
+    "background": "0078d4",
+    "foreground": null,
+    "kind": "brand",
+    "asset": "azure.svg",
+    "source": "https://raw.githubusercontent.com/lobehub/lobe-icons/34270bc208d7122778dc00b30bd460f97ea03216/packages/static-svg/icons/azure.svg",
+    "license": "MIT",
+    "notes": "Original SVG; displayed as a monochrome mask.",
+    "original_source": null,
+    "guidelines": null,
+    "original_sha256": "a48fa106b32093acac4cb858df39c4ee6bf1049d2ecec92ad556190f7c4d9a0e",
+    "sha256": "a48fa106b32093acac4cb858df39c4ee6bf1049d2ecec92ad556190f7c4d9a0e"
+  },
+  {
+    "id": "bat",
+    "name": "Bat",
+    "commands": [
+      "bat",
+      "batcat"
+    ],
+    "ansi": 13,
+    "background": "31369e",
+    "foreground": null,
+    "kind": "brand",
+    "asset": "bat.svg",
+    "source": "https://raw.githubusercontent.com/simple-icons/simple-icons/17cd4ee07612198a1d8777a060d4100423762a8b/icons/bat.svg",
+    "license": "CC0-1.0",
+    "notes": "Original SVG; displayed as a monochrome mask.",
+    "original_source": "https://github.com/sharkdp/bat/blob/018a4826211b8b486883b720a5daa65eca2d4604/doc/logo-header.svg",
+    "guidelines": null,
+    "original_sha256": "bd5ccf9abcb78a509bdb4b4a24f79c4fb7476c69e6eddba4734f20f86b1177d2",
+    "sha256": "bd5ccf9abcb78a509bdb4b4a24f79c4fb7476c69e6eddba4734f20f86b1177d2"
+  },
+  {
+    "id": "bazel",
+    "name": "Bazel",
+    "commands": [
+      "bazel",
+      "bazelisk"
+    ],
+    "ansi": 10,
+    "background": "43a047",
+    "foreground": null,
+    "kind": "brand",
+    "asset": "bazel.svg",
+    "source": "https://raw.githubusercontent.com/simple-icons/simple-icons/17cd4ee07612198a1d8777a060d4100423762a8b/icons/bazel.svg",
+    "license": "CC0-1.0",
+    "notes": "Original SVG; displayed as a monochrome mask.",
+    "original_source": "https://bazel.build",
+    "guidelines": null,
+    "original_sha256": "8b3c1aa9a3a4f8281229d1b1b842c1b0dd115414ddbc4b66f45082de2697a956",
+    "sha256": "8b3c1aa9a3a4f8281229d1b1b842c1b0dd115414ddbc4b66f45082de2697a956"
+  },
+  {
+    "id": "boundary",
+    "name": "Boundary",
+    "commands": [
+      "boundary"
+    ],
+    "ansi": 13,
+    "background": "394a60",
+    "foreground": null,
+    "kind": "brand",
+    "asset": "boundary.svg",
+    "source": "https://raw.githubusercontent.com/homarr-labs/dashboard-icons/d4b500dc40a8e1043b1581cabb7208892cf35472/svg/boundary.svg",
+    "license": "Apache-2.0",
+    "notes": "Original SVG; displayed as a monochrome mask.",
+    "original_source": null,
+    "guidelines": null,
+    "original_sha256": "3297661a584f2af40b54cf69be6b818dd042f5f68f38ed623ef2b335d4e3653c",
+    "sha256": "3297661a584f2af40b54cf69be6b818dd042f5f68f38ed623ef2b335d4e3653c"
+  },
+  {
+    "id": "browser",
+    "name": "Browser",
+    "commands": [
+      "firefox",
+      "chromium",
+      "chrome",
+      "google-chrome",
+      "brave",
+      "zen",
+      "browser"
+    ],
+    "ansi": 12,
+    "background": "394a60",
+    "foreground": null,
+    "kind": "generic",
+    "asset": "../icons/world.svg",
+    "source": "https://tabler.io/icons",
+    "license": "MIT",
+    "notes": "Functional category, not a brand.",
+    "sha256": "25fd225860a3fefe84a028c0dc88b9335c9fca1d8e4b72f5f441f2e9c81c4a68"
+  },
+  {
+    "id": "btop",
+    "name": "btop",
+    "commands": [
+      "btop"
+    ],
+    "ansi": 14,
+    "background": "394a60",
+    "foreground": null,
+    "kind": "brand",
+    "asset": "btop.svg",
+    "source": "https://raw.githubusercontent.com/homarr-labs/dashboard-icons/d4b500dc40a8e1043b1581cabb7208892cf35472/svg/btop.svg",
+    "license": "Apache-2.0",
+    "notes": "Original SVG; displayed as a monochrome mask.",
+    "original_source": null,
+    "guidelines": null,
+    "original_sha256": "fdd88bf17cf042d96a786427d1ac2bf1641510f34aee57e80508a0a781c2425d",
+    "sha256": "fdd88bf17cf042d96a786427d1ac2bf1641510f34aee57e80508a0a781c2425d"
+  },
+  {
+    "id": "buck",
+    "name": "Buck",
+    "commands": [
+      "buck",
+      "buck2"
+    ],
+    "ansi": 11,
+    "background": "394a60",
+    "foreground": null,
+    "kind": "brand",
+    "asset": "buck.svg",
+    "source": "https://raw.githubusercontent.com/facebook/buck2/296d874cfd8a78834129d2e25395463dbfb37a1c/website/static/img/logo.svg",
+    "license": "Apache-2.0",
+    "notes": "Original SVG; displayed as a monochrome mask.",
+    "original_source": null,
+    "guidelines": null,
+    "original_sha256": "00c19095a4485d831cf90834ee4b521627b271617428f33cbb383168131e547d",
+    "sha256": "00c19095a4485d831cf90834ee4b521627b271617428f33cbb383168131e547d"
+  },
+  {
+    "id": "buildkite",
+    "name": "Buildkite",
+    "commands": [
+      "buildkite-agent",
+      "bk"
+    ],
+    "ansi": 10,
+    "background": "008f59",
+    "foreground": "ffffff",
+    "kind": "brand",
+    "asset": "buildkite.svg",
+    "source": "https://raw.githubusercontent.com/simple-icons/simple-icons/17cd4ee07612198a1d8777a060d4100423762a8b/icons/buildkite.svg",
+    "license": "CC0-1.0",
+    "notes": "Original SVG; displayed as a monochrome mask.",
+    "original_source": "https://buildkite.com/brand-assets",
+    "guidelines": "https://buildkite.com/brand-assets",
+    "original_sha256": "32d45e2a770e5198bd0b12da30a43c3f560a54dd182a970fb32949e91f807a3f",
+    "sha256": "32d45e2a770e5198bd0b12da30a43c3f560a54dd182a970fb32949e91f807a3f"
+  },
+  {
+    "id": "bun",
+    "name": "Bun",
+    "commands": [
+      "bun",
+      "bunx"
+    ],
+    "ansi": 11,
+    "background": "343840",
+    "foreground": null,
+    "kind": "brand",
+    "asset": "bun.svg",
+    "source": "https://raw.githubusercontent.com/simple-icons/simple-icons/17cd4ee07612198a1d8777a060d4100423762a8b/icons/bun.svg",
+    "license": "CC0-1.0",
+    "notes": "Original SVG; displayed as a monochrome mask.",
+    "original_source": "https://bun.sh/press-kit",
+    "guidelines": null,
+    "original_sha256": "f356fc1ec5659e73e9b1e881ef2785a4fc4e0e3d82b446e6484f55303546dc6d",
+    "sha256": "f356fc1ec5659e73e9b1e881ef2785a4fc4e0e3d82b446e6484f55303546dc6d"
+  },
+  {
+    "id": "caddy",
+    "name": "Caddy",
+    "commands": [
+      "caddy"
+    ],
+    "ansi": 10,
+    "background": "1f88c0",
+    "foreground": null,
+    "kind": "brand",
+    "asset": "caddy.svg",
+    "source": "https://raw.githubusercontent.com/simple-icons/simple-icons/17cd4ee07612198a1d8777a060d4100423762a8b/icons/caddy.svg",
+    "license": "CC0-1.0",
+    "notes": "Original SVG; displayed as a monochrome mask.",
+    "original_source": "https://caddyserver.com",
+    "guidelines": null,
+    "original_sha256": "3ce50619d72dd473413d0b774f8956691b36f7224f3850a08e23b4da1f69f3ff",
+    "sha256": "3ce50619d72dd473413d0b774f8956691b36f7224f3850a08e23b4da1f69f3ff"
+  },
+  {
+    "id": "charm",
+    "name": "Charm",
+    "commands": [
+      "charm",
+      "gum",
+      "glow",
+      "freeze",
+      "vhs"
+    ],
+    "ansi": 13,
+    "background": "9664e4",
+    "foreground": null,
+    "kind": "brand",
+    "asset": "charm.svg",
+    "source": "https://raw.githubusercontent.com/charmbracelet/crush/fb19c853d0bbac086977c4de45e6a8aa9b1f1de7/internal/oauth/callback/charm.svg",
+    "license": "FSL-1.1-MIT",
+    "notes": "Original SVG; displayed as a monochrome mask.",
+    "original_source": null,
+    "guidelines": null,
+    "original_sha256": "2077b12e0db56010b5d67b6187380f3635c53560828b472a3c0563d274801938",
+    "sha256": "2077b12e0db56010b5d67b6187380f3635c53560828b472a3c0563d274801938"
+  },
+  {
+    "id": "clang",
+    "name": "Clang",
+    "commands": [
+      "clang",
+      "clang++",
+      "clangd"
+    ],
+    "ansi": 12,
+    "background": "546c88",
+    "foreground": null,
+    "kind": "brand",
+    "asset": "clang.svg",
+    "source": "https://raw.githubusercontent.com/simple-icons/simple-icons/17cd4ee07612198a1d8777a060d4100423762a8b/icons/llvm.svg",
+    "license": "CC0-1.0 collection; LLVM trademark",
+    "notes": "LLVM dragon used for Clang, its compiler frontend, with user approval; not a distinct Clang logo.",
+    "sha256": "46d9effbbe0e1a9206d271b638446e56f5912c82249de6b106849ce868c24bd7",
+    "original_source": null,
+    "original_sha256": "46d9effbbe0e1a9206d271b638446e56f5912c82249de6b106849ce868c24bd7"
+  },
+  {
+    "id": "claude-code",
+    "name": "Claude Code",
+    "commands": [
+      "claude",
+      "claude-code"
+    ],
+    "ansi": 11,
+    "background": "b96246",
+    "foreground": "ffffff",
+    "kind": "brand",
+    "asset": "claude-code.svg",
+    "source": "https://raw.githubusercontent.com/simple-icons/simple-icons/17cd4ee07612198a1d8777a060d4100423762a8b/icons/claudecode.svg",
+    "license": "CC0-1.0",
+    "notes": "Original SVG; displayed as a monochrome mask.",
+    "original_source": "https://code.claude.com",
+    "guidelines": null,
+    "original_sha256": "f7691bedae6d71e39e41436f39e453430c1ee21f6305a596984c70a5786abbda",
+    "sha256": "f7691bedae6d71e39e41436f39e453430c1ee21f6305a596984c70a5786abbda"
+  },
+  {
+    "id": "cloudflare",
+    "name": "Cloudflare",
+    "commands": [
+      "wrangler",
+      "cloudflared"
+    ],
+    "ansi": 11,
+    "background": "f38020",
+    "foreground": null,
+    "kind": "brand",
+    "asset": "cloudflare.svg",
+    "source": "https://raw.githubusercontent.com/simple-icons/simple-icons/17cd4ee07612198a1d8777a060d4100423762a8b/icons/cloudflare.svg",
+    "license": "CC0-1.0",
+    "notes": "Original SVG; displayed as a monochrome mask.",
+    "original_source": "https://www.cloudflare.com/logo/",
+    "guidelines": "https://www.cloudflare.com/trademark/",
+    "original_sha256": "408096d99907fd99e0863cb5d73f77a72537c6a85fd8d5e2704178a83a891f08",
+    "sha256": "408096d99907fd99e0863cb5d73f77a72537c6a85fd8d5e2704178a83a891f08"
+  },
+  {
+    "id": "coder",
+    "name": "Coder",
+    "commands": [
+      "coder",
+      "code-server"
+    ],
+    "ansi": 12,
+    "background": "343840",
+    "foreground": null,
+    "kind": "brand",
+    "asset": "coder.svg",
+    "source": "https://raw.githubusercontent.com/simple-icons/simple-icons/17cd4ee07612198a1d8777a060d4100423762a8b/icons/coder.svg",
+    "license": "CC0-1.0",
+    "notes": "Original SVG; displayed as a monochrome mask.",
+    "original_source": "https://coder.com/brand#3-logos",
+    "guidelines": "https://coder.com/brand",
+    "original_sha256": "a6d7395f0b062be87921ca07ded21a5a0e398eabdd28eda23929574941fa77ea",
+    "sha256": "a6d7395f0b062be87921ca07ded21a5a0e398eabdd28eda23929574941fa77ea"
+  },
+  {
+    "id": "codex",
+    "name": "Codex",
+    "commands": [
+      "codex"
+    ],
+    "ansi": 14,
+    "background": "167d68",
+    "foreground": null,
+    "kind": "brand",
+    "asset": "codex.svg",
+    "source": "https://raw.githubusercontent.com/lobehub/lobe-icons/34270bc208d7122778dc00b30bd460f97ea03216/packages/static-svg/icons/openai.svg",
+    "license": "MIT",
+    "notes": "OpenAI mark used for Codex, as requested.",
+    "original_source": null,
+    "guidelines": null,
+    "original_sha256": "a595df6b423920c67a7f8f73c063e4bfb72d415948097b6cac063a2366bb5186",
+    "sha256": "a595df6b423920c67a7f8f73c063e4bfb72d415948097b6cac063a2366bb5186"
+  },
+  {
+    "id": "consul",
+    "name": "Consul",
+    "commands": [
+      "consul"
+    ],
+    "ansi": 13,
+    "background": "f24c53",
+    "foreground": null,
+    "kind": "brand",
+    "asset": "consul.svg",
+    "source": "https://raw.githubusercontent.com/simple-icons/simple-icons/17cd4ee07612198a1d8777a060d4100423762a8b/icons/consul.svg",
+    "license": "CC0-1.0",
+    "notes": "Original SVG; displayed as a monochrome mask.",
+    "original_source": "https://www.hashicorp.com/brand",
+    "guidelines": "https://www.hashicorp.com/brand",
+    "original_sha256": "e02fc7a817314df9e58ee465690ebcec2fabe4f61d17c8a9f4193514114630cc",
+    "sha256": "e02fc7a817314df9e58ee465690ebcec2fabe4f61d17c8a9f4193514114630cc"
+  },
+  {
+    "id": "copilot",
+    "name": "Copilot",
+    "commands": [
+      "copilot",
+      "github-copilot"
+    ],
+    "ansi": 12,
+    "background": "343840",
+    "foreground": null,
+    "kind": "brand",
+    "asset": "copilot.svg",
+    "source": "https://raw.githubusercontent.com/simple-icons/simple-icons/17cd4ee07612198a1d8777a060d4100423762a8b/icons/githubcopilot.svg",
+    "license": "MIT",
+    "notes": "Original SVG; displayed as a monochrome mask.",
+    "original_source": "https://primer.style/foundations/icons/copilot-24",
+    "guidelines": null,
+    "original_sha256": "c72c1e0018e84b3128c5a1ac43ec2be135ac6ec4eb9c0ea18ed76416d23f2af3",
+    "sha256": "c72c1e0018e84b3128c5a1ac43ec2be135ac6ec4eb9c0ea18ed76416d23f2af3"
+  },
+  {
+    "id": "crush",
+    "name": "Crush",
+    "commands": [
+      "crush"
+    ],
+    "ansi": 13,
+    "background": "e762c0",
+    "foreground": null,
+    "kind": "brand",
+    "asset": "crush.svg",
+    "source": "https://raw.githubusercontent.com/haydenbleasel/ultracite/main/apps/docs/public/logos/crush.svg",
+    "license": "MIT",
+    "notes": "Original SVG with background removed and mark cropped for monochrome display.",
+    "original_source": null,
+    "guidelines": null,
+    "original_sha256": "30e1dbc6a5741954d6b41bba00be541ec2e588340df494cbf4e3096ea7be4c18",
+    "sha256": "62aa3e5480e4065c44905d3985e1efba551826ba6549bb5f128ccf51dcc191ba"
+  },
+  {
+    "id": "cua",
+    "name": "Cua",
+    "commands": [
+      "cua",
+      "cua-agent"
+    ],
+    "ansi": 13,
+    "background": "4065f0",
+    "foreground": null,
+    "kind": "brand",
+    "asset": "cua.svg",
+    "source": "https://raw.githubusercontent.com/trycua/cua/b3af0299e0594a9b96cab320f4440304c6061d6c/apps/cua-spaces-web/public/cua_logo_white_new.svg",
+    "license": "MIT",
+    "notes": "Original SVG; displayed as a monochrome mask.",
+    "original_source": null,
+    "guidelines": null,
+    "original_sha256": "b907cdb074f7b690654376b8cee156409adfa8fa3aa81ecfdc3cc652ccc6a2c2",
+    "sha256": "b907cdb074f7b690654376b8cee156409adfa8fa3aa81ecfdc3cc652ccc6a2c2"
+  },
+  {
+    "id": "cursor",
+    "name": "Cursor",
+    "commands": [
+      "cursor",
+      "cursor-agent"
+    ],
+    "ansi": 14,
+    "background": "343840",
+    "foreground": null,
+    "kind": "brand",
+    "asset": "cursor.svg",
+    "source": "https://raw.githubusercontent.com/simple-icons/simple-icons/17cd4ee07612198a1d8777a060d4100423762a8b/icons/cursor.svg",
+    "license": "CC0-1.0",
+    "notes": "Original SVG; displayed as a monochrome mask.",
+    "original_source": "https://cursor.com/brand",
+    "guidelines": null,
+    "original_sha256": "71572a9be192cc069ec22b48d785e61d754eeed7edb7d082d615f6d5620f70ec",
+    "sha256": "71572a9be192cc069ec22b48d785e61d754eeed7edb7d082d615f6d5620f70ec"
+  },
+  {
+    "id": "d2",
+    "name": "D2",
+    "commands": [
+      "d2"
+    ],
+    "ansi": 12,
+    "background": "394a60",
+    "foreground": null,
+    "kind": "brand",
+    "asset": "d2.svg",
+    "source": "https://raw.githubusercontent.com/terrastruct/d2/6a7b4837838a3907604a1d9eec57ee98b6f3cd01/docs/assets/logo.svg",
+    "license": "MPL-2.0",
+    "notes": "Original SVG; displayed as a monochrome mask.",
+    "original_source": null,
+    "guidelines": null,
+    "original_sha256": "fae5679393693f29ff369fe2229ad0baaf02d01dfe4ffb0ec03bbb8ff316c8f4",
+    "sha256": "fae5679393693f29ff369fe2229ad0baaf02d01dfe4ffb0ec03bbb8ff316c8f4"
+  },
+  {
+    "id": "dart",
+    "name": "Dart",
+    "commands": [
+      "dart"
+    ],
+    "ansi": 14,
+    "background": "0175c2",
+    "foreground": null,
+    "kind": "brand",
+    "asset": "dart.svg",
+    "source": "https://raw.githubusercontent.com/simple-icons/simple-icons/17cd4ee07612198a1d8777a060d4100423762a8b/icons/dart.svg",
+    "license": "CC0-1.0",
+    "notes": "Original SVG; displayed as a monochrome mask.",
+    "original_source": "https://github.com/dart-lang/site-shared/tree/18458ff440afd3d06f04e5cb871c4c5eda29c9d5/src/_assets/image/dart/logo",
+    "guidelines": null,
+    "original_sha256": "e02868488ff4ac8e8b22440c6b021e6539f9df21271e0ffb8a7bf92ada0126bb",
+    "sha256": "e02868488ff4ac8e8b22440c6b021e6539f9df21271e0ffb8a7bf92ada0126bb"
+  },
+  {
+    "id": "datadog",
+    "name": "Datadog",
+    "commands": [
+      "datadog-agent",
+      "dog",
+      "datadog-ci"
+    ],
+    "ansi": 13,
+    "background": "632ca6",
+    "foreground": null,
+    "kind": "brand",
+    "asset": "datadog.svg",
+    "source": "https://raw.githubusercontent.com/simple-icons/simple-icons/17cd4ee07612198a1d8777a060d4100423762a8b/icons/datadog.svg",
+    "license": "CC0-1.0",
+    "notes": "Original SVG; displayed as a monochrome mask.",
+    "original_source": "https://www.datadoghq.com/about/resources",
+    "guidelines": "https://www.datadoghq.com/about/resources/",
+    "original_sha256": "2dae0a9ddf090ec01626d9d0f73b1740a70ad280de92e2c27136bc81151fd1ff",
+    "sha256": "2dae0a9ddf090ec01626d9d0f73b1740a70ad280de92e2c27136bc81151fd1ff"
+  },
+  {
+    "id": "dbcli",
+    "name": "DBCLI",
+    "commands": [
+      "dbcli",
+      "pgcli",
+      "mycli",
+      "litecli",
+      "mssql-cli"
+    ],
+    "ansi": 14,
+    "background": "52433b",
+    "foreground": "ffffff",
+    "kind": "generic",
+    "asset": "dbcli.svg",
+    "source": "User-provided visual reference",
+    "license": "Project artwork",
+    "notes": "Functional database-and-terminal pictogram adapted from the supplied visual reference; not a third-party logo.",
+    "original_source": null,
+    "guidelines": null,
+    "original_sha256": null,
+    "sha256": "b0af34e0927ea89e253bc13906c9a9b4af2158a8beb7e3bc5380645a325e4e09"
+  },
+  {
+    "id": "delta",
+    "name": "Delta",
+    "commands": [
+      "delta",
+      "deltadb"
+    ],
+    "ansi": 12,
+    "background": "ac553b",
+    "foreground": null,
+    "kind": "brand",
+    "asset": "delta.svg",
+    "source": "https://delta.dev/favicon.svg",
+    "license": "Brand asset; no separate asset license stated",
+    "notes": "Official Delta favicon. Delta is Zed\u2019s conversation-versioning project, not the git-delta pager.",
+    "sha256": "fd78c148795ae0d0ae80e6fc5ddc6d93e537da322206f30fb574ae758af4947f",
+    "original_source": null,
+    "original_sha256": "fd78c148795ae0d0ae80e6fc5ddc6d93e537da322206f30fb574ae758af4947f"
+  },
+  {
+    "id": "depot",
+    "name": "Depot",
+    "commands": [
+      "depot"
+    ],
+    "ansi": 11,
+    "background": "ef3f34",
+    "foreground": null,
+    "kind": "brand",
+    "asset": "depot.svg",
+    "source": "https://raw.githubusercontent.com/pheralb/svgl/90f6de7026c5e75a9014dbf1f422792bd40b1802/static/library/depot-dark.svg",
+    "license": "MIT",
+    "notes": "Original SVG; displayed as a monochrome mask.",
+    "original_source": null,
+    "guidelines": null,
+    "original_sha256": "8f19082a326d63aa3abad94157dbcb9946a68690bb934393d8dcf53bd72a0d97",
+    "sha256": "8f19082a326d63aa3abad94157dbcb9946a68690bb934393d8dcf53bd72a0d97"
+  },
+  {
+    "id": "devin",
+    "name": "Devin",
+    "commands": [
+      "devin"
+    ],
+    "ansi": 12,
+    "background": "3270ce",
+    "foreground": null,
+    "kind": "brand",
+    "asset": "devin.svg",
+    "source": "https://raw.githubusercontent.com/lobehub/lobe-icons/34270bc208d7122778dc00b30bd460f97ea03216/packages/static-svg/icons/devin.svg",
+    "license": "MIT",
+    "notes": "Original SVG; displayed as a monochrome mask.",
+    "original_source": null,
+    "guidelines": null,
+    "original_sha256": "8d197b0c31522517ffa896cd4a1ee65719eb73bff9eb9bbf7edf64db6b1a573d",
+    "sha256": "8d197b0c31522517ffa896cd4a1ee65719eb73bff9eb9bbf7edf64db6b1a573d"
+  },
+  {
+    "id": "docker",
+    "name": "Docker",
+    "commands": [
+      "docker",
+      "docker-compose"
+    ],
+    "ansi": 12,
+    "background": "2496ed",
+    "foreground": null,
+    "kind": "brand",
+    "asset": "docker.svg",
+    "source": "https://raw.githubusercontent.com/simple-icons/simple-icons/17cd4ee07612198a1d8777a060d4100423762a8b/icons/docker.svg",
+    "license": "CC0-1.0",
+    "notes": "Original SVG; displayed as a monochrome mask.",
+    "original_source": "https://www.docker.com/company/newsroom/media-resources",
+    "guidelines": null,
+    "original_sha256": "65571291c261ef869c31540a38f3ca0f0ee3bb73f179c172211c8860f19a6359",
+    "sha256": "65571291c261ef869c31540a38f3ca0f0ee3bb73f179c172211c8860f19a6359"
+  },
+  {
+    "id": "droid",
+    "name": "Droid",
+    "commands": [
+      "droid"
+    ],
+    "ansi": 10,
+    "background": "c37642",
+    "foreground": null,
+    "kind": "brand",
+    "asset": "droid.svg",
+    "source": "https://raw.githubusercontent.com/haydenbleasel/ultracite/main/apps/docs/public/logos/droid.svg",
+    "license": "MIT",
+    "notes": "Original SVG with background removed and mark cropped for monochrome display.",
+    "sha256": "22ec44ba1b8d8fd596aaf83887ae480fa0d6eb3b6431d17e2224ec43cc82b42c",
+    "original_source": null,
+    "original_sha256": "e88bb1ba0c77bc7f717f88f1e55e10f1687ff0f2f42b653fcd7c8726a27ac0b2"
+  },
+  {
+    "id": "duckdb",
+    "name": "DuckDB",
+    "commands": [
+      "duckdb"
+    ],
+    "ansi": 11,
+    "background": "fff000",
+    "foreground": null,
+    "kind": "brand",
+    "asset": "duckdb.svg",
+    "source": "https://raw.githubusercontent.com/simple-icons/simple-icons/17cd4ee07612198a1d8777a060d4100423762a8b/icons/duckdb.svg",
+    "license": "CC0-1.0",
+    "notes": "Original SVG; displayed as a monochrome mask.",
+    "original_source": "https://duckdb.org",
+    "guidelines": null,
+    "original_sha256": "2d53f8978d58ac12411fc618569a492922bb15e3e1798b56ba1511e72c62f826",
+    "sha256": "2d53f8978d58ac12411fc618569a492922bb15e3e1798b56ba1511e72c62f826"
+  },
+  {
+    "id": "e2b",
+    "name": "E2B",
+    "commands": [
+      "e2b"
+    ],
+    "ansi": 11,
+    "background": "ca6130",
+    "foreground": null,
+    "kind": "brand",
+    "asset": "e2b.svg",
+    "source": "https://raw.githubusercontent.com/e2b-dev/E2B/c4bab34e85a82cf55bbec5ce89d91d1abf299b1a/readme-assets/logo-white.png",
+    "license": "Apache-2.0",
+    "notes": "Monochrome vector trace of published raster; original preserved.",
+    "original_source": null,
+    "guidelines": null,
+    "original_sha256": "f7da0a7eb62beb344fd7cdd8b610a9d1edb3b7e8fb013eaef9f369eb03321c78",
+    "sha256": "622e8edcdd9976b7235281c74a91b503331cefb3dccc2c49749d91b051d5119b"
+  },
+  {
+    "id": "elixir",
+    "name": "Elixir",
+    "commands": [
+      "elixir",
+      "iex",
+      "mix"
+    ],
+    "ansi": 13,
+    "background": "8847b9",
+    "foreground": null,
+    "kind": "brand",
+    "asset": "elixir.svg",
+    "source": "https://raw.githubusercontent.com/simple-icons/simple-icons/17cd4ee07612198a1d8777a060d4100423762a8b/icons/elixir.svg",
+    "license": "CC0-1.0",
+    "notes": "Original SVG; displayed as a monochrome mask.",
+    "original_source": "https://github.com/elixir-lang/elixir-lang.github.com/tree/031746384ee23b9be19298c92a9699c56cc05845/images/logo",
+    "guidelines": "https://elixir-lang.org/trademarks/",
+    "original_sha256": "d660279eaad792683d6e8cee70b225935e856f6b7aae4327d30f4a7f69e71c34",
+    "sha256": "d660279eaad792683d6e8cee70b225935e856f6b7aae4327d30f4a7f69e71c34"
+  },
+  {
+    "id": "emacs",
+    "name": "Emacs",
+    "commands": [
+      "emacs",
+      "emacsclient"
+    ],
+    "ansi": 13,
+    "background": "7f5ab6",
+    "foreground": null,
+    "kind": "brand",
+    "asset": "emacs.svg",
+    "source": "https://raw.githubusercontent.com/homarr-labs/dashboard-icons/d4b500dc40a8e1043b1581cabb7208892cf35472/svg/emacs.svg",
+    "license": "Apache-2.0",
+    "notes": "Original SVG with background removed and mark cropped for monochrome display.",
+    "original_source": null,
+    "guidelines": null,
+    "original_sha256": "76d23310178c224fd89d2b4c75bb4a69f2eb6c04764fadae16573c32033d052d",
+    "sha256": "372abc786570822296f3c6e636c142ded2adc5baddeb10b7abd432fed96785a8"
+  },
+  {
+    "id": "expo",
+    "name": "Expo",
+    "commands": [
+      "expo"
+    ],
+    "ansi": 14,
+    "background": "1c2024",
+    "foreground": null,
+    "kind": "brand",
+    "asset": "expo.svg",
+    "source": "https://raw.githubusercontent.com/simple-icons/simple-icons/17cd4ee07612198a1d8777a060d4100423762a8b/icons/expo.svg",
+    "license": "CC0-1.0",
+    "notes": "Original SVG; displayed as a monochrome mask.",
+    "original_source": "https://expo.dev/brand/",
+    "guidelines": "https://expo.dev/brand/",
+    "original_sha256": "fe31b54a038878735a20ff497c6b250221707047785a324c4f7ef83228f40c6a",
+    "sha256": "fe31b54a038878735a20ff497c6b250221707047785a324c4f7ef83228f40c6a"
+  },
+  {
+    "id": "flutter",
+    "name": "Flutter",
+    "commands": [
+      "flutter"
+    ],
+    "ansi": 12,
+    "background": "02569b",
+    "foreground": null,
+    "kind": "brand",
+    "asset": "flutter.svg",
+    "source": "https://raw.githubusercontent.com/simple-icons/simple-icons/17cd4ee07612198a1d8777a060d4100423762a8b/icons/flutter.svg",
+    "license": "CC0-1.0",
+    "notes": "Original SVG; displayed as a monochrome mask.",
+    "original_source": "https://flutter.dev/brand",
+    "guidelines": "https://flutter.dev/brand",
+    "original_sha256": "3f268e6fd52e538478ec299cef53cfd85a1c3454b5eb4c7997dd2e21e6b7d741",
+    "sha256": "3f268e6fd52e538478ec299cef53cfd85a1c3454b5eb4c7997dd2e21e6b7d741"
+  },
+  {
+    "id": "foundation-models",
+    "name": "Foundation Models",
+    "commands": [
+      "foundation-models"
+    ],
+    "ansi": 13,
+    "background": "7356b7",
+    "foreground": null,
+    "kind": "brand",
+    "asset": "foundation-models.svg",
+    "source": "https://developer.apple.com/assets/elements/icons/foundationmodel/foundationmodel-128x128_2x.png",
+    "license": "Apple brand asset; no separate asset license stated",
+    "notes": "Monochrome trace of the published raster, selecting foreground detail rather than its opaque background; original preserved.",
+    "original_source": null,
+    "guidelines": null,
+    "original_sha256": "acaabc076671628bb9f5f9af7d7e1f938c9ae04e668fc9bf2165cb37af2d1cd9",
+    "sha256": "3cd1fbe6194a282b36bf03488ab0cd74448eb32e000f923e63551bf940e4ee5a"
+  },
+  {
+    "id": "fx",
+    "name": "fx",
+    "commands": [
+      "fx"
+    ],
+    "ansi": 11,
+    "background": "aa535c",
+    "foreground": null,
+    "kind": "brand",
+    "asset": "fx.svg",
+    "source": "https://fx.wtf/img/logo.svg",
+    "license": "MIT",
+    "notes": "Original SVG; displayed as a monochrome mask.",
+    "original_source": null,
+    "guidelines": null,
+    "original_sha256": "3bec56f45db468da62ee19061d2c66f82e20ce82cc9838eb47f3e0776e4369c0",
+    "sha256": "3bec56f45db468da62ee19061d2c66f82e20ce82cc9838eb47f3e0776e4369c0"
+  },
+  {
+    "id": "gemini",
+    "name": "Gemini",
+    "commands": [
+      "gemini",
+      "gemini-cli"
+    ],
+    "ansi": 12,
+    "background": "5474d4",
+    "foreground": null,
+    "kind": "brand",
+    "asset": "gemini.svg",
+    "source": "https://raw.githubusercontent.com/lobehub/lobe-icons/34270bc208d7122778dc00b30bd460f97ea03216/packages/static-svg/icons/gemini.svg",
+    "license": "MIT",
+    "notes": "Original SVG; displayed as a monochrome mask.",
+    "original_source": null,
+    "guidelines": null,
+    "original_sha256": "87d5b3c4be75a66f54c1936482a263df68185545b741129badd1b7c2449c18d3",
+    "sha256": "87d5b3c4be75a66f54c1936482a263df68185545b741129badd1b7c2449c18d3"
+  },
+  {
+    "id": "git",
+    "name": "Git",
+    "commands": [
+      "git",
+      "lazygit",
+      "tig"
+    ],
+    "ansi": 9,
+    "background": "c03d2c",
+    "foreground": null,
+    "kind": "brand",
+    "asset": "git.svg",
+    "source": "https://raw.githubusercontent.com/simple-icons/simple-icons/17cd4ee07612198a1d8777a060d4100423762a8b/icons/git.svg",
+    "license": "CC-BY-3.0",
+    "notes": "Original SVG; displayed as a monochrome mask.",
+    "original_source": "https://git-scm.com/community/logos",
+    "guidelines": null,
+    "original_sha256": "95724d436215d483de82288610c3c144854138f49945424697fcdf8be66e17d6",
+    "sha256": "95724d436215d483de82288610c3c144854138f49945424697fcdf8be66e17d6"
+  },
+  {
+    "id": "git-butler",
+    "name": "Git Butler",
+    "commands": [
+      "gitbutler",
+      "git-butler",
+      "but"
+    ],
+    "ansi": 11,
+    "background": "8958a5",
+    "foreground": null,
+    "kind": "brand",
+    "asset": "git-butler.svg",
+    "source": "https://gitbutler.com/favicon/favicon.svg",
+    "license": "FSL-1.1-MIT",
+    "notes": "Original SVG with background removed and mark cropped for monochrome display.",
+    "original_source": null,
+    "guidelines": null,
+    "original_sha256": "c6d5b8a1c2c40d7899038d6a25c37236b94799a59eea83e39edd1c38cf682147",
+    "sha256": "55633a5c3f0213bf74504d9adf13ee0de9cec5f0583a10102ad3368aec8f9253"
+  },
+  {
+    "id": "git-changes",
+    "name": "Git Changes",
+    "commands": [
+      "git-changes"
+    ],
+    "ansi": 10,
+    "background": "394a60",
+    "foreground": null,
+    "kind": "generic",
+    "asset": "../icons/brand-git.svg",
+    "source": "https://tabler.io/icons",
+    "license": "MIT",
+    "notes": "Functional category, not a brand.",
+    "sha256": "dbe24aa9e0947a040da7e5e9db99dfe50a5ee0bba4f02fe5b28070ffe1ebacd3"
+  },
+  {
+    "id": "github",
+    "name": "GitHub",
+    "commands": [
+      "gh"
+    ],
+    "ansi": 13,
+    "background": "343840",
+    "foreground": null,
+    "kind": "brand",
+    "asset": "github.svg",
+    "source": "https://raw.githubusercontent.com/simple-icons/simple-icons/17cd4ee07612198a1d8777a060d4100423762a8b/icons/github.svg",
+    "license": "CC0-1.0",
+    "notes": "Original SVG; displayed as a monochrome mask.",
+    "original_source": "https://github.com/logos",
+    "guidelines": "https://github.com/logos",
+    "original_sha256": "3bf8cceead820aec50d4ee825a3fd02c5a1cd6665cc9cf4cbf3d9c8861a204bb",
+    "sha256": "3bf8cceead820aec50d4ee825a3fd02c5a1cd6665cc9cf4cbf3d9c8861a204bb"
+  },
+  {
+    "id": "gitlab",
+    "name": "GitLab",
+    "commands": [
+      "glab",
+      "gitlab-runner"
+    ],
+    "ansi": 11,
+    "background": "fc6d26",
+    "foreground": null,
+    "kind": "brand",
+    "asset": "gitlab.svg",
+    "source": "https://raw.githubusercontent.com/simple-icons/simple-icons/17cd4ee07612198a1d8777a060d4100423762a8b/icons/gitlab.svg",
+    "license": "CC0-1.0",
+    "notes": "Original SVG; displayed as a monochrome mask.",
+    "original_source": "https://about.gitlab.com/press/press-kit/",
+    "guidelines": "https://about.gitlab.com/handbook/marketing/corporate-marketing/brand-activation/trademark-guidelines/",
+    "original_sha256": "c7c39058bd1b6f9f40334383bd5136bb8c5ba5e6a24200f2d1f18365e2526e28",
+    "sha256": "c7c39058bd1b6f9f40334383bd5136bb8c5ba5e6a24200f2d1f18365e2526e28"
+  },
+  {
+    "id": "gnu",
+    "name": "Gnu",
+    "commands": [
+      "gcc",
+      "g++",
+      "gmake",
+      "make"
+    ],
+    "ansi": 11,
+    "background": "a42e2b",
+    "foreground": null,
+    "kind": "brand",
+    "asset": "gnu.svg",
+    "source": "https://raw.githubusercontent.com/simple-icons/simple-icons/17cd4ee07612198a1d8777a060d4100423762a8b/icons/gnu.svg",
+    "license": "CC-BY-SA-2.0",
+    "notes": "Original SVG; displayed as a monochrome mask.",
+    "original_source": "https://gnu.org",
+    "guidelines": null,
+    "original_sha256": "24a8ccdc9e076463d3162309ddf6db5ded394c109ca9d8ece9709a339894f21e",
+    "sha256": "24a8ccdc9e076463d3162309ddf6db5ded394c109ca9d8ece9709a339894f21e"
+  },
+  {
+    "id": "go",
+    "name": "Go",
+    "commands": [
+      "go",
+      "gofmt",
+      "gopls"
+    ],
+    "ansi": 14,
+    "background": "00add8",
+    "foreground": null,
+    "kind": "brand",
+    "asset": "go.svg",
+    "source": "https://raw.githubusercontent.com/simple-icons/simple-icons/17cd4ee07612198a1d8777a060d4100423762a8b/icons/go.svg",
+    "license": "CC0-1.0",
+    "notes": "Original SVG; displayed as a monochrome mask.",
+    "original_source": "https://blog.golang.org/go-brand",
+    "guidelines": "https://blog.golang.org/go-brand",
+    "original_sha256": "36a745fe15584bf138d02ae6abcbdd155bc1cd4f4976634ad34861b2059db559",
+    "sha256": "36a745fe15584bf138d02ae6abcbdd155bc1cd4f4976634ad34861b2059db559"
+  },
+  {
+    "id": "goose",
+    "name": "Goose",
+    "commands": [
+      "goose"
+    ],
+    "ansi": 11,
+    "background": "635449",
+    "foreground": null,
+    "kind": "brand",
+    "asset": "goose.svg",
+    "source": "https://raw.githubusercontent.com/lobehub/lobe-icons/34270bc208d7122778dc00b30bd460f97ea03216/packages/static-svg/icons/goose.svg",
+    "license": "MIT",
+    "notes": "Original SVG; displayed as a monochrome mask.",
+    "original_source": null,
+    "guidelines": null,
+    "original_sha256": "8779d9a61c5b0be78a3d36cab6843ba5af86218ba2ff1b18eb918c7a8d25bb99",
+    "sha256": "8779d9a61c5b0be78a3d36cab6843ba5af86218ba2ff1b18eb918c7a8d25bb99"
+  },
+  {
+    "id": "gradle",
+    "name": "Gradle",
+    "commands": [
+      "gradle",
+      "gradlew"
+    ],
+    "ansi": 10,
+    "background": "02303a",
+    "foreground": null,
+    "kind": "brand",
+    "asset": "gradle.svg",
+    "source": "https://raw.githubusercontent.com/simple-icons/simple-icons/17cd4ee07612198a1d8777a060d4100423762a8b/icons/gradle.svg",
+    "license": "CC0-1.0",
+    "notes": "Original SVG; displayed as a monochrome mask.",
+    "original_source": "https://gradle.com/brand",
+    "guidelines": "https://gradle.com/brand",
+    "original_sha256": "1ae785093daee910b4bc6ee351742976e441dfcd9bdb13e82a88c0c0ef37022e",
+    "sha256": "1ae785093daee910b4bc6ee351742976e441dfcd9bdb13e82a88c0c0ef37022e"
+  },
+  {
+    "id": "grok",
+    "name": "Grok",
+    "commands": [
+      "grok"
+    ],
+    "ansi": 14,
+    "background": "373e4a",
+    "foreground": null,
+    "kind": "brand",
+    "asset": "grok.svg",
+    "source": "https://raw.githubusercontent.com/lobehub/lobe-icons/34270bc208d7122778dc00b30bd460f97ea03216/packages/static-svg/icons/grok.svg",
+    "license": "MIT",
+    "notes": "Original SVG; displayed as a monochrome mask.",
+    "original_source": null,
+    "guidelines": null,
+    "original_sha256": "9175fc90c22655160231976c849f25a03b888d7cc0e04c5f1b987b659bb07c95",
+    "sha256": "9175fc90c22655160231976c849f25a03b888d7cc0e04c5f1b987b659bb07c95"
+  },
+  {
+    "id": "helix",
+    "name": "Helix",
+    "commands": [
+      "hx",
+      "helix"
+    ],
+    "ansi": 13,
+    "background": "281733",
+    "foreground": null,
+    "kind": "brand",
+    "asset": "helix.svg",
+    "source": "https://raw.githubusercontent.com/simple-icons/simple-icons/17cd4ee07612198a1d8777a060d4100423762a8b/icons/helix.svg",
+    "license": "CC0-1.0",
+    "notes": "Original SVG; displayed as a monochrome mask.",
+    "original_source": "https://helix-editor.com",
+    "guidelines": null,
+    "original_sha256": "a8f958e1bcea9989c2475b8c06084e063e165d14ba8cb0fc6c0fc30fb9517dd2",
+    "sha256": "a8f958e1bcea9989c2475b8c06084e063e165d14ba8cb0fc6c0fc30fb9517dd2"
+  },
+  {
+    "id": "hermes",
+    "name": "Hermes",
+    "commands": [
+      "hermes"
+    ],
+    "ansi": 14,
+    "background": "bb842f",
+    "foreground": null,
+    "kind": "brand",
+    "asset": "hermes.svg",
+    "source": "https://raw.githubusercontent.com/lobehub/lobe-icons/34270bc208d7122778dc00b30bd460f97ea03216/packages/static-svg/icons/hermesagent.svg",
+    "license": "MIT",
+    "notes": "Original SVG; displayed as a monochrome mask.",
+    "original_source": null,
+    "guidelines": null,
+    "original_sha256": "02d43c0a91fc2ee41f2684fc39613ff6687de29a4b079665bace5303671dd63b",
+    "sha256": "02d43c0a91fc2ee41f2684fc39613ff6687de29a4b079665bace5303671dd63b"
+  },
+  {
+    "id": "heroku",
+    "name": "Heroku",
+    "commands": [
+      "heroku"
+    ],
+    "ansi": 13,
+    "background": "394a60",
+    "foreground": null,
+    "kind": "brand",
+    "asset": "heroku.svg",
+    "source": "https://raw.githubusercontent.com/devicons/devicon/32fe1d3b3f36ad11f90ab94f7db59738139c2bf6/icons/heroku/heroku-plain.svg",
+    "license": "MIT",
+    "notes": "Original SVG; displayed as a monochrome mask.",
+    "original_source": null,
+    "guidelines": null,
+    "original_sha256": "31c9343fb74cb5f0d517b7461aa15c92b68afa13084997d6510411fb797f1892",
+    "sha256": "31c9343fb74cb5f0d517b7461aa15c92b68afa13084997d6510411fb797f1892"
+  },
+  {
+    "id": "homebrew",
+    "name": "Homebrew",
+    "commands": [
+      "brew"
+    ],
+    "ansi": 11,
+    "background": "fbb040",
+    "foreground": null,
+    "kind": "brand",
+    "asset": "homebrew.svg",
+    "source": "https://raw.githubusercontent.com/simple-icons/simple-icons/17cd4ee07612198a1d8777a060d4100423762a8b/icons/homebrew.svg",
+    "license": "CC0-1.0",
+    "notes": "Original SVG; displayed as a monochrome mask.",
+    "original_source": "https://github.com/Homebrew/brew.sh/blob/2e576aaca83e62dda41a188597bb4bd20e75e385/assets/img/homebrew.svg",
+    "guidelines": null,
+    "original_sha256": "59aef3ad19dca4db571725f87312f19ec2633fdedc85831a0d556798c1813549",
+    "sha256": "59aef3ad19dca4db571725f87312f19ec2633fdedc85831a0d556798c1813549"
+  },
+  {
+    "id": "homey",
+    "name": "Homey",
+    "commands": [
+      "homey"
+    ],
+    "ansi": 11,
+    "background": "df6c28",
+    "foreground": null,
+    "kind": "brand",
+    "asset": "homey.svg",
+    "source": "https://raw.githubusercontent.com/homarr-labs/dashboard-icons/d4b500dc40a8e1043b1581cabb7208892cf35472/svg/homey.svg",
+    "license": "Apache-2.0",
+    "notes": "Original SVG; displayed as a monochrome mask.",
+    "sha256": "421c46c07ba5cb7144fae50ae75d984a9fbefc63fb579c6deecb2e81e606ad3c",
+    "original_source": null,
+    "original_sha256": "421c46c07ba5cb7144fae50ae75d984a9fbefc63fb579c6deecb2e81e606ad3c"
+  },
+  {
+    "id": "htop",
+    "name": "htop",
+    "commands": [
+      "htop"
+    ],
+    "ansi": 10,
+    "background": "009020",
+    "foreground": null,
+    "kind": "brand",
+    "asset": "htop.svg",
+    "source": "https://raw.githubusercontent.com/simple-icons/simple-icons/17cd4ee07612198a1d8777a060d4100423762a8b/icons/htop.svg",
+    "license": "CC0-1.0",
+    "notes": "Original SVG; displayed as a monochrome mask.",
+    "original_source": "https://github.com/htop-dev/htop/blob/03d5e4746f53bd07daf68638d714a7fec336297b/htop.svg",
+    "guidelines": null,
+    "original_sha256": "ff14aeb0cec291e9297c3652c833170394169d0d5ac28caf82370439ab712684",
+    "sha256": "ff14aeb0cec291e9297c3652c833170394169d0d5ac28caf82370439ab712684"
+  },
+  {
+    "id": "hugging-face",
+    "name": "Hugging Face",
+    "commands": [
+      "hf",
+      "huggingface-cli",
+      "huggingface"
+    ],
+    "ansi": 11,
+    "background": "ffd21e",
+    "foreground": null,
+    "kind": "brand",
+    "asset": "hugging-face.svg",
+    "source": "https://raw.githubusercontent.com/simple-icons/simple-icons/17cd4ee07612198a1d8777a060d4100423762a8b/icons/huggingface.svg",
+    "license": "CC0-1.0",
+    "notes": "Original SVG; displayed as a monochrome mask.",
+    "original_source": "https://huggingface.co/brand",
+    "guidelines": "https://huggingface.co/brand",
+    "original_sha256": "aa81744034eecf4ac6b3fb7108dd71223965c7af3c534932391314563b150109",
+    "sha256": "aa81744034eecf4ac6b3fb7108dd71223965c7af3c534932391314563b150109"
+  },
+  {
+    "id": "hunk",
+    "name": "Hunk",
+    "commands": [
+      "hunk"
+    ],
+    "ansi": 9,
+    "background": "df5e3a",
+    "foreground": null,
+    "kind": "brand",
+    "asset": "hunk.svg",
+    "source": "https://raw.githubusercontent.com/modem-dev/hunk/995af56a22c5199e120022418a21ee446f9b0023/website/public/brand/downloads/logo-mark-paper.svg",
+    "license": "MIT",
+    "notes": "Original SVG; displayed as a monochrome mask.",
+    "original_source": null,
+    "guidelines": null,
+    "original_sha256": "aec42516536ef2cd2a868cd1792cec4f55faa7bce89346e7fba4e9577b15262b",
+    "sha256": "aec42516536ef2cd2a868cd1792cec4f55faa7bce89346e7fba4e9577b15262b"
+  },
+  {
+    "id": "ibm-bob",
+    "name": "IBM Bob",
+    "commands": [
+      "bob",
+      "ibm-bob"
+    ],
+    "ansi": 12,
+    "background": "2862e9",
+    "foreground": null,
+    "kind": "brand",
+    "asset": "ibm-bob.svg",
+    "source": "https://raw.githubusercontent.com/haydenbleasel/ultracite/main/apps/docs/public/logos/bob.svg",
+    "license": "MIT",
+    "notes": "Original SVG with background removed and mark cropped for monochrome display.",
+    "original_source": null,
+    "guidelines": null,
+    "original_sha256": "2ed121b2e9ec607e689ba6d5fc672e65c462aaf9bb731a24674896a05d2fb29e",
+    "sha256": "23f501d7996985eb378a11f0638d3ac1f05a2ca59911517a7705f934a4759037"
+  },
+  {
+    "id": "inspector",
+    "name": "Inspector",
+    "commands": [
+      "inspector",
+      "node-inspect"
+    ],
+    "ansi": 12,
+    "background": "394a60",
+    "foreground": null,
+    "kind": "generic",
+    "asset": "../icons/search.svg",
+    "source": "https://tabler.io/icons",
+    "license": "MIT",
+    "notes": "Functional category, not a brand.",
+    "sha256": "57e054b6c1508be40d5eba1ea434b702f5ff55dca04e28e5e3f22472c2f6176d"
+  },
+  {
+    "id": "jj",
+    "name": "JJ",
+    "commands": [
+      "jj",
+      "jujutsu"
+    ],
+    "ansi": 13,
+    "background": "9467ce",
+    "foreground": null,
+    "kind": "brand",
+    "asset": "jj.svg",
+    "source": "https://raw.githubusercontent.com/jj-vcs/jj/6f0fc934af3961cbe02ac0a9696bfbeef023ace9/docs/images/jj-logo.svg",
+    "license": "Apache-2.0",
+    "notes": "Original SVG with background removed and mark cropped for monochrome display.",
+    "original_source": null,
+    "guidelines": null,
+    "original_sha256": "36461ac6cb98c1652c3f1b40aa021635b90cd69b00199c3055e3dbb68dd32e29",
+    "sha256": "e9247c4f466d48d24258bba5477a9400a7210e46f3a3deaa04487c4c64645b81"
+  },
+  {
+    "id": "julia",
+    "name": "Julia",
+    "commands": [
+      "julia"
+    ],
+    "ansi": 13,
+    "background": "9558b2",
+    "foreground": null,
+    "kind": "brand",
+    "asset": "julia.svg",
+    "source": "https://raw.githubusercontent.com/simple-icons/simple-icons/17cd4ee07612198a1d8777a060d4100423762a8b/icons/julia.svg",
+    "license": "CC0-1.0",
+    "notes": "Original SVG; displayed as a monochrome mask.",
+    "original_source": "https://github.com/JuliaLang/julia-logo-graphics/blob/b5551ca7946b4a25746c045c15fbb8806610f8d0/images/julia-dots.svg",
+    "guidelines": null,
+    "original_sha256": "d7471ddca5a25f72c43f433726b00c324175f0fe1b80011ff3e77e750f273f9d",
+    "sha256": "d7471ddca5a25f72c43f433726b00c324175f0fe1b80011ff3e77e750f273f9d"
+  },
+  {
+    "id": "junie",
+    "name": "Junie",
+    "commands": [
+      "junie"
+    ],
+    "ansi": 10,
+    "background": "58723c",
+    "foreground": null,
+    "kind": "brand",
+    "asset": "junie.svg",
+    "source": "https://raw.githubusercontent.com/lobehub/lobe-icons/34270bc208d7122778dc00b30bd460f97ea03216/packages/static-svg/icons/junie.svg",
+    "license": "MIT",
+    "notes": "Original SVG; displayed as a monochrome mask.",
+    "original_source": null,
+    "guidelines": null,
+    "original_sha256": "dded0700186377523b7b10bbb204fd3f095d1ea52fe89722cd6cc319a154e208",
+    "sha256": "dded0700186377523b7b10bbb204fd3f095d1ea52fe89722cd6cc319a154e208"
+  },
+  {
+    "id": "jupyter",
+    "name": "Jupyter",
+    "commands": [
+      "jupyter",
+      "jupyter-lab",
+      "jupyter-notebook",
+      "ipython"
+    ],
+    "ansi": 11,
+    "background": "f37626",
+    "foreground": null,
+    "kind": "brand",
+    "asset": "jupyter.svg",
+    "source": "https://raw.githubusercontent.com/simple-icons/simple-icons/17cd4ee07612198a1d8777a060d4100423762a8b/icons/jupyter.svg",
+    "license": "CC0-1.0",
+    "notes": "Original SVG; displayed as a monochrome mask.",
+    "original_source": "https://github.com/jupyter/design/blob/80716ee75dd7b2a6ec6abcd89922d020483589b1/logos/Logo%20Mark/logomark-whitebody-whitemoons/logomark-whitebody-whitemoons.svg",
+    "guidelines": "https://github.com/jupyter/design",
+    "original_sha256": "46e1e4fe83ba623803dfbfe8714a31ea902178421624dc3de427aae8325b9dba",
+    "sha256": "46e1e4fe83ba623803dfbfe8714a31ea902178421624dc3de427aae8325b9dba"
+  },
+  {
+    "id": "k9s",
+    "name": "K9s",
+    "commands": [
+      "k9s"
+    ],
+    "ansi": 12,
+    "background": "417ab3",
+    "foreground": null,
+    "kind": "brand",
+    "asset": "k9s.svg",
+    "source": "https://k9scli.io/assets/k9s.png",
+    "license": "Apache-2.0",
+    "notes": "Monochrome vector trace of published raster; original preserved.",
+    "original_source": null,
+    "guidelines": null,
+    "original_sha256": "e4b574962491c993502fb4145f16e772ddae0e7c57dd002cecc17154110a9424",
+    "sha256": "d227d7fa513f63fc557a269fcf4e2f0491295e23c97befda47ae169904293649"
+  },
+  {
+    "id": "kakoune",
+    "name": "Kakoune",
+    "commands": [
+      "kak",
+      "kakoune"
+    ],
+    "ansi": 11,
+    "background": "7b6852",
+    "foreground": null,
+    "kind": "brand",
+    "asset": "kakoune.svg",
+    "source": "https://raw.githubusercontent.com/mawww/kakoune/a4466920c2a9223d7ba1feff12f02962d67ece3e/doc/kakoune_logo.svg",
+    "license": "Unlicense",
+    "notes": "Original SVG; displayed as a monochrome mask.",
+    "original_source": null,
+    "guidelines": null,
+    "original_sha256": "2718481268e21ab8ac69aac0d6c5f501fccd8c73489bdc63c8fb3f9c6d6e2ff5",
+    "sha256": "2718481268e21ab8ac69aac0d6c5f501fccd8c73489bdc63c8fb3f9c6d6e2ff5"
+  },
+  {
+    "id": "kimi",
+    "name": "Kimi",
+    "commands": [
+      "kimi",
+      "kimi-cli"
+    ],
+    "ansi": 12,
+    "background": "343840",
+    "foreground": null,
+    "kind": "brand",
+    "asset": "kimi.svg",
+    "source": "https://raw.githubusercontent.com/simple-icons/simple-icons/17cd4ee07612198a1d8777a060d4100423762a8b/icons/kimi.svg",
+    "license": "CC0-1.0",
+    "notes": "Original SVG; displayed as a monochrome mask.",
+    "original_source": "https://moonshotai.github.io/Branding-Guide",
+    "guidelines": "https://moonshotai.github.io/Branding-Guide",
+    "original_sha256": "01fb4be70032974e2c9a4f2af9688ea505ad7d996de8866cea0844c4b0581091",
+    "sha256": "01fb4be70032974e2c9a4f2af9688ea505ad7d996de8866cea0844c4b0581091"
+  },
+  {
+    "id": "kiro",
+    "name": "Kiro",
+    "commands": [
+      "kiro",
+      "kiro-cli"
+    ],
+    "ansi": 13,
+    "background": "7358b4",
+    "foreground": null,
+    "kind": "brand",
+    "asset": "kiro.svg",
+    "source": "https://raw.githubusercontent.com/lobehub/lobe-icons/34270bc208d7122778dc00b30bd460f97ea03216/packages/static-svg/icons/kiro.svg",
+    "license": "MIT",
+    "notes": "Original SVG; displayed as a monochrome mask.",
+    "original_source": null,
+    "guidelines": null,
+    "original_sha256": "1e56073e35799b0d7075d5376ca2d99c3d3bbf51a000a1ec3d4b0df7612c91d6",
+    "sha256": "1e56073e35799b0d7075d5376ca2d99c3d3bbf51a000a1ec3d4b0df7612c91d6"
+  },
+  {
+    "id": "kubernetes",
+    "name": "Kubernetes",
+    "commands": [
+      "kubectl",
+      "kubelet",
+      "kubeadm",
+      "helm"
+    ],
+    "ansi": 12,
+    "background": "326ce5",
+    "foreground": null,
+    "kind": "brand",
+    "asset": "kubernetes.svg",
+    "source": "https://raw.githubusercontent.com/simple-icons/simple-icons/17cd4ee07612198a1d8777a060d4100423762a8b/icons/kubernetes.svg",
+    "license": "CC0-1.0",
+    "notes": "Original SVG; displayed as a monochrome mask.",
+    "original_source": "https://github.com/kubernetes/kubernetes/tree/cac53883f4714452f3084a22e4be20d042a9df33/logo",
+    "guidelines": null,
+    "original_sha256": "ceee2f4e87fa1533600672190c156194039f744fa9b5da10e83f002178e84b47",
+    "sha256": "ceee2f4e87fa1533600672190c156194039f744fa9b5da10e83f002178e84b47"
+  },
+  {
+    "id": "llama",
+    "name": "Llama",
+    "commands": [
+      "llama",
+      "llama-cli",
+      "llama-server"
+    ],
+    "ansi": 11,
+    "background": "8669b7",
+    "foreground": null,
+    "kind": "brand",
+    "asset": "llama.svg",
+    "source": "https://raw.githubusercontent.com/ggml-org/llama.brand/master/logo/svg/icon/icon-dark.svg",
+    "license": "CC-BY-NC-4.0 with explicit software-distribution and monochrome permission",
+    "notes": "Source: ggml-org/llama.brand. BRAND-USAGE.md permits nominative distribution and monochrome adaptation.",
+    "sha256": "78bbb16ce08f25baf0bc2c8f0c765e85d933f537ba92625b844528cb02aa249b",
+    "original_source": null,
+    "original_sha256": "78bbb16ce08f25baf0bc2c8f0c765e85d933f537ba92625b844528cb02aa249b"
+  },
+  {
+    "id": "maki",
+    "name": "Maki",
+    "commands": [
+      "maki"
+    ],
+    "ansi": 10,
+    "background": "555c8f",
+    "foreground": null,
+    "kind": "brand",
+    "asset": "maki.svg",
+    "source": "https://raw.githubusercontent.com/tontinton/maki/25120936ac8eb1245d5698f839f7be90e318fe19/site/android-chrome-512x512.png",
+    "license": "MIT",
+    "notes": "Monochrome trace of the published raster, selecting foreground detail rather than its opaque background; original preserved.",
+    "original_source": null,
+    "guidelines": null,
+    "original_sha256": "6a87d145e2bf304ecd6050abb168d6007672163285d30b1ac4c9b8dc7d61b56f",
+    "sha256": "fc9f74c1ca218823ebcce501747b464ddfebcfd4c9f3a31250b28bcdbf1b5a31"
+  },
+  {
+    "id": "mastra",
+    "name": "Mastra",
+    "commands": [
+      "mastra"
+    ],
+    "ansi": 13,
+    "background": "334f4d",
+    "foreground": null,
+    "kind": "brand",
+    "asset": "mastra.svg",
+    "source": "https://mastra.ai/favicon/new-brand/icon.svg",
+    "license": "Brand asset; no separate asset license stated",
+    "notes": "Current Mastra.ai mark; favicon background removed.",
+    "original_source": null,
+    "guidelines": null,
+    "original_sha256": "b7efd2c13ff63e4cdd7088208c5b47f1b986214ceca24ba5231f060bd01c425a",
+    "sha256": "793eb2ea5bb06b7de2ec48903fcdf233ca2cfbf743831083c68fc93dde13d492"
+  },
+  {
+    "id": "meta",
+    "name": "Meta",
+    "commands": [
+      "meta"
+    ],
+    "ansi": 12,
+    "background": "0467df",
+    "foreground": null,
+    "kind": "brand",
+    "asset": "meta.svg",
+    "source": "https://raw.githubusercontent.com/simple-icons/simple-icons/17cd4ee07612198a1d8777a060d4100423762a8b/icons/meta.svg",
+    "license": "CC0-1.0",
+    "notes": "Original SVG; displayed as a monochrome mask.",
+    "original_source": "https://www.meta.com",
+    "guidelines": "https://www.facebook.com/brand/resources/meta/company-brand",
+    "original_sha256": "e3e9db62f59dc477e5917687349b8aa9685b841d40300c1afad60ad85075cd2e",
+    "sha256": "e3e9db62f59dc477e5917687349b8aa9685b841d40300c1afad60ad85075cd2e"
+  },
+  {
+    "id": "micro",
+    "name": "Micro",
+    "commands": [
+      "micro"
+    ],
+    "ansi": 14,
+    "background": "2e7b9b",
+    "foreground": null,
+    "kind": "brand",
+    "asset": "micro.svg",
+    "source": "https://raw.githubusercontent.com/simple-icons/simple-icons/17cd4ee07612198a1d8777a060d4100423762a8b/icons/microeditor.svg",
+    "license": "CC0-1.0",
+    "notes": "Original monochrome SVG from Simple Icons; project identity verified.",
+    "original_source": "https://micro-editor.github.io/",
+    "guidelines": null,
+    "original_sha256": "76f40a946fb3213040e723f6dee01f1dc5ba2362a1911e2eddfd2803be3bb99f",
+    "sha256": "76f40a946fb3213040e723f6dee01f1dc5ba2362a1911e2eddfd2803be3bb99f"
+  },
+  {
+    "id": "minimal",
+    "name": "Minimal",
+    "commands": [
+      "minimal",
+      "mn"
+    ],
+    "ansi": 14,
+    "background": "484e55",
+    "foreground": null,
+    "kind": "brand",
+    "asset": "minimal.svg",
+    "source": "https://minimal.dev/favicon.svg",
+    "license": "Brand asset; no separate asset license stated",
+    "notes": "Official Minimal.dev favicon, cropped to its mark; identity confirmed by user.",
+    "sha256": "32b9c7fa20a831167f2d8b07049bf811951b734edef409808507572a76cc5ee1",
+    "original_sha256": "1d897f52ea1ea6143161eea03fc130a2ea71af0ff023d0a3f45e8e929c9fc424"
+  },
+  {
+    "id": "mise",
+    "name": "Mise",
+    "commands": [
+      "mise",
+      "rtx"
+    ],
+    "ansi": 11,
+    "background": "615ec1",
+    "foreground": null,
+    "kind": "brand",
+    "asset": "mise.svg",
+    "source": "https://raw.githubusercontent.com/jdx/mise/b2d03501484e8ec938920c12dadeae1944016950/docs/public/logo-dark.svg",
+    "license": "MIT",
+    "notes": "Original SVG; displayed as a monochrome mask.",
+    "original_source": null,
+    "guidelines": null,
+    "original_sha256": "cf028030054326cf7ef668a53052173aa8761d2f716fbcf8de1dc4ee13249f3a",
+    "sha256": "cf028030054326cf7ef668a53052173aa8761d2f716fbcf8de1dc4ee13249f3a"
+  },
+  {
+    "id": "mistral",
+    "name": "Mistral",
+    "commands": [
+      "mistral",
+      "mistral-vibe",
+      "vibe"
+    ],
+    "ansi": 11,
+    "background": "d86a32",
+    "foreground": null,
+    "kind": "brand",
+    "asset": "mistral.svg",
+    "source": "https://raw.githubusercontent.com/lobehub/lobe-icons/34270bc208d7122778dc00b30bd460f97ea03216/packages/static-svg/icons/mistral.svg",
+    "license": "MIT",
+    "notes": "Original SVG; displayed as a monochrome mask.",
+    "original_source": null,
+    "guidelines": null,
+    "original_sha256": "a06cfa54e7deff7f7544175b006b7f8a03fbc5624c44f7d553a44d07ea96e629",
+    "sha256": "a06cfa54e7deff7f7544175b006b7f8a03fbc5624c44f7d553a44d07ea96e629"
+  },
+  {
+    "id": "modal",
+    "name": "Modal",
+    "commands": [
+      "modal"
+    ],
+    "ansi": 10,
+    "background": "7fee64",
+    "foreground": null,
+    "kind": "brand",
+    "asset": "modal.svg",
+    "source": "https://raw.githubusercontent.com/simple-icons/simple-icons/17cd4ee07612198a1d8777a060d4100423762a8b/icons/modal.svg",
+    "license": "CC0-1.0",
+    "notes": "Original SVG; displayed as a monochrome mask.",
+    "original_source": "https://modal.com",
+    "guidelines": null,
+    "original_sha256": "7759009735dbb2407c9ccc29a4fac0243a4bd545c65a8c39aaa7e56e357cd670",
+    "sha256": "7759009735dbb2407c9ccc29a4fac0243a4bd545c65a8c39aaa7e56e357cd670"
+  },
+  {
+    "id": "mole",
+    "name": "Mole",
+    "commands": [
+      "mole",
+      "mo"
+    ],
+    "ansi": 11,
+    "background": "8a694a",
+    "foreground": null,
+    "kind": "brand",
+    "asset": "mole.svg",
+    "source": "https://raw.githubusercontent.com/tw93/Mole/ee7be609c70a568d7bc386b1442963f47c6a33ed/plugins/mole/.claude-plugin/icon.png",
+    "license": "GPL-3.0; Mole trademark policy applies",
+    "notes": "Monochrome vector trace of official transparent plugin icon; original preserved.",
+    "sha256": "054360acf263e2f5dbb62d9e48abaedf7e53f9020da267ffca24b66228ecc6d8",
+    "original_source": null,
+    "original_sha256": "de4ad1372afdd7f67b3232071eb13f408aa81f2d3956dac947f0d8ad7e459bfa"
+  },
+  {
+    "id": "moon",
+    "name": "Moon",
+    "commands": [
+      "moon"
+    ],
+    "ansi": 13,
+    "background": "8255bc",
+    "foreground": null,
+    "kind": "brand",
+    "asset": "moon.svg",
+    "source": "https://raw.githubusercontent.com/simple-icons/simple-icons/17cd4ee07612198a1d8777a060d4100423762a8b/icons/moonrepo.svg",
+    "license": "CC0-1.0",
+    "notes": "Original monochrome SVG from Simple Icons; project identity verified.",
+    "original_source": "https://moonrepo.dev",
+    "guidelines": null,
+    "original_sha256": "96a0cef3147bdded991ae9685288722d3b9495bd80c028c4116b958c725cd4e2",
+    "sha256": "96a0cef3147bdded991ae9685288722d3b9495bd80c028c4116b958c725cd4e2"
+  },
+  {
+    "id": "nano",
+    "name": "Nano",
+    "commands": [
+      "nano",
+      "rnano"
+    ],
+    "ansi": 10,
+    "background": "625799",
+    "foreground": null,
+    "kind": "brand",
+    "asset": "nano.svg",
+    "source": "https://raw.githubusercontent.com/devicons/devicon/32fe1d3b3f36ad11f90ab94f7db59738139c2bf6/icons/nano/nano-plain.svg",
+    "license": "MIT",
+    "notes": "Original SVG; displayed as a monochrome mask.",
+    "original_source": null,
+    "guidelines": null,
+    "original_sha256": "9f3ea3c9b143218466fd39716dcd0f824af4063d50239888458c828735199dfa",
+    "sha256": "9f3ea3c9b143218466fd39716dcd0f824af4063d50239888458c828735199dfa"
+  },
+  {
+    "id": "nanoc",
+    "name": "Nanoc",
+    "commands": [
+      "nanoc"
+    ],
+    "ansi": 9,
+    "background": "42774b",
+    "foreground": null,
+    "kind": "brand",
+    "asset": "nanoc.svg",
+    "source": "https://raw.githubusercontent.com/file-icons/icons/master/svg/Nanoc.svg",
+    "license": "ISC",
+    "notes": "Original SVG; displayed as a monochrome mask.",
+    "original_source": null,
+    "guidelines": null,
+    "original_sha256": "df94e4cb482af21ca4e0af520d591dc0dea4e02a62face6f201eab0c3d5dfa22",
+    "sha256": "df94e4cb482af21ca4e0af520d591dc0dea4e02a62face6f201eab0c3d5dfa22"
+  },
+  {
+    "id": "neovim",
+    "name": "Neovim",
+    "commands": [
+      "nvim",
+      "neovim"
+    ],
+    "ansi": 10,
+    "background": "57a143",
+    "foreground": null,
+    "kind": "brand",
+    "asset": "neovim.svg",
+    "source": "https://raw.githubusercontent.com/simple-icons/simple-icons/17cd4ee07612198a1d8777a060d4100423762a8b/icons/neovim.svg",
+    "license": "CC-BY-SA-3.0",
+    "notes": "Original SVG; displayed as a monochrome mask.",
+    "original_source": "https://neovim.io",
+    "guidelines": null,
+    "original_sha256": "b82225d459a28530dfdabb93b78bee75e1cf070feebfee70fd393266710e6b04",
+    "sha256": "b82225d459a28530dfdabb93b78bee75e1cf070feebfee70fd393266710e6b04"
+  },
+  {
+    "id": "nextflow",
+    "name": "Nextflow",
+    "commands": [
+      "nextflow"
+    ],
+    "ansi": 10,
+    "background": "0dc09d",
+    "foreground": null,
+    "kind": "brand",
+    "asset": "nextflow.svg",
+    "source": "https://raw.githubusercontent.com/simple-icons/simple-icons/17cd4ee07612198a1d8777a060d4100423762a8b/icons/nextflow.svg",
+    "license": "CC0-1.0",
+    "notes": "Original SVG; displayed as a monochrome mask.",
+    "original_source": "https://github.com/seqeralabs/logos/blob/a8d4906b8fa7359541e520882f93a4bf029af44c/nextflow/nextflow_icon_color.svg",
+    "guidelines": null,
+    "original_sha256": "4e6308841791163c07cc76d4c4ca046334a78de581f1698cad0ab65c57be50e2",
+    "sha256": "4e6308841791163c07cc76d4c4ca046334a78de581f1698cad0ab65c57be50e2"
+  },
+  {
+    "id": "nix",
+    "name": "Nix",
+    "commands": [
+      "nix",
+      "nix-shell",
+      "nix-build",
+      "nixos-rebuild",
+      "nh"
+    ],
+    "ansi": 12,
+    "background": "507caf",
+    "foreground": null,
+    "kind": "brand",
+    "asset": "nix.svg",
+    "source": "https://raw.githubusercontent.com/devicons/devicon/32fe1d3b3f36ad11f90ab94f7db59738139c2bf6/icons/nixos/nixos-plain.svg",
+    "license": "MIT",
+    "notes": "Original SVG; displayed as a monochrome mask.",
+    "original_source": null,
+    "guidelines": null,
+    "original_sha256": "f965fcf8a5961737f44e4aedab25ca6a7816baf847dc2a83aed173c141d86683",
+    "sha256": "f965fcf8a5961737f44e4aedab25ca6a7816baf847dc2a83aed173c141d86683"
+  },
+  {
+    "id": "node",
+    "name": "Node",
+    "commands": [
+      "node",
+      "nodejs",
+      "npm",
+      "npx",
+      "corepack"
+    ],
+    "ansi": 10,
+    "background": "417b35",
+    "foreground": null,
+    "kind": "brand",
+    "asset": "node.svg",
+    "source": "https://raw.githubusercontent.com/devicons/devicon/32fe1d3b3f36ad11f90ab94f7db59738139c2bf6/icons/nodejs/nodejs-plain.svg",
+    "license": "MIT",
+    "notes": "Original SVG; displayed as a monochrome mask.",
+    "original_source": null,
+    "guidelines": null,
+    "original_sha256": "652001afa92b10923ed00ac62121f242d0be85772d48f71c29cf825b2bb2f88c",
+    "sha256": "652001afa92b10923ed00ac62121f242d0be85772d48f71c29cf825b2bb2f88c"
+  },
+  {
+    "id": "nomad",
+    "name": "Nomad",
+    "commands": [
+      "nomad"
+    ],
+    "ansi": 10,
+    "background": "00ca8e",
+    "foreground": null,
+    "kind": "brand",
+    "asset": "nomad.svg",
+    "source": "https://raw.githubusercontent.com/simple-icons/simple-icons/17cd4ee07612198a1d8777a060d4100423762a8b/icons/nomad.svg",
+    "license": "CC0-1.0",
+    "notes": "Original SVG; displayed as a monochrome mask.",
+    "original_source": "https://www.hashicorp.com/brand",
+    "guidelines": "https://www.hashicorp.com/brand",
+    "original_sha256": "9548e6b360c413c480ea938c000fb7750a0f640dd4f33315dac76e5c2322c340",
+    "sha256": "9548e6b360c413c480ea938c000fb7750a0f640dd4f33315dac76e5c2322c340"
+  },
+  {
+    "id": "notion",
+    "name": "Notion",
+    "commands": [
+      "notion",
+      "notion-cli"
+    ],
+    "ansi": 14,
+    "background": "343840",
+    "foreground": null,
+    "kind": "brand",
+    "asset": "notion.svg",
+    "source": "https://raw.githubusercontent.com/simple-icons/simple-icons/17cd4ee07612198a1d8777a060d4100423762a8b/icons/notion.svg",
+    "license": "CC0-1.0",
+    "notes": "Original SVG; displayed as a monochrome mask.",
+    "original_source": "https://www.notion.so",
+    "guidelines": null,
+    "original_sha256": "b17d2a2b592a06252efef522d5205f0c7a958f748d40df1011ed081417e42f85",
+    "sha256": "b17d2a2b592a06252efef522d5205f0c7a958f748d40df1011ed081417e42f85"
+  },
+  {
+    "id": "ollama",
+    "name": "Ollama",
+    "commands": [
+      "ollama"
+    ],
+    "ansi": 14,
+    "background": "343840",
+    "foreground": null,
+    "kind": "brand",
+    "asset": "ollama.svg",
+    "source": "https://raw.githubusercontent.com/simple-icons/simple-icons/17cd4ee07612198a1d8777a060d4100423762a8b/icons/ollama.svg",
+    "license": "CC0-1.0",
+    "notes": "Original SVG; displayed as a monochrome mask.",
+    "original_source": "https://github.com/ollama/ollama/issues/2152#issuecomment-1905286922",
+    "guidelines": null,
+    "original_sha256": "9c62bf0159ee96c8b58c86a732f33b002b4b3bb165ec86e8ecca51ad6a82dab6",
+    "sha256": "9c62bf0159ee96c8b58c86a732f33b002b4b3bb165ec86e8ecca51ad6a82dab6"
+  },
+  {
+    "id": "omp",
+    "name": "omp",
+    "commands": [
+      "omp",
+      "oh-my-pi"
+    ],
+    "ansi": 13,
+    "background": "9b5682",
+    "foreground": null,
+    "kind": "brand",
+    "asset": "omp.svg",
+    "source": "https://raw.githubusercontent.com/can1357/oh-my-pi/1bdbf6d242d99ca62bdf2feeff4519ff992f647d/assets/icon.svg",
+    "license": "MIT",
+    "notes": "Original SVG; displayed as a monochrome mask.",
+    "original_source": null,
+    "guidelines": null,
+    "original_sha256": "727019727006f26fe3d1f187d3fe9830f26213733a51721096a2044ab059cf61",
+    "sha256": "727019727006f26fe3d1f187d3fe9830f26213733a51721096a2044ab059cf61"
+  },
+  {
+    "id": "openclaw",
+    "name": "OpenClaw",
+    "commands": [
+      "openclaw"
+    ],
+    "ansi": 9,
+    "background": "394a60",
+    "foreground": null,
+    "kind": "brand",
+    "asset": "openclaw.svg",
+    "source": "https://raw.githubusercontent.com/lobehub/lobe-icons/34270bc208d7122778dc00b30bd460f97ea03216/packages/static-svg/icons/openclaw.svg",
+    "license": "MIT",
+    "notes": "Original SVG; displayed as a monochrome mask.",
+    "original_source": null,
+    "guidelines": null,
+    "original_sha256": "8ef4de8032b06492af52a2070fc044ce7cc0c1dcef70471b386571eb1c3b2b63",
+    "sha256": "8ef4de8032b06492af52a2070fc044ce7cc0c1dcef70471b386571eb1c3b2b63"
+  },
+  {
+    "id": "opencode",
+    "name": "OpenCode",
+    "commands": [
+      "opencode"
+    ],
+    "ansi": 14,
+    "background": "343840",
+    "foreground": null,
+    "kind": "brand",
+    "asset": "opencode.svg",
+    "source": "https://raw.githubusercontent.com/simple-icons/simple-icons/17cd4ee07612198a1d8777a060d4100423762a8b/icons/opencode.svg",
+    "license": "CC0-1.0",
+    "notes": "Original SVG; displayed as a monochrome mask.",
+    "original_source": "https://github.com/anomalyco/opencode/blob/1251a870cb384543c150c4a72fb101b55eec971b/packages/identity/mark.svg",
+    "guidelines": null,
+    "original_sha256": "6f7d203200ba051cdbaa726c4de0a729cee3f1cec47953f189399d951af58c4c",
+    "sha256": "6f7d203200ba051cdbaa726c4de0a729cee3f1cec47953f189399d951af58c4c"
+  },
+  {
+    "id": "opscope",
+    "name": "Opscope",
+    "commands": [
+      "opscope"
+    ],
+    "ansi": 14,
+    "background": "387153",
+    "foreground": null,
+    "kind": "brand",
+    "asset": "opscope.svg",
+    "source": "https://opscope.stealth-factory.co/favicon.svg",
+    "license": "Brand asset; no separate asset license stated",
+    "notes": "Official favicon with its background removed; retains the project\u2019s terminal prompt symbol.",
+    "sha256": "16461c0412891a506752123835e1cd602ebe3d7ee082a59eac922054240dbbf0",
+    "original_source": null,
+    "original_sha256": "42ba199bdfbe7a5f4f17bcc2ddd44b45c0b54acde2a9bf3c98b9fdd18ee94fbf"
+  },
+  {
+    "id": "orbstack",
+    "name": "OrbStack",
+    "commands": [
+      "orb",
+      "orbctl",
+      "orbstack"
+    ],
+    "ansi": 13,
+    "background": "6154be",
+    "foreground": null,
+    "kind": "brand",
+    "asset": "orbstack.svg",
+    "source": "https://orbstack.dev/img/icon128.png",
+    "license": "Brand asset; no separate asset license stated",
+    "notes": "Monochrome trace of the published raster, selecting foreground detail rather than its opaque background; original preserved.",
+    "original_source": null,
+    "guidelines": null,
+    "original_sha256": "53ab411fea3f430a124e0091fdaa7db08c58a8a864d7e49ca3000b0c64a4077b",
+    "sha256": "7af761d2939af5acbf14242e60bf14b341854e30756a722d1fe966c094536f14"
+  },
+  {
+    "id": "oxide",
+    "name": "Oxide",
+    "commands": [
+      "oxide",
+      "ox"
+    ],
+    "ansi": 10,
+    "background": "347255",
+    "foreground": null,
+    "kind": "brand",
+    "asset": "oxide.svg",
+    "source": "https://oxide.computer/favicon.svg",
+    "license": "Brand asset; no separate asset license stated",
+    "notes": "Original SVG with background removed and mark cropped for monochrome display.",
+    "original_source": null,
+    "guidelines": null,
+    "original_sha256": "04dbc6f2d44d7557319f1b4e298f2ee40fc5b8446ee8cd66d1b6eb3d493b7ff5",
+    "sha256": "e869ae3590ce97db27520e8b7666a9159a50fa0c4cf619672cbd9491c70c4847"
+  },
+  {
+    "id": "pack",
+    "name": "Pack",
+    "commands": [
+      "pack"
+    ],
+    "ansi": 12,
+    "background": "4c63b5",
+    "foreground": null,
+    "kind": "brand",
+    "asset": "pack.svg",
+    "source": "https://buildpacks.io/images/buildpacks-logo.svg",
+    "license": "Apache-2.0",
+    "notes": "Original SVG with background removed and mark cropped for monochrome display.",
+    "original_source": null,
+    "guidelines": null,
+    "original_sha256": "f635dbe7e51a3d90d5cbd2c6c39435c14992deb366e367c9683dec4f10d201fe",
+    "sha256": "78925caf042581f1697367afcb535b0559f3d5bb7261b7cc734f510744d0b685"
+  },
+  {
+    "id": "packer",
+    "name": "Packer",
+    "commands": [
+      "packer"
+    ],
+    "ansi": 12,
+    "background": "02a8ef",
+    "foreground": null,
+    "kind": "brand",
+    "asset": "packer.svg",
+    "source": "https://raw.githubusercontent.com/simple-icons/simple-icons/17cd4ee07612198a1d8777a060d4100423762a8b/icons/packer.svg",
+    "license": "CC0-1.0",
+    "notes": "Original SVG; displayed as a monochrome mask.",
+    "original_source": "https://www.hashicorp.com/brand",
+    "guidelines": "https://www.hashicorp.com/brand",
+    "original_sha256": "1abe4d36bbe170e3b37eda59064112ba0633e1a07b60d6842673e2ca34f6dde4",
+    "sha256": "1abe4d36bbe170e3b37eda59064112ba0633e1a07b60d6842673e2ca34f6dde4"
+  },
+  {
+    "id": "php",
+    "name": "PHP",
+    "commands": [
+      "php",
+      "composer",
+      "phpunit"
+    ],
+    "ansi": 13,
+    "background": "777bb4",
+    "foreground": null,
+    "kind": "brand",
+    "asset": "php.svg",
+    "source": "https://raw.githubusercontent.com/simple-icons/simple-icons/17cd4ee07612198a1d8777a060d4100423762a8b/icons/php.svg",
+    "license": "CC-BY-SA-4.0",
+    "notes": "Original SVG; displayed as a monochrome mask.",
+    "original_source": "https://php.net/download-logos.php",
+    "guidelines": null,
+    "original_sha256": "cd1beaa0dde7e765b5d2cbae786c1f6db967f72073eb7b9f9bbc63da55b9d0f6",
+    "sha256": "cd1beaa0dde7e765b5d2cbae786c1f6db967f72073eb7b9f9bbc63da55b9d0f6"
+  },
+  {
+    "id": "pi",
+    "name": "Pi",
+    "commands": [
+      "pi"
+    ],
+    "ansi": 13,
+    "background": "7c596c",
+    "foreground": null,
+    "kind": "brand",
+    "asset": "pi.svg",
+    "source": "https://raw.githubusercontent.com/simple-icons/simple-icons/17cd4ee07612198a1d8777a060d4100423762a8b/icons/pi.svg",
+    "license": "CC0-1.0",
+    "notes": "Original SVG; displayed as a monochrome mask.",
+    "original_source": "https://pi.dev/favicon.svg",
+    "guidelines": null,
+    "original_sha256": "3f2a9abe50e8383f9fed6825301f2f7ebebf6bcd8185c2b281eb68109fe5ae73",
+    "sha256": "3f2a9abe50e8383f9fed6825301f2f7ebebf6bcd8185c2b281eb68109fe5ae73"
+  },
+  {
+    "id": "pixi",
+    "name": "Pixi",
+    "commands": [
+      "pixi"
+    ],
+    "ansi": 11,
+    "background": "36332b",
+    "foreground": "ffcd1f",
+    "kind": "brand",
+    "asset": "pixi.svg",
+    "source": "https://raw.githubusercontent.com/prefix-dev/pixi/b16d51592d1a1d6c9e402af55f6fe4a45c8c2c03/docs/assets/prefix_logo_light.svg",
+    "license": "BSD-3-Clause",
+    "notes": "Prefix mark selected by the user for Pixi; extracted from its official wordmark.",
+    "original_source": null,
+    "guidelines": null,
+    "original_sha256": "07e6239e4cb855f480634357de006a25e509870c2ba853cde6cbef0c5cc1a215",
+    "sha256": "19c4a7f03e8b80594ec9f4bf8daae0895abf726b16790214eaa29f71ffed6fc5"
+  },
+  {
+    "id": "pnpm",
+    "name": "pnpm",
+    "commands": [
+      "pnpm",
+      "pnpx"
+    ],
+    "ansi": 11,
+    "background": "f69220",
+    "foreground": null,
+    "kind": "brand",
+    "asset": "pnpm.svg",
+    "source": "https://raw.githubusercontent.com/simple-icons/simple-icons/17cd4ee07612198a1d8777a060d4100423762a8b/icons/pnpm.svg",
+    "license": "CC0-1.0",
+    "notes": "Original SVG; displayed as a monochrome mask.",
+    "original_source": "https://pnpm.io/logos",
+    "guidelines": null,
+    "original_sha256": "c6285a2d1fa28b8d6c42cd7f7edf360434371ff6f15744425c4444e41fed812b",
+    "sha256": "c6285a2d1fa28b8d6c42cd7f7edf360434371ff6f15744425c4444e41fed812b"
+  },
+  {
+    "id": "podman",
+    "name": "Podman",
+    "commands": [
+      "podman",
+      "podman-compose"
+    ],
+    "ansi": 13,
+    "background": "892ca0",
+    "foreground": null,
+    "kind": "brand",
+    "asset": "podman.svg",
+    "source": "https://raw.githubusercontent.com/simple-icons/simple-icons/17cd4ee07612198a1d8777a060d4100423762a8b/icons/podman.svg",
+    "license": "CC0-1.0",
+    "notes": "Original SVG; displayed as a monochrome mask.",
+    "original_source": "https://podman.io",
+    "guidelines": null,
+    "original_sha256": "676f0e895fed6e004e2fbf55f364ba900ff1a6a6de26b78fb5066dde421e4e00",
+    "sha256": "676f0e895fed6e004e2fbf55f364ba900ff1a6a6de26b78fb5066dde421e4e00"
+  },
+  {
+    "id": "poolside",
+    "name": "Poolside",
+    "commands": [
+      "poolside"
+    ],
+    "ansi": 12,
+    "background": "346dc0",
+    "foreground": null,
+    "kind": "brand",
+    "asset": "poolside.svg",
+    "source": "https://raw.githubusercontent.com/lobehub/lobe-icons/34270bc208d7122778dc00b30bd460f97ea03216/packages/static-svg/icons/poolside.svg",
+    "license": "MIT",
+    "notes": "Original SVG; displayed as a monochrome mask.",
+    "original_source": null,
+    "guidelines": null,
+    "original_sha256": "1765259d468c3e2f1ea0f1e24f3e4b26a9682ebe592611cac0c8be2f866711b8",
+    "sha256": "1765259d468c3e2f1ea0f1e24f3e4b26a9682ebe592611cac0c8be2f866711b8"
+  },
+  {
+    "id": "porter",
+    "name": "Porter",
+    "commands": [
+      "porter"
+    ],
+    "ansi": 12,
+    "background": "ad5238",
+    "foreground": null,
+    "kind": "brand",
+    "asset": "porter.svg",
+    "source": "https://cdn.prod.website-files.com/643fc03f8c77db037e34a7da/69a746277cfcd2bfe39d7a5f_webclip.png",
+    "license": "Brand asset; no separate asset license stated",
+    "notes": "Vector trace of published raster; original preserved.",
+    "sha256": "0705a6406043891c948b299a7fccc7d48497dc7e770a865fdb8d18301a76b3bb",
+    "original_source": null,
+    "original_sha256": "b0e514a9f3728f8670ef48919abc13965e208c9089699e8ab778cbb455ba2bb6"
+  },
+  {
+    "id": "postgres",
+    "name": "Postgres",
+    "commands": [
+      "psql",
+      "postgres",
+      "pg_dump",
+      "pg_restore"
+    ],
+    "ansi": 12,
+    "background": "4169e1",
+    "foreground": null,
+    "kind": "brand",
+    "asset": "postgres.svg",
+    "source": "https://raw.githubusercontent.com/simple-icons/simple-icons/17cd4ee07612198a1d8777a060d4100423762a8b/icons/postgresql.svg",
+    "license": "CC0-1.0",
+    "notes": "Original SVG; displayed as a monochrome mask.",
+    "original_source": "https://wiki.postgresql.org/wiki/Logo",
+    "guidelines": "https://www.postgresql.org/about/policies/trademarks/",
+    "original_sha256": "c8ccadbd88c9312c2ad3734c4861b31d3485ce179ee91d64793143f83cfa745c",
+    "sha256": "c8ccadbd88c9312c2ad3734c4861b31d3485ce179ee91d64793143f83cfa745c"
+  },
+  {
+    "id": "prime-agent",
+    "name": "Prime Agent",
+    "commands": [
+      "prime",
+      "prime-agent"
+    ],
+    "ansi": 13,
+    "background": "3c7f54",
+    "foreground": null,
+    "kind": "brand",
+    "asset": "prime-agent.svg",
+    "source": "https://www.primeintellect.ai/backgrounds/refactor/logo.svg",
+    "license": "Brand asset; no separate asset license stated",
+    "notes": "Original SVG with background removed and mark cropped for monochrome display.",
+    "original_source": null,
+    "guidelines": null,
+    "original_sha256": "d92b0b6ab7e68f3027726263ea070b774150fbdca7bd6e49a36d2a279c30faca",
+    "sha256": "c6ceb55944e2f4b7585fb672a0dc746c82749c3def36ba6702ce1927af56c60f"
+  },
+  {
+    "id": "proto",
+    "name": "Proto",
+    "commands": [
+      "proto"
+    ],
+    "ansi": 11,
+    "background": "947553",
+    "foreground": null,
+    "kind": "brand",
+    "asset": "proto.svg",
+    "source": "https://raw.githubusercontent.com/moonrepo/website/c81d5f225e60dc57f662c37e76e389d389898072/web/public/brand/proto/icon-vector.svg",
+    "license": "Brand asset; no separate asset license stated",
+    "notes": "Original SVG; displayed as a monochrome mask.",
+    "original_source": null,
+    "guidelines": null,
+    "original_sha256": "796c7c4609bf1fccb6f24b7015156a6613c1cb89a597e171bff337e6d17bb911",
+    "sha256": "796c7c4609bf1fccb6f24b7015156a6613c1cb89a597e171bff337e6d17bb911"
+  },
+  {
+    "id": "proton-drive",
+    "name": "Proton Drive",
+    "commands": [
+      "proton-drive",
+      "proton-drive-cli"
+    ],
+    "ansi": 13,
+    "background": "eb508d",
+    "foreground": null,
+    "kind": "brand",
+    "asset": "proton-drive.svg",
+    "source": "https://raw.githubusercontent.com/simple-icons/simple-icons/17cd4ee07612198a1d8777a060d4100423762a8b/icons/protondrive.svg",
+    "license": "CC0-1.0",
+    "notes": "Original SVG; displayed as a monochrome mask.",
+    "original_source": "https://proton.me/media/kit",
+    "guidelines": null,
+    "original_sha256": "c6225e35eee32ef2db5319f1a1510262bc2e96abd9f36d596d946c470b733f56",
+    "sha256": "c6225e35eee32ef2db5319f1a1510262bc2e96abd9f36d596d946c470b733f56"
+  },
+  {
+    "id": "proton-pass",
+    "name": "Proton Pass",
+    "commands": [
+      "proton-pass",
+      "proton-pass-cli"
+    ],
+    "ansi": 13,
+    "background": "394a60",
+    "foreground": null,
+    "kind": "brand",
+    "asset": "proton-pass.svg",
+    "source": "https://raw.githubusercontent.com/homarr-labs/dashboard-icons/d4b500dc40a8e1043b1581cabb7208892cf35472/svg/proton-pass.svg",
+    "license": "Apache-2.0",
+    "notes": "Original SVG; displayed as a monochrome mask.",
+    "original_source": null,
+    "guidelines": null,
+    "original_sha256": "b84237cf6fb3128afb235c44ac841732c01fbfb30ba9ebedbdb2a93afe55c2fb",
+    "sha256": "b84237cf6fb3128afb235c44ac841732c01fbfb30ba9ebedbdb2a93afe55c2fb"
+  },
+  {
+    "id": "python",
+    "name": "Python",
+    "commands": [
+      "python",
+      "python3",
+      "pip",
+      "pip3",
+      "pypy",
+      "pypy3"
+    ],
+    "ansi": 11,
+    "background": "3776ab",
+    "foreground": null,
+    "kind": "brand",
+    "asset": "python.svg",
+    "source": "https://raw.githubusercontent.com/simple-icons/simple-icons/17cd4ee07612198a1d8777a060d4100423762a8b/icons/python.svg",
+    "license": "CC0-1.0",
+    "notes": "Original SVG; displayed as a monochrome mask.",
+    "original_source": "https://www.python.org/community/logos/",
+    "guidelines": "https://www.python.org/community/logos/",
+    "original_sha256": "a90c00fd441482b4867ad5d7fa68db56aab4891f1b1e6879fe1ea3b355cf378f",
+    "sha256": "a90c00fd441482b4867ad5d7fa68db56aab4891f1b1e6879fe1ea3b355cf378f"
+  },
+  {
+    "id": "railway",
+    "name": "Railway",
+    "commands": [
+      "railway"
+    ],
+    "ansi": 13,
+    "background": "343840",
+    "foreground": null,
+    "kind": "brand",
+    "asset": "railway.svg",
+    "source": "https://raw.githubusercontent.com/simple-icons/simple-icons/17cd4ee07612198a1d8777a060d4100423762a8b/icons/railway.svg",
+    "license": "CC0-1.0",
+    "notes": "Original SVG; displayed as a monochrome mask.",
+    "original_source": "https://railway.app",
+    "guidelines": null,
+    "original_sha256": "1e386a6d03360dd84cd858bc69b3ac9452afc212846a197f7a890898439a7f1d",
+    "sha256": "1e386a6d03360dd84cd858bc69b3ac9452afc212846a197f7a890898439a7f1d"
+  },
+  {
+    "id": "rclone",
+    "name": "Rclone",
+    "commands": [
+      "rclone"
+    ],
+    "ansi": 14,
+    "background": "3f79ad",
+    "foreground": null,
+    "kind": "brand",
+    "asset": "rclone.svg",
+    "source": "https://raw.githubusercontent.com/simple-icons/simple-icons/17cd4ee07612198a1d8777a060d4100423762a8b/icons/rclone.svg",
+    "license": "CC0-1.0",
+    "notes": "Original SVG; displayed as a monochrome mask.",
+    "original_source": "https://github.com/rclone/rclone/blob/8f1c309c8149a734ccc3a0d2ce185b936dbe783a/graphics/logo/svg/logo_symbol_color.svg",
+    "guidelines": null,
+    "original_sha256": "8c5614618b201dca0ffcd5f129fbc767f9d9e82d9467f90ec0f8d79a61f5d191",
+    "sha256": "8c5614618b201dca0ffcd5f129fbc767f9d9e82d9467f90ec0f8d79a61f5d191"
+  },
+  {
+    "id": "redis",
+    "name": "Redis",
+    "commands": [
+      "redis-cli",
+      "redis-server",
+      "redis-sentinel"
+    ],
+    "ansi": 9,
+    "background": "ff4438",
+    "foreground": null,
+    "kind": "brand",
+    "asset": "redis.svg",
+    "source": "https://raw.githubusercontent.com/simple-icons/simple-icons/17cd4ee07612198a1d8777a060d4100423762a8b/icons/redis.svg",
+    "license": "CC0-1.0",
+    "notes": "Original SVG; displayed as a monochrome mask.",
+    "original_source": "https://redis.io/brand-guidelines",
+    "guidelines": "https://redis.io/brand-guidelines",
+    "original_sha256": "428b86deb14c8bdacdcdf75987fe454f367bcd078a7e4ae3f84de29aa5bdf136",
+    "sha256": "428b86deb14c8bdacdcdf75987fe454f367bcd078a7e4ae3f84de29aa5bdf136"
+  },
+  {
+    "id": "render",
+    "name": "Render",
+    "commands": [
+      "render"
+    ],
+    "ansi": 10,
+    "background": "343840",
+    "foreground": null,
+    "kind": "brand",
+    "asset": "render.svg",
+    "source": "https://raw.githubusercontent.com/simple-icons/simple-icons/17cd4ee07612198a1d8777a060d4100423762a8b/icons/render.svg",
+    "license": "CC0-1.0",
+    "notes": "Original SVG; displayed as a monochrome mask.",
+    "original_source": "https://render.com",
+    "guidelines": null,
+    "original_sha256": "bd1597c44b4417a0f22f4ae6df79f935b4afd850f7a6a6717090b6f46f28e6d6",
+    "sha256": "bd1597c44b4417a0f22f4ae6df79f935b4afd850f7a6a6717090b6f46f28e6d6"
+  },
+  {
+    "id": "rex",
+    "name": "Rex",
+    "commands": [
+      "rex",
+      "rexia"
+    ],
+    "ansi": 13,
+    "background": "a566c6",
+    "foreground": null,
+    "kind": "brand",
+    "asset": "rex.svg",
+    "source": "https://www.superlogical.com/rex-icon.png",
+    "license": "Brand asset; no separate asset license stated",
+    "notes": "Monochrome trace of the published raster, selecting foreground detail rather than its opaque background; original preserved.",
+    "sha256": "02a1fbfb1d58c721f0c4f524d0bb06164647899471a4da649a37b50d903264e0",
+    "original_source": null,
+    "original_sha256": "e6220a5527dd77c8040792e725c51d79fb34a70cfdc448db52e119c9fe998f59"
+  },
+  {
+    "id": "ruby",
+    "name": "Ruby",
+    "commands": [
+      "ruby",
+      "irb",
+      "bundle",
+      "bundler",
+      "gem",
+      "rake",
+      "rails"
+    ],
+    "ansi": 9,
+    "background": "cc342d",
+    "foreground": null,
+    "kind": "brand",
+    "asset": "ruby.svg",
+    "source": "https://raw.githubusercontent.com/simple-icons/simple-icons/17cd4ee07612198a1d8777a060d4100423762a8b/icons/ruby.svg",
+    "license": "CC-BY-SA-2.5",
+    "notes": "Original SVG; displayed as a monochrome mask.",
+    "original_source": "https://www.ruby-lang.org/en/about/logo/",
+    "guidelines": null,
+    "original_sha256": "956992a81b988b916efdd6f7a78b9f19fe352b5c04f2019af2ce1a89e390ac9d",
+    "sha256": "956992a81b988b916efdd6f7a78b9f19fe352b5c04f2019af2ce1a89e390ac9d"
+  },
+  {
+    "id": "rust",
+    "name": "Rust",
+    "commands": [
+      "rustc",
+      "cargo",
+      "rustup",
+      "rustfmt",
+      "rust-analyzer"
+    ],
+    "ansi": 9,
+    "background": "343840",
+    "foreground": null,
+    "kind": "brand",
+    "asset": "rust.svg",
+    "source": "https://raw.githubusercontent.com/simple-icons/simple-icons/17cd4ee07612198a1d8777a060d4100423762a8b/icons/rust.svg",
+    "license": "CC-BY-SA-4.0",
+    "notes": "Original SVG; displayed as a monochrome mask.",
+    "original_source": "https://www.rust-lang.org",
+    "guidelines": "https://www.rust-lang.org/policies/media-guide",
+    "original_sha256": "95a291d8887610d103704adcc5c5f2cbfa4c80a96f8e72b00531d5691beb67a8",
+    "sha256": "95a291d8887610d103704adcc5c5f2cbfa4c80a96f8e72b00531d5691beb67a8"
+  },
+  {
+    "id": "sail",
+    "name": "Sail",
+    "commands": [
+      "sail"
+    ],
+    "ansi": 12,
+    "background": "2044ad",
+    "foreground": null,
+    "kind": "brand",
+    "asset": "sail.svg",
+    "source": "https://lakesail.com/",
+    "license": "Brand asset; no separate asset license stated",
+    "notes": "Sailboat paths extracted from the official LakeSail header wordmark. Identity confirmed by user.",
+    "sha256": "ed82647044a14b3dbb1f9dff198758700a3ebb7dcf11eb00ad4c64eea3971aa8",
+    "original_source": null,
+    "original_sha256": "e42dd7bfe7222fcc8f51172ad502ec1cb280b66efc0238653630cfd99840aeb3"
+  },
+  {
+    "id": "sanity",
+    "name": "Sanity",
+    "commands": [
+      "sanity"
+    ],
+    "ansi": 9,
+    "background": "343840",
+    "foreground": null,
+    "kind": "brand",
+    "asset": "sanity.svg",
+    "source": "https://raw.githubusercontent.com/simple-icons/simple-icons/17cd4ee07612198a1d8777a060d4100423762a8b/icons/sanity.svg",
+    "license": "MIT",
+    "notes": "Original SVG; displayed as a monochrome mask.",
+    "original_source": "https://github.com/sanity-io/logos/blob/e298a1ac2757c83910fe08b496a115bc9aef06bd/src/sanityMonogram.tsx",
+    "guidelines": null,
+    "original_sha256": "7c94e59b8458db8de5c47df1ce498b3df2d681cadb46c282a60c476e1985196f",
+    "sha256": "7c94e59b8458db8de5c47df1ce498b3df2d681cadb46c282a60c476e1985196f"
+  },
+  {
+    "id": "shell",
+    "name": "Shell",
+    "commands": [
+      "sh",
+      "bash",
+      "zsh",
+      "fish",
+      "dash",
+      "ksh",
+      "nu",
+      "nushell",
+      "xonsh",
+      "tcsh"
+    ],
+    "ansi": 10,
+    "background": "394a60",
+    "foreground": null,
+    "kind": "shell",
+    "asset": "shell.svg",
+    "source": "Rexia pictogram",
+    "license": "Project artwork",
+    "notes": "Generic symbol, not a third-party logo.",
+    "sha256": "961f9c2b374704c9d85df7cc37c0e22f48bd15db626be8a816a4aa14d3dd277c"
+  },
+  {
+    "id": "shell-caffeinate",
+    "name": "Shell - caffeinate",
+    "commands": [
+      "caffeinate",
+      "systemd-inhibit"
+    ],
+    "ansi": 11,
+    "background": "394a60",
+    "foreground": null,
+    "kind": "shell",
+    "asset": "shell-caffeinate.svg",
+    "source": "Rexia pictogram",
+    "license": "Project artwork",
+    "notes": "Generic symbol, not a third-party logo.",
+    "sha256": "ae45e60cc9e1d8bd97642c1eb1fbedab90eebd17ce0e6469c540c6d813d6d2a8"
+  },
+  {
+    "id": "shell-container",
+    "name": "Shell - container",
+    "commands": [
+      "shell-container",
+      "distrobox",
+      "toolbox"
+    ],
+    "ansi": 14,
+    "background": "394a60",
+    "foreground": null,
+    "kind": "shell",
+    "asset": "shell-container.svg",
+    "source": "Rexia pictogram",
+    "license": "Project artwork",
+    "notes": "Generic symbol, not a third-party logo.",
+    "sha256": "019a2b977ac269337a663f63bf1ffe374ed47a80690e883d47fd6c8970ec119a"
+  },
+  {
+    "id": "shell-log",
+    "name": "Shell - log",
+    "commands": [
+      "tail",
+      "journalctl",
+      "dmesg",
+      "lnav"
+    ],
+    "ansi": 11,
+    "background": "394a60",
+    "foreground": null,
+    "kind": "shell",
+    "asset": "shell-log.svg",
+    "source": "Rexia pictogram",
+    "license": "Project artwork",
+    "notes": "Generic symbol, not a third-party logo.",
+    "sha256": "cfdf4c721c231275accc1a09ad8cd7fccd6e64db452aa3e68ddf33517b7cf47a"
+  },
+  {
+    "id": "shell-sleep",
+    "name": "Shell - sleep",
+    "commands": [
+      "sleep"
+    ],
+    "ansi": 13,
+    "background": "394a60",
+    "foreground": null,
+    "kind": "shell",
+    "asset": "shell-sleep.svg",
+    "source": "Rexia pictogram",
+    "license": "Project artwork",
+    "notes": "Generic symbol, not a third-party logo.",
+    "sha256": "8ed00dd36850ca482459b963367f514fcd403046b6b40e39fad2f2c161e81ca5"
+  },
+  {
+    "id": "shell-top",
+    "name": "Shell - top",
+    "commands": [
+      "top",
+      "atop",
+      "glances",
+      "nvtop"
+    ],
+    "ansi": 14,
+    "background": "394a60",
+    "foreground": null,
+    "kind": "shell",
+    "asset": "shell-top.svg",
+    "source": "Rexia pictogram",
+    "license": "Project artwork",
+    "notes": "Generic symbol, not a third-party logo.",
+    "sha256": "b820b8a7cd58cd922fbd0ce7deadc38b0709c8d350ad016fef1d80ac0cb25222"
+  },
+  {
+    "id": "shopify",
+    "name": "Shopify",
+    "commands": [
+      "shopify"
+    ],
+    "ansi": 10,
+    "background": "7ab55c",
+    "foreground": null,
+    "kind": "brand",
+    "asset": "shopify.svg",
+    "source": "https://raw.githubusercontent.com/simple-icons/simple-icons/17cd4ee07612198a1d8777a060d4100423762a8b/icons/shopify.svg",
+    "license": "CC0-1.0",
+    "notes": "Original SVG; displayed as a monochrome mask.",
+    "original_source": "https://www.shopify.com/brand-assets",
+    "guidelines": "https://www.shopify.com/brand-assets",
+    "original_sha256": "a5ea31f53511bb0b3663cb73ff96eaa8d0451fe9cad586625adfc02b729e4d4d",
+    "sha256": "a5ea31f53511bb0b3663cb73ff96eaa8d0451fe9cad586625adfc02b729e4d4d"
+  },
+  {
+    "id": "snowflake",
+    "name": "Snowflake",
+    "commands": [
+      "snow",
+      "snowsql"
+    ],
+    "ansi": 14,
+    "background": "29b5e8",
+    "foreground": null,
+    "kind": "brand",
+    "asset": "snowflake.svg",
+    "source": "https://raw.githubusercontent.com/simple-icons/simple-icons/17cd4ee07612198a1d8777a060d4100423762a8b/icons/snowflake.svg",
+    "license": "CC0-1.0",
+    "notes": "Original SVG; displayed as a monochrome mask.",
+    "original_source": "https://www.snowflake.com/brand-guidelines/",
+    "guidelines": "https://www.snowflake.com/brand-guidelines/",
+    "original_sha256": "75690c4c666a406278286284f89896e8ef55dd0bfbc791acb910ce40e4a46aa9",
+    "sha256": "75690c4c666a406278286284f89896e8ef55dd0bfbc791acb910ce40e4a46aa9"
+  },
+  {
+    "id": "sofka",
+    "name": "Sofka",
+    "commands": [
+      "sofka"
+    ],
+    "ansi": 11,
+    "background": "343440",
+    "foreground": "b4befe",
+    "kind": "brand",
+    "asset": "sofka.svg",
+    "source": "https://raw.githubusercontent.com/homarr-labs/dashboard-icons/d4b500dc40a8e1043b1581cabb7208892cf35472/svg/sofka.svg",
+    "license": "Apache-2.0",
+    "notes": "Simple cat mark from Dashboard Icons, matching the user\u2019s reference; background removed and eye holes retained.",
+    "original_source": null,
+    "guidelines": null,
+    "original_sha256": "fc7aa31854a46cc05e2bbc5ce1e2db1580939d5609b3b359ab083d1fdfde1268",
+    "sha256": "0b54ac06e50e69ae0f38ead5c527f9e005439b597019fc95a19b4f25db76943d"
+  },
+  {
+    "id": "sqlite",
+    "name": "SQLite",
+    "commands": [
+      "sqlite",
+      "sqlite3"
+    ],
+    "ansi": 12,
+    "background": "003b57",
+    "foreground": null,
+    "kind": "brand",
+    "asset": "sqlite.svg",
+    "source": "https://raw.githubusercontent.com/simple-icons/simple-icons/17cd4ee07612198a1d8777a060d4100423762a8b/icons/sqlite.svg",
+    "license": "CC0-1.0",
+    "notes": "Original SVG; displayed as a monochrome mask.",
+    "original_source": "https://github.com/sqlite/sqlite/blob/43e862723ec680542ca6f608f9963c0993dd7324/art/sqlite370.eps",
+    "guidelines": null,
+    "original_sha256": "71d4153bc9661dfe6b92dad70f737ec2b6c7c839311e502b4ca66fe664fe12b6",
+    "sha256": "71d4153bc9661dfe6b92dad70f737ec2b6c7c839311e502b4ca66fe664fe12b6"
+  },
+  {
+    "id": "stripe",
+    "name": "Stripe",
+    "commands": [
+      "stripe"
+    ],
+    "ansi": 13,
+    "background": "635bff",
+    "foreground": null,
+    "kind": "brand",
+    "asset": "stripe.svg",
+    "source": "https://raw.githubusercontent.com/simple-icons/simple-icons/17cd4ee07612198a1d8777a060d4100423762a8b/icons/stripe.svg",
+    "license": "CC0-1.0",
+    "notes": "Original SVG; displayed as a monochrome mask.",
+    "original_source": "https://stripe.com/newsroom/information",
+    "guidelines": null,
+    "original_sha256": "130c6d957b8977f5eda2928267b9df531ca038a400a801765d263801bb1bd870",
+    "sha256": "130c6d957b8977f5eda2928267b9df531ca038a400a801765d263801bb1bd870"
+  },
+  {
+    "id": "sublime",
+    "name": "Sublime",
+    "commands": [
+      "subl",
+      "sublime_text"
+    ],
+    "ansi": 11,
+    "background": "ce832b",
+    "foreground": null,
+    "kind": "brand",
+    "asset": "sublime.svg",
+    "source": "https://raw.githubusercontent.com/pheralb/svgl/90f6de7026c5e75a9014dbf1f422792bd40b1802/static/library/sublimetext.svg",
+    "license": "MIT",
+    "notes": "Original SVG; displayed as a monochrome mask.",
+    "original_source": null,
+    "guidelines": null,
+    "original_sha256": "13a3118739a8fa01fe31770c5164f34bd118aa204dbc366804b95fd2def06dbe",
+    "sha256": "13a3118739a8fa01fe31770c5164f34bd118aa204dbc366804b95fd2def06dbe"
+  },
+  {
+    "id": "swift",
+    "name": "Swift",
+    "commands": [
+      "swift",
+      "swiftc"
+    ],
+    "ansi": 11,
+    "background": "f05138",
+    "foreground": null,
+    "kind": "brand",
+    "asset": "swift.svg",
+    "source": "https://raw.githubusercontent.com/simple-icons/simple-icons/17cd4ee07612198a1d8777a060d4100423762a8b/icons/swift.svg",
+    "license": "CC0-1.0",
+    "notes": "Original SVG; displayed as a monochrome mask.",
+    "original_source": "https://developer.apple.com/swift/resources/",
+    "guidelines": "https://developer.apple.com/swift/resources/",
+    "original_sha256": "b3d5f49cc459b7a3417db134ec70052c30305c3799d0f854796544c52c18a4bc",
+    "sha256": "b3d5f49cc459b7a3417db134ec70052c30305c3799d0f854796544c52c18a4bc"
+  },
+  {
+    "id": "tailscale",
+    "name": "Tailscale",
+    "commands": [
+      "tailscale",
+      "tailscaled"
+    ],
+    "ansi": 14,
+    "background": "343840",
+    "foreground": null,
+    "kind": "brand",
+    "asset": "tailscale.svg",
+    "source": "https://raw.githubusercontent.com/simple-icons/simple-icons/17cd4ee07612198a1d8777a060d4100423762a8b/icons/tailscale.svg",
+    "license": "CC0-1.0",
+    "notes": "Original SVG; displayed as a monochrome mask.",
+    "original_source": "https://tailscale.com/press",
+    "guidelines": null,
+    "original_sha256": "80ecdde08c2a4cddaa64447fcbfafab81326864671cd33b7fc3d40c4c8661dfc",
+    "sha256": "80ecdde08c2a4cddaa64447fcbfafab81326864671cd33b7fc3d40c4c8661dfc"
+  },
+  {
+    "id": "tart",
+    "name": "Tart",
+    "commands": [
+      "tart"
+    ],
+    "ansi": 11,
+    "background": "a459aa",
+    "foreground": null,
+    "kind": "brand",
+    "asset": "tart.svg",
+    "source": "https://raw.githubusercontent.com/cirruslabs/tart/6430e84ab0bb4f3fede93abb9a91402800b20e06/docs/assets/images/TartLogo.png",
+    "license": "FSL-1.1-MIT",
+    "notes": "Monochrome foreground trace from the original project artwork; background and shading excluded for tab-size recognition.",
+    "original_source": null,
+    "guidelines": null,
+    "original_sha256": "f871ea7c50fe2f8a1bbadb702e7d5b1423dda22d9fb7404b9b52a21265a45bab",
+    "sha256": "eee6d34ba6e90da143fe206ae38020d49a216176700fc61835c7dfbd99686e54"
+  },
+  {
+    "id": "task",
+    "name": "Task",
+    "commands": [
+      "task"
+    ],
+    "ansi": 10,
+    "background": "29beb0",
+    "foreground": null,
+    "kind": "brand",
+    "asset": "task.svg",
+    "source": "https://raw.githubusercontent.com/simple-icons/simple-icons/17cd4ee07612198a1d8777a060d4100423762a8b/icons/task.svg",
+    "license": "CC0-1.0",
+    "notes": "go-task/task logo, not Taskwarrior.",
+    "original_source": "https://github.com/go-task/task/blob/84ad0056e49e2206bf5903863cdf972a7305072c/docs/static/img/logo_mono.svg",
+    "guidelines": null,
+    "original_sha256": "a3f8f22dae11432da7b25821a104cd75d9646560bed3bf864bcc01e5ea0bf3f9",
+    "sha256": "a3f8f22dae11432da7b25821a104cd75d9646560bed3bf864bcc01e5ea0bf3f9"
+  },
+  {
+    "id": "terraform",
+    "name": "Terraform",
+    "commands": [
+      "terraform",
+      "tofu"
+    ],
+    "ansi": 13,
+    "background": "844fba",
+    "foreground": null,
+    "kind": "brand",
+    "asset": "terraform.svg",
+    "source": "https://raw.githubusercontent.com/simple-icons/simple-icons/17cd4ee07612198a1d8777a060d4100423762a8b/icons/terraform.svg",
+    "license": "CC0-1.0",
+    "notes": "Original SVG; displayed as a monochrome mask.",
+    "original_source": "https://www.hashicorp.com/brand",
+    "guidelines": "https://www.hashicorp.com/brand",
+    "original_sha256": "9c3737d360a174afec8fa0208332a3991f087ea0b7bacb1eea16598883e1a730",
+    "sha256": "9c3737d360a174afec8fa0208332a3991f087ea0b7bacb1eea16598883e1a730"
+  },
+  {
+    "id": "tessl",
+    "name": "Tessl",
+    "commands": [
+      "tessl"
+    ],
+    "ansi": 10,
+    "background": "447967",
+    "foreground": null,
+    "kind": "brand",
+    "asset": "tessl.svg",
+    "source": "https://tessl.io/favicon.svg",
+    "license": "Brand asset; no separate asset license stated",
+    "notes": "Original SVG; displayed as a monochrome mask.",
+    "original_source": null,
+    "guidelines": null,
+    "original_sha256": "314bc6a726f2f570de0a4059722de7e7bf38d7079a490c8f8a8156a76b44fe7f",
+    "sha256": "314bc6a726f2f570de0a4059722de7e7bf38d7079a490c8f8a8156a76b44fe7f"
+  },
+  {
+    "id": "tilt",
+    "name": "Tilt",
+    "commands": [
+      "tilt"
+    ],
+    "ansi": 10,
+    "background": "397a50",
+    "foreground": null,
+    "kind": "brand",
+    "asset": "tilt.svg",
+    "source": "https://raw.githubusercontent.com/tilt-dev/tilt.build/7f259e2b648b76eb4114c4ff47c8f5af7ad671a5/src/assets/svg/Tilt-logo.svg",
+    "license": "Apache-2.0",
+    "notes": "Original SVG; displayed as a monochrome mask.",
+    "sha256": "e8b38d7a312cdf7b9c0ad991c18eab4ad3385933eabbad67b0bc1be41d026b0b",
+    "original_source": null,
+    "original_sha256": "e8b38d7a312cdf7b9c0ad991c18eab4ad3385933eabbad67b0bc1be41d026b0b"
+  },
+  {
+    "id": "turborepo",
+    "name": "Turborepo",
+    "commands": [
+      "turbo",
+      "turborepo"
+    ],
+    "ansi": 9,
+    "background": "ff1e56",
+    "foreground": null,
+    "kind": "brand",
+    "asset": "turborepo.svg",
+    "source": "https://raw.githubusercontent.com/simple-icons/simple-icons/17cd4ee07612198a1d8777a060d4100423762a8b/icons/turborepo.svg",
+    "license": "CC0-1.0",
+    "notes": "Original SVG; displayed as a monochrome mask.",
+    "original_source": "https://vercel.com/geist/brands",
+    "guidelines": "https://vercel.com/geist/brands",
+    "original_sha256": "ac2ca04b129601cb94809ef788778dd4ae1ade4123d7dcfb0810dc4a4d068519",
+    "sha256": "ac2ca04b129601cb94809ef788778dd4ae1ade4123d7dcfb0810dc4a4d068519"
+  },
+  {
+    "id": "unreal-engine",
+    "name": "Unreal Engine",
+    "commands": [
+      "UnrealEditor",
+      "UE4Editor",
+      "RunUAT.sh",
+      "UnrealBuildTool"
+    ],
+    "ansi": 14,
+    "background": "343840",
+    "foreground": null,
+    "kind": "brand",
+    "asset": "unreal-engine.svg",
+    "source": "https://raw.githubusercontent.com/simple-icons/simple-icons/17cd4ee07612198a1d8777a060d4100423762a8b/icons/unrealengine.svg",
+    "license": "CC0-1.0",
+    "notes": "Original SVG; displayed as a monochrome mask.",
+    "original_source": "https://www.unrealengine.com/en-US/branding",
+    "guidelines": "https://www.unrealengine.com/en-US/branding",
+    "original_sha256": "06bbd4833c91e4ad085dd8203b26739538a881e38755a3efc9ed8d57cfadbb73",
+    "sha256": "06bbd4833c91e4ad085dd8203b26739538a881e38755a3efc9ed8d57cfadbb73"
+  },
+  {
+    "id": "uv",
+    "name": "uv",
+    "commands": [
+      "uv",
+      "uvx"
+    ],
+    "ansi": 13,
+    "background": "de5fe9",
+    "foreground": null,
+    "kind": "brand",
+    "asset": "uv.svg",
+    "source": "https://raw.githubusercontent.com/simple-icons/simple-icons/17cd4ee07612198a1d8777a060d4100423762a8b/icons/uv.svg",
+    "license": "CC0-1.0",
+    "notes": "Original SVG; displayed as a monochrome mask.",
+    "original_source": "https://docs.astral.sh/uv/",
+    "guidelines": null,
+    "original_sha256": "5ad031d1a80f9be4e9e1e2aa24bc76117284e5486a306de5b92c8c1777d5f38d",
+    "sha256": "5ad031d1a80f9be4e9e1e2aa24bc76117284e5486a306de5b92c8c1777d5f38d"
+  },
+  {
+    "id": "vagrant",
+    "name": "Vagrant",
+    "commands": [
+      "vagrant"
+    ],
+    "ansi": 12,
+    "background": "1868f2",
+    "foreground": null,
+    "kind": "brand",
+    "asset": "vagrant.svg",
+    "source": "https://raw.githubusercontent.com/simple-icons/simple-icons/17cd4ee07612198a1d8777a060d4100423762a8b/icons/vagrant.svg",
+    "license": "CC0-1.0",
+    "notes": "Original SVG; displayed as a monochrome mask.",
+    "original_source": "https://www.hashicorp.com/brand",
+    "guidelines": "https://www.hashicorp.com/brand",
+    "original_sha256": "9bde1c213070effa1f4c613c5c10335f9a4bdf2972898c112b518f04e98c1f34",
+    "sha256": "9bde1c213070effa1f4c613c5c10335f9a4bdf2972898c112b518f04e98c1f34"
+  },
+  {
+    "id": "vakna",
+    "name": "Vakna",
+    "commands": [
+      "vakna"
+    ],
+    "ansi": 11,
+    "background": "556ca6",
+    "foreground": null,
+    "kind": "brand",
+    "asset": "vakna.svg",
+    "source": "https://vakna.com/icon.svg?icon.3c09cacatdw91.svg",
+    "license": "Brand asset; no separate asset license stated",
+    "notes": "Original SVG with background removed and mark cropped for monochrome display.",
+    "original_source": null,
+    "guidelines": null,
+    "original_sha256": "a17e5e4d577670a02403627b129aa9a11aabe147e45ccd8f61742584c99efe99",
+    "sha256": "41341129f671da2dd5d1e34ef3889b2d00542094e193d249b8dbd92e38024db0"
+  },
+  {
+    "id": "vault",
+    "name": "Vault",
+    "commands": [
+      "vault"
+    ],
+    "ansi": 11,
+    "background": "ffec6e",
+    "foreground": null,
+    "kind": "brand",
+    "asset": "vault.svg",
+    "source": "https://raw.githubusercontent.com/simple-icons/simple-icons/17cd4ee07612198a1d8777a060d4100423762a8b/icons/vault.svg",
+    "license": "CC0-1.0",
+    "notes": "Original SVG; displayed as a monochrome mask.",
+    "original_source": "https://www.hashicorp.com/brand",
+    "guidelines": "https://www.hashicorp.com/brand",
+    "original_sha256": "92bea9266b1fa330db6d9f322030784e54bd60c10f49937fe79a222f62ed7b8c",
+    "sha256": "92bea9266b1fa330db6d9f322030784e54bd60c10f49937fe79a222f62ed7b8c"
+  },
+  {
+    "id": "vercel",
+    "name": "Vercel",
+    "commands": [
+      "vercel",
+      "vc"
+    ],
+    "ansi": 14,
+    "background": "343840",
+    "foreground": null,
+    "kind": "brand",
+    "asset": "vercel.svg",
+    "source": "https://raw.githubusercontent.com/simple-icons/simple-icons/17cd4ee07612198a1d8777a060d4100423762a8b/icons/vercel.svg",
+    "license": "CC0-1.0",
+    "notes": "Original SVG; displayed as a monochrome mask.",
+    "original_source": "https://vercel.com/geist/brands",
+    "guidelines": "https://vercel.com/geist/brands",
+    "original_sha256": "57f1e4135486c566e9878fddd259f7f6bf8ec43f31e7e6e38a36d9e814a1c0e0",
+    "sha256": "57f1e4135486c566e9878fddd259f7f6bf8ec43f31e7e6e38a36d9e814a1c0e0"
+  },
+  {
+    "id": "vim",
+    "name": "Vim",
+    "commands": [
+      "vim",
+      "vi",
+      "gvim",
+      "view",
+      "rview"
+    ],
+    "ansi": 10,
+    "background": "019733",
+    "foreground": null,
+    "kind": "brand",
+    "asset": "vim.svg",
+    "source": "https://raw.githubusercontent.com/simple-icons/simple-icons/17cd4ee07612198a1d8777a060d4100423762a8b/icons/vim.svg",
+    "license": "CC0-1.0",
+    "notes": "Original SVG; displayed as a monochrome mask.",
+    "original_source": "https://commons.wikimedia.org/wiki/File:Vimlogo.svg",
+    "guidelines": null,
+    "original_sha256": "d3a39e8a2820764d98e9f481f6dd8bc90fe49788fb5f682e742eb3c98f2fc39e",
+    "sha256": "d3a39e8a2820764d98e9f481f6dd8bc90fe49788fb5f682e742eb3c98f2fc39e"
+  },
+  {
+    "id": "vite",
+    "name": "Vite",
+    "commands": [
+      "vite"
+    ],
+    "ansi": 13,
+    "background": "9135ff",
+    "foreground": null,
+    "kind": "brand",
+    "asset": "vite.svg",
+    "source": "https://raw.githubusercontent.com/simple-icons/simple-icons/17cd4ee07612198a1d8777a060d4100423762a8b/icons/vite.svg",
+    "license": "CC0-1.0",
+    "notes": "Original SVG; displayed as a monochrome mask.",
+    "original_source": "https://github.com/voidzero-dev/community-design-resources/blob/55902097229cf01cf2a4ceb376f992f5cf306756/brand-assets/vite/vite-icon-color-bracketless.svg",
+    "guidelines": null,
+    "original_sha256": "642bb261d6476ddf326b8ed7757543b3443a93a77fef1e434021fc201defa21c",
+    "sha256": "642bb261d6476ddf326b8ed7757543b3443a93a77fef1e434021fc201defa21c"
+  },
+  {
+    "id": "vite-plus",
+    "name": "Vite+",
+    "commands": [
+      "vite+",
+      "vite-plus",
+      "vp"
+    ],
+    "ansi": 13,
+    "background": "6254fe",
+    "foreground": null,
+    "kind": "brand",
+    "asset": "vite-plus.svg",
+    "source": "https://raw.githubusercontent.com/voidzero-dev/vite-plus/b46f7cffffbf169e330c4a9841c645e310feb06b/logo.svg",
+    "license": "MIT",
+    "notes": "Official Vite+ mark extracted from wordmark; gradients and filters omitted for monochrome display.",
+    "sha256": "e3f20736acc39d011e5c2b2fa92854e1ab933a4ca02a6577116702c046d16f78",
+    "original_source": null,
+    "original_sha256": "93e35d7415b62222c05a40aec224a618b21d3c69f11fcf3135c0d4792639728a"
+  },
+  {
+    "id": "waypoint",
+    "name": "Waypoint",
+    "commands": [
+      "waypoint"
+    ],
+    "ansi": 12,
+    "background": "6c60ad",
+    "foreground": null,
+    "kind": "brand",
+    "asset": "waypoint.svg",
+    "source": "https://raw.githubusercontent.com/homarr-labs/dashboard-icons/d4b500dc40a8e1043b1581cabb7208892cf35472/svg/hashicorp-waypoint.svg",
+    "license": "Apache-2.0",
+    "notes": "Original SVG; displayed as a monochrome mask.",
+    "original_source": null,
+    "guidelines": null,
+    "original_sha256": "d162d842acbc94f5ecca0efc090014889af018e610cc5a81680f648ed1609b4b",
+    "sha256": "d162d842acbc94f5ecca0efc090014889af018e610cc5a81680f648ed1609b4b"
+  },
+  {
+    "id": "xcode",
+    "name": "Xcode",
+    "commands": [
+      "xcodebuild",
+      "xcrun",
+      "xcode-select"
+    ],
+    "ansi": 12,
+    "background": "147efb",
+    "foreground": null,
+    "kind": "brand",
+    "asset": "xcode.svg",
+    "source": "https://raw.githubusercontent.com/simple-icons/simple-icons/17cd4ee07612198a1d8777a060d4100423762a8b/icons/xcode.svg",
+    "license": "CC0-1.0",
+    "notes": "Original SVG; displayed as a monochrome mask.",
+    "original_source": "https://developer.apple.com/develop",
+    "guidelines": null,
+    "original_sha256": "20f03ce67d3bf01bbc95aef5cb6b6af1ed833bcf83337d499ab07caf7085553f",
+    "sha256": "20f03ce67d3bf01bbc95aef5cb6b6af1ed833bcf83337d499ab07caf7085553f"
+  },
+  {
+    "id": "yazi",
+    "name": "Yazi",
+    "commands": [
+      "yazi",
+      "ya"
+    ],
+    "ansi": 11,
+    "background": "b58c2d",
+    "foreground": null,
+    "kind": "brand",
+    "asset": "yazi.svg",
+    "source": "https://raw.githubusercontent.com/sxyazi/yazi/d5e4beb6b5212c28d1026d8e7d4ae985dcf174cb/assets/logo.png",
+    "license": "MIT",
+    "notes": "Monochrome foreground trace from the original project artwork; background and shading excluded for tab-size recognition.",
+    "original_source": null,
+    "guidelines": null,
+    "original_sha256": "7df01d685d6727dcf165f2de5d9145dedca89d38e18f526209a9ec6346ab9915",
+    "sha256": "fc05733dbca9ff26dd1535caf7e0d75beb6a21ab41c1e45ed39c76ae44dd45f0"
+  },
+  {
+    "id": "zig",
+    "name": "Zig",
+    "commands": [
+      "zig"
+    ],
+    "ansi": 11,
+    "background": "f7a41d",
+    "foreground": null,
+    "kind": "brand",
+    "asset": "zig.svg",
+    "source": "https://raw.githubusercontent.com/simple-icons/simple-icons/17cd4ee07612198a1d8777a060d4100423762a8b/icons/zig.svg",
+    "license": "CC-BY-SA-4.0",
+    "notes": "Original SVG; displayed as a monochrome mask.",
+    "original_source": "https://github.com/ziglang/logo/blob/6446ba8e37a0651da720d8869e1ce9264fa0c0b9/zig-mark.svg",
+    "guidelines": null,
+    "original_sha256": "1cd8fe569c641c0229c3717f2f883b88cf9beaa3b2adc255799ea3e014ee1955",
+    "sha256": "1cd8fe569c641c0229c3717f2f883b88cf9beaa3b2adc255799ea3e014ee1955"
+  },
+  {
+    "id": "co-codes",
+    "name": "co",
+    "commands": [
+      "co",
+      "co.codes"
+    ],
+    "ansi": 14,
+    "background": "8758ff",
+    "foreground": "ffffff",
+    "kind": "brand",
+    "asset": "co-codes.svg",
+    "source": "https://co.codes/favicon.svg",
+    "license": "User-owned; requested integration",
+    "notes": "Background removed and mark cropped; original preserved.",
+    "sha256": "215786e7e40e04728510f504e677950646bbf2564196305267ede3311f8e55e3"
+  },
+  {
+    "id": "gojo",
+    "name": "Gojo",
+    "commands": [
+      "gojo"
+    ],
+    "ansi": 13,
+    "background": "4a6572",
+    "foreground": null,
+    "kind": "generic",
+    "asset": "gojo.svg",
+    "source": "Rexia pictogram",
+    "license": "Project artwork",
+    "notes": "Generic symbol, not a third-party logo.",
+    "sha256": "74e049614fc88bdd57e67a21f00c1a354fbbd177bb6d9117c45f39ce9a264d58"
+  }
+]
