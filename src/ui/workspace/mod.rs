@@ -169,6 +169,7 @@ pub struct Workspace {
     fetching_tabs: HashSet<(usize, String)>,
     /// A tab or pane pressed for dragging, and the drag once it moves.
     moving: Option<dragging::Moving>,
+    session_preview: Option<dragging::SessionPreview>,
     /// The sidebar's edge while it's dragged, and the width it's being dragged to.
     sidebar_resizing: Option<sidebar_width::Resizing>,
     /// Change Shortcut came from the Shortcuts page, so it goes back there after.
@@ -403,6 +404,7 @@ impl Workspace {
             known_tabs: HashMap::new(),
             fetching_tabs: HashSet::new(),
             moving: None,
+            session_preview: None,
             sidebar_resizing: None,
             shortcut_return: false,
             tab_selected_at_press: None,
@@ -1284,7 +1286,7 @@ impl Workspace {
             .into_any_element()
     }
 
-    fn render_sidebar(&self, theme: &Theme, cx: &mut Context<Self>) -> AnyElement {
+    fn render_sidebar(&self, window: &Window, theme: &Theme, cx: &mut Context<Self>) -> AnyElement {
         let (session_text, tab_text, tab_height) =
             self.settings.interface.sidebar_text_size.metrics();
         let mut list = div().flex().flex_col().gap(px(8.));
@@ -1305,7 +1307,7 @@ impl Workspace {
             let mut group = div()
                 .flex()
                 .flex_col()
-                .gap(px(2.))
+                .gap(dragging::SESSION_ROW_GAP)
                 .p(px(4.))
                 .rounded(theme.radius())
                 .bg(host_surface)
@@ -1389,7 +1391,15 @@ impl Workspace {
                         .child(status),
                 );
             }
-            for session in &model.sessions {
+            let preview = self.session_preview_rows(index, &model.sessions);
+            let mut sessions: Vec<_> = model.sessions.iter().collect();
+            if let Some(preview) = &preview {
+                sessions.sort_by_key(|s| preview.order.iter().position(|id| id == &s.session_id));
+                if preview.animating && !cx.reduce_motion() {
+                    window.request_animation_frame();
+                }
+            }
+            for session in sessions {
                 let selected =
                     index == self.active && model.selected.as_ref() == Some(&session.session_id);
                 let id = session.session_id.clone();
@@ -1399,123 +1409,143 @@ impl Workspace {
                     .copied()
                     .unwrap_or(selected);
                 let activity = self.session_mark(index, &session.session_id, &model);
-                group = group.child(
-                    div()
-                        .id(SharedString::from(format!(
-                            "session-{index}-{}",
-                            session.session_id
-                        )))
-                        .flex()
-                        .items_center()
-                        .gap(px(4.))
-                        .px(px(4.))
-                        .h(px(tab_height))
-                        .rounded(theme.radius_small())
-                        .cursor_pointer()
-                        .text_color(theme.text_muted)
-                        .hover(|d| d.bg(theme.overlay(0.06)))
-                        .child(
-                            div()
-                                .flex()
-                                .flex_none()
-                                .items_center()
-                                .justify_center()
-                                .size(px(22.))
-                                .child(
-                                    icon(if expanded {
-                                        "chevron-down"
-                                    } else {
-                                        "chevron-right"
-                                    })
-                                    .size(px(14.))
-                                    .text_color(theme.text_muted),
-                                ),
-                        )
-                        .child(
-                            div()
-                                .flex_1()
-                                .min_w_0()
-                                .overflow_hidden()
-                                .text_ellipsis()
-                                .whitespace_nowrap()
-                                .text_size(px(session_text))
-                                .child(session.label.clone()),
-                        )
-                        .children(
-                            activity
-                                .map(|(state, badge)| activity_mark(state, badge, false, theme)),
-                        )
-                        // Row actions, shown while the pointer is on the row.
-                        .child(
-                            div()
-                                .flex()
-                                .invisible()
-                                .group_hover("session-row", |d| d.visible())
-                                .child(
-                                    small_icon_button(
-                                        SharedString::from(format!("session-new-tab-{index}-{id}")),
-                                        "plus",
-                                        theme.text_muted,
-                                        theme,
-                                        cx.listener({
-                                            let id = id.clone();
-                                            move |ws, _, _, cx| {
-                                                ws.set_session_expanded(index, id.clone(), true);
-                                                ws.new_tab_in(index, id.clone(), cx);
-                                                cx.notify();
-                                            }
-                                        }),
-                                    )
-                                    .on_mouse_down(MouseButton::Left, |_, _, cx| {
-                                        cx.stop_propagation()
-                                    })
-                                    .relative()
+                let (offset, grabbed) = preview.as_ref().map_or((px(0.), false), |preview| {
+                    preview.placement(&id, cx.reduce_motion())
+                });
+                let mut session_group = div()
+                    .id(SharedString::from(format!("session-group-{index}-{id}")))
+                    .relative()
+                    .top(offset)
+                    .flex()
+                    .flex_col()
+                    .gap(dragging::SESSION_ROW_GAP)
+                    .when(grabbed, |d| d.bg(host_surface))
+                    .child(self.track_bounds(format!("session-group:{index}:{id}"), cx))
+                    .child(
+                        div()
+                            .id(SharedString::from(format!(
+                                "session-{index}-{}",
+                                session.session_id
+                            )))
+                            .flex()
+                            .items_center()
+                            .gap(px(4.))
+                            .px(px(4.))
+                            .h(px(tab_height))
+                            .rounded(theme.radius_small())
+                            .cursor_pointer()
+                            .text_color(theme.text_muted)
+                            .hover(|d| d.bg(theme.overlay(0.06)))
+                            .when(grabbed, |d| d.bg(theme.overlay(0.16)))
+                            .child(
+                                div()
+                                    .flex()
+                                    .flex_none()
+                                    .items_center()
+                                    .justify_center()
+                                    .size(px(22.))
                                     .child(
-                                        self.track_bounds(
+                                        icon(if expanded {
+                                            "chevron-down"
+                                        } else {
+                                            "chevron-right"
+                                        })
+                                        .size(px(14.))
+                                        .text_color(theme.text_muted),
+                                    ),
+                            )
+                            .child(
+                                div()
+                                    .flex_1()
+                                    .min_w_0()
+                                    .overflow_hidden()
+                                    .text_ellipsis()
+                                    .whitespace_nowrap()
+                                    .text_size(px(session_text))
+                                    .child(session.label.clone()),
+                            )
+                            .children(
+                                activity.map(|(state, badge)| {
+                                    activity_mark(state, badge, false, theme)
+                                }),
+                            )
+                            // Row actions, shown while the pointer is on the row.
+                            .child(
+                                div()
+                                    .flex()
+                                    .invisible()
+                                    .group_hover("session-row", |d| d.visible())
+                                    .child(
+                                        small_icon_button(
+                                            SharedString::from(format!(
+                                                "session-new-tab-{index}-{id}"
+                                            )),
+                                            "plus",
+                                            theme.text_muted,
+                                            theme,
+                                            cx.listener({
+                                                let id = id.clone();
+                                                move |ws, _, _, cx| {
+                                                    ws.set_session_expanded(
+                                                        index,
+                                                        id.clone(),
+                                                        true,
+                                                    );
+                                                    ws.new_tab_in(index, id.clone(), cx);
+                                                    cx.notify();
+                                                }
+                                            }),
+                                        )
+                                        .on_mouse_down(MouseButton::Left, |_, _, cx| {
+                                            cx.stop_propagation()
+                                        })
+                                        .relative()
+                                        .child(self.track_bounds(
                                             format!("session-new-tab:{index}:{id}"),
                                             cx,
-                                        ),
+                                        ))
+                                        .tooltip(self.tip("client.tab.new", None)),
                                     )
-                                    .tooltip(self.tip("client.tab.new", None)),
-                                )
-                                .child(
-                                    small_icon_button(
-                                        SharedString::from(format!("session-close-{index}-{id}")),
-                                        "x",
-                                        theme.text_muted,
-                                        theme,
-                                        {
-                                            let id = id.clone();
-                                            cx.listener(move |ws, _, window, cx| {
-                                                cx.stop_propagation();
-                                                ws.close_session(index, id.clone(), window, cx)
-                                            })
-                                        },
-                                    )
-                                    .tooltip(self.tip("session.close", None)),
-                                ),
-                        )
-                        .relative()
-                        .group("session-row")
-                        .child(self.track_bounds(format!("session:{index}:{id}"), cx))
-                        .on_mouse_down(MouseButton::Left, {
-                            let id = id.clone();
-                            cx.listener(move |ws, event: &gpui::MouseDownEvent, _, _| {
-                                ws.press_session_for_drag(index, id.clone(), event.position);
+                                    .child(
+                                        small_icon_button(
+                                            SharedString::from(format!(
+                                                "session-close-{index}-{id}"
+                                            )),
+                                            "x",
+                                            theme.text_muted,
+                                            theme,
+                                            {
+                                                let id = id.clone();
+                                                cx.listener(move |ws, _, window, cx| {
+                                                    cx.stop_propagation();
+                                                    ws.close_session(index, id.clone(), window, cx)
+                                                })
+                                            },
+                                        )
+                                        .tooltip(self.tip("session.close", None)),
+                                    ),
+                            )
+                            .relative()
+                            .group("session-row")
+                            .child(self.track_bounds(format!("session:{index}:{id}"), cx))
+                            .on_mouse_down(MouseButton::Left, {
+                                let id = id.clone();
+                                cx.listener(move |ws, event: &gpui::MouseDownEvent, _, _| {
+                                    ws.press_session_for_drag(index, id.clone(), event.position);
+                                })
                             })
-                        })
-                        .on_mouse_down(MouseButton::Right, {
-                            let id = id.clone();
-                            cx.listener(move |ws, event: &gpui::MouseDownEvent, _, cx| {
-                                ws.open_session_menu(index, id.clone(), event.position, cx);
-                                cx.stop_propagation();
+                            .on_mouse_down(MouseButton::Right, {
+                                let id = id.clone();
+                                cx.listener(move |ws, event: &gpui::MouseDownEvent, _, cx| {
+                                    ws.open_session_menu(index, id.clone(), event.position, cx);
+                                    cx.stop_propagation();
+                                })
                             })
-                        })
-                        .on_click(cx.listener(move |ws, _, _, cx| {
-                            ws.set_session_expanded(index, id.clone(), !expanded);
-                            cx.notify();
-                        })),
-                );
+                            .on_click(cx.listener(move |ws, _, _, cx| {
+                                ws.set_session_expanded(index, id.clone(), !expanded);
+                                cx.notify();
+                            })),
+                    );
                 if expanded && let Some(view) = model.views.get(&session.session_id) {
                     for (number, window) in view.windows.iter().enumerate() {
                         let active =
@@ -1523,7 +1553,7 @@ impl Workspace {
                         let window_id = window.id().to_owned();
                         let (label, path) = titles::sidebar_tab_title(window, &model);
                         let active_fill = theme.overlay(0.16);
-                        group = group.child(
+                        session_group = session_group.child(
                             div()
                                 .id(SharedString::from(format!("side-tab-{window_id}")))
                                 .group("side-tab")
@@ -1680,6 +1710,7 @@ impl Workspace {
                         );
                     }
                 }
+                group = group.child(session_group);
             }
             list = list.child(group);
         }
@@ -2545,6 +2576,7 @@ impl Render for Workspace {
         // Tabs and headers record where they're drawn again this frame; until then, reads
         // see the last frame's.
         self.drawn_bounds = std::mem::take(&mut self.element_bounds);
+        self.settle_session_preview();
         let theme = Theme::get(cx).clone();
         let model = self.model();
         let layout = self.settings.interface.toolbar_layout;
@@ -2577,7 +2609,7 @@ impl Render for Workspace {
             let content = if activity_only {
                 self.render_sidebar_activity(false, &theme, cx)
             } else {
-                self.render_sidebar(&theme, cx)
+                self.render_sidebar(window, &theme, cx)
             };
             let side_bar = if layout.vertical() && shown {
                 Some(self.render_side_toolbar(session_label, &theme, cx))

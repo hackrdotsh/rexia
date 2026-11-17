@@ -100,6 +100,17 @@ fn session_rows_rename_move_reorder_and_close() {
     move_to(&mut h, point(c.center().x, c.center().y - px(20.)), true);
     let target = point(top.center().x, top.top() + px(4.));
     move_to(&mut h, target, true);
+    h.wait_ui(
+        "the grabbed row follows the pointer and its neighbor makes room",
+        |ws| {
+            let dragged = ws.element_bounds(&format!("session:0:{}", ours[2]))?;
+            let neighbor = ws.element_bounds(&format!("session:0:{}", ours[1]))?;
+            ((dragged.center().y - target.y).abs() <= px(1.)
+                && neighbor.top() > top.top() + px(10.))
+            .then_some(())
+        },
+    );
+    assert_eq!(order(&h.host.snapshot(), &ours), [1, 0, 2]);
     h.screenshot("session-drag");
     up(&mut h, target, MouseButton::Left);
     let dragged = h.wait("c first", |m| {
@@ -107,6 +118,10 @@ fn session_rows_rename_move_reorder_and_close() {
         (o == [2, 1, 0]).then_some(o)
     });
     println!("after dragging c to the top: {dragged:?}");
+    h.wait_ui("the dropped row settles into the previewed slot", |ws| {
+        let dropped = ws.element_bounds(&format!("session:0:{}", ours[2]))?;
+        ((dropped.top() - top.top()).abs() <= px(1.)).then_some(())
+    });
 
     // Double-clicking doesn't rename; the right-click menu does.
     let b = row(&mut h, &ours[1]);

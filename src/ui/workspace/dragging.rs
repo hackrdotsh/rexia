@@ -11,9 +11,113 @@ use gpui::{
     AnyElement, Bounds, Context, Pixels, Point, deferred, div, point, prelude::*, px, size,
 };
 use serde_json::json;
+use std::{
+    collections::HashMap,
+    time::{Duration, Instant},
+};
 
 /// How far the pointer moves before a press becomes a drag.
 const THRESHOLD: f32 = 4.;
+pub(super) const SESSION_ROW_GAP: Pixels = px(2.);
+
+/// A temporary order based on the unshifted group bounds at the start of the drag.
+pub(super) struct SessionPreview {
+    host: usize,
+    grabbed: String,
+    grab_offset: Option<Pixels>,
+    spots: Vec<(String, Bounds<Pixels>)>,
+    order: Vec<String>,
+    offsets: HashMap<String, Pixels>,
+    started: Instant,
+    pending: bool,
+}
+
+pub(super) struct SessionPreviewRows<'a> {
+    pub order: &'a [String],
+    preview: &'a SessionPreview,
+    remaining: f32,
+    pub animating: bool,
+}
+
+impl SessionPreviewRows<'_> {
+    pub fn placement(&self, id: &str, reduce_motion: bool) -> (Pixels, bool) {
+        if id == self.preview.grabbed
+            && let Some(offset) = self.preview.grab_offset
+        {
+            return (offset, true);
+        }
+        let remaining = if reduce_motion { 0. } else { self.remaining };
+        (
+            self.preview.offsets.get(id).copied().unwrap_or_default() * remaining,
+            false,
+        )
+    }
+}
+
+impl SessionPreview {
+    fn positions(&self, order: &[String]) -> HashMap<String, Pixels> {
+        let mut y = Pixels::ZERO;
+        order
+            .iter()
+            .map(|id| {
+                let height = self
+                    .spots
+                    .iter()
+                    .find(|(key, _)| key == id)
+                    .unwrap()
+                    .1
+                    .size
+                    .height;
+                let position = y;
+                y += height + SESSION_ROW_GAP;
+                (id.clone(), position)
+            })
+            .collect()
+    }
+
+    fn remaining(&self, style: crate::settings::AnimationStyle) -> f32 {
+        style.duration().map_or(0., |duration| {
+            let progress = (self.started.elapsed().as_secs_f32() / duration.as_secs_f32()).min(1.);
+            1. - super::motion::easing(style)(progress)
+        })
+    }
+
+    fn retarget(&mut self, order: Vec<String>, style: crate::settings::AnimationStyle) {
+        if self.order == order {
+            return;
+        }
+        let previous = self.positions(&self.order);
+        let next = self.positions(&order);
+        let remaining = self.remaining(style);
+        self.offsets = order
+            .iter()
+            .map(|id| {
+                let offset = if id == &self.grabbed
+                    && let Some(offset) = self.grab_offset
+                {
+                    offset
+                } else {
+                    self.offsets.get(id).copied().unwrap_or_default() * remaining
+                };
+                (id.clone(), previous[id] + offset - next[id])
+            })
+            .collect();
+        self.order = order;
+        self.started = Instant::now();
+    }
+
+    fn settle(&mut self, style: crate::settings::AnimationStyle) {
+        let remaining = self.remaining(style);
+        for offset in self.offsets.values_mut() {
+            *offset *= remaining;
+        }
+        if let Some(offset) = self.grab_offset.take() {
+            self.offsets.insert(self.grabbed.clone(), offset);
+        }
+        self.pending = true;
+        self.started = Instant::now();
+    }
+}
 
 #[derive(Clone, Debug, PartialEq)]
 pub enum Grab {
@@ -82,6 +186,13 @@ impl Workspace {
 
     /// A press on a session row that may become a drag to reorder it.
     pub(super) fn press_session_for_drag(&mut self, host: usize, id: String, at: Point<Pixels>) {
+        if self
+            .session_preview
+            .as_ref()
+            .is_some_and(|preview| preview.pending)
+        {
+            return;
+        }
         self.moving = Some(Moving {
             grab: Grab::Session(host, id.clone()),
             session: id,
@@ -96,7 +207,7 @@ impl Workspace {
         self.session_order(host)
             .into_iter()
             .filter_map(|id| {
-                let bounds = self.element_bounds(&format!("session:{host}:{id}"))?;
+                let bounds = self.element_bounds(&format!("session-group:{host}:{id}"))?;
                 Some((id, bounds))
             })
             .collect()
@@ -104,8 +215,12 @@ impl Workspace {
 
     /// Where a dragged session would go: before the first row whose middle is below the
     /// pointer, among its own host's rows.
-    fn session_landing(&self, host: usize, at: Point<Pixels>) -> Option<Landing> {
-        let spots = self.session_spots(host);
+    fn session_landing(&self, host: usize, id: &str, at: Point<Pixels>) -> Option<Landing> {
+        let preview = self
+            .session_preview
+            .as_ref()
+            .filter(|preview| preview.host == host)?;
+        let spots = &preview.spots;
         let first = spots.first()?.1;
         let last = spots.last()?.1;
         let slack = px(16.);
@@ -118,9 +233,86 @@ impl Workspace {
         }
         let before = spots
             .iter()
-            .find(|(_, b)| at.y < b.center().y)
+            .find(|(other, b)| other != id && at.y < b.center().y)
             .map(|(id, _)| id.clone());
         Some(Landing::SessionBefore(before))
+    }
+
+    fn update_session_preview(&mut self, host: usize, id: &str, at: Point<Pixels>) {
+        if self.session_preview.is_none() {
+            let spots = self.session_spots(host);
+            self.session_preview = Some(SessionPreview {
+                host,
+                grabbed: id.to_owned(),
+                grab_offset: None,
+                order: spots.iter().map(|(id, _)| id.clone()).collect(),
+                spots,
+                offsets: HashMap::new(),
+                started: Instant::now(),
+                pending: false,
+            });
+        }
+        let landing = self.session_landing(host, id, at);
+        let valid = landing.is_some();
+        let start = self.moving.as_ref().map_or(at.y, |moving| moving.start.y);
+        let preview = self.session_preview.as_mut().unwrap();
+        let mut order: Vec<_> = preview.spots.iter().map(|(key, _)| key.clone()).collect();
+        if let Some(Landing::SessionBefore(before)) = landing
+            && let Some(from) = order.iter().position(|key| key == id)
+        {
+            let key = order.remove(from);
+            let to = before.and_then(|before| order.iter().position(|key| *key == before));
+            order.insert(to.unwrap_or(order.len()), key);
+        }
+        preview.retarget(order, self.settings.interface.animation);
+        preview.grab_offset = if valid {
+            let base: Vec<_> = preview.spots.iter().map(|(id, _)| id.clone()).collect();
+            preview
+                .positions(&base)
+                .get(id)
+                .map(|origin| *origin + (at.y - start) - preview.positions(&preview.order)[id])
+        } else {
+            None
+        };
+    }
+
+    pub(super) fn session_preview_rows(
+        &self,
+        host: usize,
+        sessions: &[view::SessionSummary],
+    ) -> Option<SessionPreviewRows<'_>> {
+        let preview = self
+            .session_preview
+            .as_ref()
+            .filter(|preview| preview.host == host)?;
+        let ids = || sessions.iter().map(|session| &session.session_id);
+        if !(ids().eq(preview.spots.iter().map(|(id, _)| id))
+            || preview.pending && ids().eq(preview.order.iter()))
+        {
+            return None;
+        }
+        let remaining = preview.remaining(self.settings.interface.animation);
+        Some(SessionPreviewRows {
+            order: &preview.order,
+            preview,
+            remaining,
+            animating: remaining > 0.,
+        })
+    }
+
+    pub(super) fn settle_session_preview(&mut self) {
+        if let Some(preview) = &self.session_preview
+            && preview.pending
+        {
+            let order = self.session_order(preview.host);
+            let at_target = order == preview.order;
+            let at_source = order.iter().eq(preview.spots.iter().map(|(id, _)| id));
+            if (at_target && preview.remaining(self.settings.interface.animation) == 0.)
+                || (!at_source && !at_target)
+            {
+                self.session_preview = None;
+            }
+        }
     }
 
     /// The pointer moved with a press held: the drag starts or follows it. Returns whether a
@@ -138,13 +330,31 @@ impl Workspace {
             }
             moving.active = true;
         }
+        if let Grab::Session(host, id) = moving.grab.clone() {
+            self.update_session_preview(host, &id, at);
+        }
         cx.notify();
         true
     }
 
     /// Escape: drop the drag without doing anything.
     pub fn cancel_drag(&mut self, cx: &mut Context<Self>) -> bool {
-        let dragging = self.moving.take().is_some_and(|m| m.active);
+        let dragging = self.moving.take().is_some_and(|m| {
+            if matches!(m.grab, Grab::Session(..))
+                && let Some(preview) = &mut self.session_preview
+            {
+                let original = preview.spots.iter().map(|(id, _)| id.clone()).collect();
+                let style = self.settings.interface.animation;
+                if preview.order != original {
+                    preview.retarget(original, style);
+                    preview.grab_offset = None;
+                    preview.pending = true;
+                } else {
+                    preview.settle(style);
+                }
+            }
+            m.active
+        });
         if dragging {
             cx.notify();
         }
@@ -192,8 +402,8 @@ impl Workspace {
     }
 
     fn landing(&self, grab: &Grab, at: Point<Pixels>) -> Option<Landing> {
-        if let Grab::Session(host, _) = grab {
-            return self.session_landing(*host, at);
+        if let Grab::Session(host, id) = grab {
+            return self.session_landing(*host, id, at);
         }
         let spots = self.tab_spots();
         // Over the tab strip: its row (or column), with some room either side.
@@ -328,13 +538,51 @@ impl Workspace {
             return false;
         }
         cx.notify();
+        if let Grab::Session(host, _) = &moving.grab
+            && let Some(preview) = &self.session_preview
+            && !self
+                .session_order(*host)
+                .iter()
+                .eq(preview.spots.iter().map(|(id, _)| id))
+        {
+            self.session_preview = None;
+            return true;
+        }
         let Some(landing) = self.landing(&moving.grab, moving.at) else {
+            if matches!(moving.grab, Grab::Session(..)) {
+                self.session_preview = None;
+            }
             return true;
         };
         let session = moving.session;
         match (moving.grab, landing) {
             (Grab::Session(host, id), Landing::SessionBefore(before)) => {
-                self.place_session(host, &id, before)
+                if let Some(preview) = &mut self.session_preview
+                    && !preview
+                        .order
+                        .iter()
+                        .eq(preview.spots.iter().map(|(id, _)| id))
+                {
+                    preview.settle(self.settings.interface.animation);
+                    let started = preview.started;
+                    self.place_session(host, &id, before);
+                    cx.spawn(async move |this, cx| {
+                        cx.background_executor().timer(Duration::from_secs(2)).await;
+                        let _ = this.update(cx, |ws, cx| {
+                            if ws
+                                .session_preview
+                                .as_ref()
+                                .is_some_and(|p| p.pending && p.started == started)
+                            {
+                                ws.session_preview = None;
+                                cx.notify();
+                            }
+                        });
+                    })
+                    .detach();
+                } else if let Some(preview) = &mut self.session_preview {
+                    preview.settle(self.settings.interface.animation);
+                }
             }
             (Grab::Tab(tab), Landing::TabBefore(before)) => {
                 let mut payload = json!({"session_id": session, "window_id": tab});
@@ -441,6 +689,9 @@ impl Workspace {
     pub(super) fn render_drag(&self, theme: &Theme) -> Option<AnyElement> {
         let moving = self.moving.as_ref().filter(|m| m.active)?;
         if let Grab::Session(host, id) = &moving.grab {
+            if self.session_landing(*host, id, moving.at).is_some() {
+                return None;
+            }
             return self.render_session_drag(*host, id, moving.at, theme);
         }
         let model = self.model();
@@ -563,7 +814,7 @@ impl Workspace {
         )
     }
 
-    /// A session being dragged: a line where it would go, and its name by the pointer.
+    /// A session dragged outside its host's list: its name follows the pointer.
     fn render_session_drag(
         &self,
         host: usize,
@@ -581,33 +832,6 @@ impl Workspace {
             .find(|s| s.session_id == id)
             .map(|s| s.label.clone())
             .unwrap_or_default();
-        let spots = self.session_spots(host);
-        let line = match self.session_landing(host, at) {
-            Some(Landing::SessionBefore(before)) => {
-                let (bounds, y) = match before {
-                    Some(before) => {
-                        let b = spots.iter().find(|(s, _)| *s == before)?.1;
-                        (b, b.top())
-                    }
-                    None => {
-                        let b = spots.last()?.1;
-                        (b, b.bottom())
-                    }
-                };
-                Some(
-                    div()
-                        .absolute()
-                        .left(bounds.left())
-                        .top(y - px(2.))
-                        .w(bounds.size.width)
-                        .h(px(3.))
-                        .rounded_full()
-                        .bg(theme.primary)
-                        .into_any_element(),
-                )
-            }
-            _ => None,
-        };
         let chip = div()
             .absolute()
             .left(at.x + px(12.))
@@ -629,17 +853,9 @@ impl Workspace {
             .whitespace_nowrap()
             .child(label);
         Some(
-            deferred(
-                div()
-                    .absolute()
-                    .top_0()
-                    .left_0()
-                    .size_full()
-                    .children(line)
-                    .child(chip),
-            )
-            .with_priority(3)
-            .into_any_element(),
+            deferred(div().absolute().top_0().left_0().size_full().child(chip))
+                .with_priority(3)
+                .into_any_element(),
         )
     }
 }

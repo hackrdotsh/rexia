@@ -1,6 +1,6 @@
 //! Sessions in the sidebar: rename, move and close them from a row's right-click menu,
-//! double-click a row to rename it, close it from the button under the pointer, and drag
-//! rows to reorder them (`session.move`; every client sees the order).
+//! close them from the button under the pointer, and drag rows to reorder them
+//! (`session.move`; every client sees the order).
 use super::{
     Workspace,
     actions::Target,
