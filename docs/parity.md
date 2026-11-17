@@ -92,6 +92,9 @@ when checked, and are built in this order; each moves to its section once it's d
 
 Working:
 
+- Fade inactive panes dims a pane's content as one picture, under a sheet of the terminal's
+  background, so half-block pictures (fastfetch logos) keep their colors apart when faded.
+
 - With focus follows mouse, the pane under the pointer takes keyboard focus as well as the
   highlight: what you type goes to the pane the pointer moved onto.
 
