@@ -113,19 +113,25 @@ pub fn render_icons(
     let width = tile + icon_offset(items.len() - 1, tile);
     let icons = items.iter().enumerate().rev().map(|(index, item)| {
         let look = icon_look(*item, shell, text, theme);
+        let scale = 1. - index as f32 * 0.1;
+        let edge = tile * scale;
         div()
             .absolute()
-            .top_0()
-            .left(px(icon_offset(index, tile)))
+            .top(px((tile - edge) / 2.))
+            .left(px(tile + icon_offset(index, tile) - edge))
             .flex()
             .items_center()
             .justify_center()
-            .size(px(tile))
-            .rounded(px(tile * 0.24))
+            .size(px(edge))
+            .rounded(px(edge * 0.24))
             .bg(look.tile.unwrap_or(background))
             .child(
                 icon(item.program.icon())
-                    .size(px(if item.colored { tile * 0.72 } else { size }))
+                    .size(px(if item.colored {
+                        edge * 0.72
+                    } else {
+                        size * scale
+                    }))
                     .text_color(look.glyph),
             )
     });

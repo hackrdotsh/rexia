@@ -121,11 +121,17 @@ fn icon_stacks_keep_the_front_whole_and_show_small_rear_slices() {
     }
     assert_eq!(pixel(2, TILE + 2., TILE / 2.), rgb(COLORS[1]));
     assert_eq!(pixel(2, TILE + 6., TILE / 2.), rgb(COLORS[2]));
-    assert_eq!(
-        pixel(1, TILE - 2., 2.),
-        rgb(COLORS[1]),
-        "the rear tile keeps its rounded outline behind the front corner"
-    );
+    for (index, x) in [TILE + 2., TILE + 6., TILE + 9., TILE + 12.]
+        .into_iter()
+        .enumerate()
+    {
+        let row = index + 1;
+        let inset = row as f32 * TILE * 0.05;
+        assert_eq!(pixel(row, x, inset - 0.5), rgb(0x102030));
+        assert_eq!(pixel(row, x, TILE - inset + 0.5), rgb(0x102030));
+        assert_eq!(pixel(row, x, inset + 7.), rgb(COLORS[row]));
+        assert_eq!(pixel(row, x, TILE - inset - 7.), rgb(COLORS[row]));
+    }
     // Transparent monochrome glyphs must not show through the leading icon either.
     for row in 6..10 {
         for y in 5..35 {

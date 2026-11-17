@@ -87,7 +87,8 @@ still need an account-owned test. The automated checks use an isolated Rex serve
 Working:
 
 - Tab icon stacks keep the focused pane's icon fully visible in front. The second icon
-  peeks out by 12.5% of its tile width, and each later icon by 7.5%.
+  peeks out by 12.5% of the front tile's width, and each later icon by 7.5%. The rear
+  icons are vertically centered and scale down to 90%, 80%, 70%, and 60%.
 
 - New splits, tabs, and floating terminals inherit the source pane's current working
   directory, on local and remote hosts. Rexia queries the process directory when opening
