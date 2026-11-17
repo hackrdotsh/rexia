@@ -1320,6 +1320,7 @@ impl Workspace {
                         .relative()
                         .flex()
                         .items_center()
+                        .pr(px(4.))
                         .rounded(theme.radius_small())
                         .cursor_pointer()
                         .when(hover, |d| d.hover(|d| d.bg(theme.overlay(0.06))))
