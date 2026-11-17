@@ -1467,6 +1467,13 @@ pub(super) fn keystroke_from_xkb(
     let key_utf8 = state.key_get_utf8(keycode);
     let key_sym = state.key_get_one_sym(keycode);
 
+    // XKB keycodes on Wayland and X11 include the eight-code evdev offset.
+    let international = match keycode.raw() {
+        94 => Some("intl_backslash"),
+        97 => Some("intl_ro"),
+        132 => Some("intl_yen"),
+        _ => None,
+    };
     let key = match key_sym {
         Keysym::Return => "enter".to_owned(),
         Keysym::Prior => "pageup".to_owned(),
@@ -1561,6 +1568,7 @@ pub(super) fn keystroke_from_xkb(
             }
         }
     };
+    let key = international.map_or(key, str::to_owned);
 
     if modifiers.shift {
         // we only include the shift for upper-case letters by convention,

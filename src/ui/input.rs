@@ -259,7 +259,7 @@ impl TextInput {
                 }
                 true
             }
-            "v" if ctrl => {
+            key if key == "paste" || (key == "v" && ctrl) || (key == "insert" && m.shift) => {
                 if let Some(text) = cx.read_from_clipboard().and_then(|item| item.text()) {
                     self.insert(&text);
                 }

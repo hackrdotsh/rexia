@@ -64,6 +64,9 @@ pub fn physical_key(key: &str) -> Option<(String, bool, Option<char>)> {
         "copy" => "copy",
         "cut" => "cut",
         "paste" => "paste",
+        "intl_backslash" => "intl_backslash",
+        "intl_ro" => "intl_ro",
+        "intl_yen" => "intl_yen",
         _ => "",
     };
     if !named.is_empty() {
@@ -372,6 +375,19 @@ mod tests {
         assert_eq!(enter["key"], "enter");
         let upper = event_from_spelling("shift+a").unwrap();
         assert_eq!(upper["text"], "A");
+    }
+
+    #[test]
+    fn international_positions_keep_their_physical_identity_and_text() {
+        for (key, code) in [
+            ("intl_backslash", "IntlBackslash"),
+            ("intl_ro", "IntlRo"),
+            ("intl_yen", "IntlYen"),
+        ] {
+            let event = with_char(key, "\\");
+            assert_eq!(super::stroke(&event).code.as_deref(), Some(code));
+            assert_eq!(key_event(&event, false).unwrap()["text"], "\\");
+        }
     }
 
     fn stroke_of(text: &'static str) -> Keystroke {
