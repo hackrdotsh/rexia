@@ -49,7 +49,6 @@ when checked, and are built in this order; each moves to its section once it's d
 | --- | --- |
 | Quick Look every link on screen, stepping with the arrow keys; files on remote hosts downloaded first; Ctrl-click a remote file link saves a copy under ~/Downloads/Rex/HOST and opens it | preview.28, 29 |
 | Settings search, `rex://settings/...` links to a group or setting, reset buttons on changed settings, every simple setting as a palette row | preview.20, 25, 28 |
-| Typing a host's address in the palette offers to add it | preview.29 |
 
 ## Settings
 
@@ -89,6 +88,11 @@ when checked, and are built in this order; each moves to its section once it's d
 ## Behavior
 
 Working:
+
+- Typing a host's address in the command palette (`alice@studio`, `ssh://…`, `https://…`,
+  `studio.tail1234.ts.net`, an IP, with a port or not) offers Add Host as the last row; it
+  opens Add Remote Host with the address and a name from it filled in. Single words and
+  hosts already added get no offer.
 
 - An ssh host whose key ssh doesn't trust, or that refuses the login, three times in a row
   stops retrying; the host's status says what to check (`ssh-keygen -R HOST` for a changed
