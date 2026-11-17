@@ -1295,7 +1295,8 @@ impl Workspace {
         for (index, host) in self.hosts.iter().enumerate() {
             let host_id = &host.config.id;
             let collapsed = self.collapsed_hosts.contains(host_id);
-            let host_surface = if index == self.active {
+            let active_host = index == self.active;
+            let host_surface = if active_host {
                 theme.surface
             } else {
                 theme.background.blend(theme.surface.opacity(0.5))
@@ -1333,30 +1334,13 @@ impl Workspace {
                             }
                         }))
                         .child(
-                            div()
-                                .flex()
-                                .flex_none()
-                                .items_center()
-                                .justify_center()
-                                .size(px(22.))
-                                .child(
-                                    icon(if collapsed {
-                                        "chevron-right"
-                                    } else {
-                                        "chevron-down"
-                                    })
-                                    .size(px(14.))
-                                    .text_color(theme.text_muted),
-                                ),
-                        )
-                        .child(
                             heading("", theme)
                                 .flex()
                                 .flex_1()
                                 .min_w_0()
                                 .items_center()
                                 .children(
-                                    self.host_icon(&host.config.id, index == self.active)
+                                    self.host_icon(host_id, active_host)
                                         .map(|icon| div().mr(px(6.)).child(icon)),
                                 )
                                 .child(
@@ -1365,6 +1349,12 @@ impl Workspace {
                                         .overflow_hidden()
                                         .text_ellipsis()
                                         .whitespace_nowrap()
+                                        .text_color(disclosure_color(
+                                            theme,
+                                            host_surface,
+                                            active_host,
+                                            !collapsed,
+                                        ))
                                         .child(host.config.label.clone()),
                                 ),
                         )
@@ -1409,8 +1399,7 @@ impl Workspace {
                 }
             }
             for session in sessions {
-                let selected =
-                    index == self.active && model.selected.as_ref() == Some(&session.session_id);
+                let selected = active_host && model.selected.as_ref() == Some(&session.session_id);
                 let id = session.session_id.clone();
                 let expanded = self
                     .session_disclosure
@@ -1451,29 +1440,19 @@ impl Workspace {
                             .when(grabbed, |d| d.bg(theme.overlay(0.16)))
                             .child(
                                 div()
-                                    .flex()
-                                    .flex_none()
-                                    .items_center()
-                                    .justify_center()
-                                    .size(px(22.))
-                                    .child(
-                                        icon(if expanded {
-                                            "chevron-down"
-                                        } else {
-                                            "chevron-right"
-                                        })
-                                        .size(px(14.))
-                                        .text_color(theme.text_muted),
-                                    ),
-                            )
-                            .child(
-                                div()
                                     .flex_1()
                                     .min_w_0()
                                     .overflow_hidden()
                                     .text_ellipsis()
                                     .whitespace_nowrap()
+                                    .pl(px(6.))
                                     .text_size(px(session_text))
+                                    .text_color(disclosure_color(
+                                        theme,
+                                        host_surface,
+                                        selected,
+                                        expanded,
+                                    ))
                                     .child(session.label.clone()),
                             )
                             .children(
@@ -2440,6 +2419,25 @@ pub(super) fn state_color(state: ProgramState, theme: &Theme) -> Hsla {
         ProgramState::Done => theme.tertiary,
         ProgramState::Working => theme.primary,
         ProgramState::Idle => theme.text_muted,
+    }
+}
+
+/// Selection lifts the label; collapsing dims it against its own host surface.
+fn disclosure_color(
+    theme: &Theme,
+    surface: gpui::Hsla,
+    selected: bool,
+    expanded: bool,
+) -> gpui::Hsla {
+    let label = if selected {
+        theme.text_muted.blend(theme.text.opacity(0.5))
+    } else {
+        theme.text_muted
+    };
+    if expanded {
+        label
+    } else {
+        surface.blend(label.opacity(0.75))
     }
 }
 
