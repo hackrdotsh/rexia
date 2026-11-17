@@ -47,7 +47,6 @@ when checked, and are built in this order; each moves to its section once it's d
 
 | Gap | Source |
 | --- | --- |
-| Sidebar width: drag to resize, remembered | preview.12 |
 | Double-click a tab or a pane's title to rename it | preview.15, 27 |
 | Hold Ctrl to show each tab's shortcut | preview.16 |
 | Tailscale notifications: sign-in needed, device approval needed, failures | Notifications › System Notifications |
@@ -96,6 +95,11 @@ when checked, and are built in this order; each moves to its section once it's d
 ## Behavior
 
 Working:
+
+- The sidebar's width: drag its edge beside the panes to resize it (180 to 480 pixels; on
+  the right side, dragging left widens it). The width is kept in settings when the drag
+  ends, so it's remembered across launches, and a double-click on the edge goes back to
+  260.
 
 - Dragging: a tab dragged in the tab bar or the sidebar moves to where the bar between
   tabs shows. A pane picked up by its header, or with Ctrl held anywhere over it (Rex for
