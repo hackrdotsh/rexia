@@ -96,6 +96,12 @@ when checked, and are built in this order; each moves to its section once it's d
 
 Working:
 
+- Session rows in the sidebar: right-click for Rename Session…, Move Up, Move Down and
+  Close Session…; double-click to rename; a close button under the pointer (closing a
+  session always asks, naming busy programs); and drag a row up or down to reorder its
+  host's sessions, with a line where it will land. The order is the server's
+  (`session.move`), so every client shows it.
+
 - Sidebar tab rows show a close button under the pointer (closing asks first when the tab
   is busy), and a tab's hover card steps aside while its right-click menu is open.
 
