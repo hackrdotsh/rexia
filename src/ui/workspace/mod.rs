@@ -1875,6 +1875,14 @@ impl Workspace {
             );
         }
         let surface = fill.map_or(theme.surface, crate::ui::theme::color);
+        let surface_opacity = self
+            .panes
+            .get(block_id)
+            .and_then(|pane| pane.read(cx).background())
+            .zip(fill)
+            .map_or(opacity, |(default, rgb)| {
+                super::terminal::background_opacity(rgb, default, opacity)
+            });
         let id = block_id.to_owned();
         let hover_only = self.settings.interface.pane_headers == PaneHeaders::Hover
             && !self.header_revealed(block_id);
@@ -2055,10 +2063,10 @@ impl Workspace {
             surface
         };
         div()
-            .bg(surface.opacity(opacity))
+            .bg(surface.opacity(surface_opacity))
             .when(hover_only, |d| {
                 d.bg(theme.background.opacity(opacity))
-                    .group_hover(group, |d| d.bg(surface.opacity(opacity)))
+                    .group_hover(group, |d| d.bg(surface.opacity(surface_opacity)))
             })
             .child(header)
             .into_any_element()

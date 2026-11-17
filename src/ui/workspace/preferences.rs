@@ -990,7 +990,7 @@ impl Workspace {
             self.stepper_row(
                 "active-pane-opacity",
                 "Active pane background opacity",
-                "The selected pane while this window is focused. Text and controls stay readable.",
+                "The selected pane while this window is focused. Only its default background color becomes transparent.",
                 format!("{:.0}%", i.active_pane_opacity * 100.),
                 |s| {
                     let steps = (s.interface.active_pane_opacity * 20.).round();

@@ -137,11 +137,21 @@ fn only_backgrounds_follow_pane_and_window_focus() {
     h.wait("first focused", |m| {
         (m.view()?.active_window()?.focused_block_id.as_deref() == Some(&first)).then_some(())
     });
+    let default_bg = h.cx.update(|cx| {
+        h.window
+            .read(cx)
+            .unwrap()
+            .focused_terminal()
+            .unwrap()
+            .read(cx)
+            .background()
+            .unwrap()
+    });
     let fixture = directory.path().join("colors.sh");
-    std::fs::write(&fixture, concat!(
-        r"printf '\033[2J\033[H\033[3;1H\033[38;2;255;0;0;48;2;0;0;255m▀▀▀▀▀▀▀▀▀▀\033[0m\033[5;1HOPACITY_READY'",
+    std::fs::write(&fixture, format!(concat!(
+        r"printf '\033[2J\033[H\033[3;1H\033[38;2;255;0;0;48;2;0;0;255m▀▀▀▀▀▀▀▀▀▀\033[0m\033[4;1H\033[48;2;{};{};{}m          \033[0m\033[5;1HOPACITY_READY'",
         "\nsleep 60\n"
-    )).unwrap();
+    ), (default_bg >> 16) & 255, (default_bg >> 8) & 255, default_bg & 255)).unwrap();
     h.type_text(&format!("sh {}", fixture.display()));
     h.press("enter");
     h.wait("color fixture", |m| {
@@ -170,11 +180,13 @@ fn only_backgrounds_follow_pane_and_window_focus() {
     });
     let upper = Point::new(center.x, center.y - cell.height * 0.3);
     let lower = Point::new(center.x, center.y + cell.height * 0.3);
+    let explicit_default = Point::new(center.x, center.y + cell.height);
     let red = pixel(&mut h, upper);
     background(red, 0xff0000, 1.);
     assert!(red[0] > 245 && red[2] < 5, "foreground stays red: {red:?}");
-    background(pixel(&mut h, lower), 0x0000ff, 0.5);
+    background(pixel(&mut h, lower), 0x0000ff, 1.);
     background(pixel(&mut h, blank), bg, 0.5);
+    background(pixel(&mut h, explicit_default), bg, 0.5);
     background(pixel(&mut h, padding), bg, 0.5);
     h.screenshot("pane-opacity-active");
 
@@ -184,9 +196,12 @@ fn only_backgrounds_follow_pane_and_window_focus() {
             cx.new(|_| OtherWindow)
         })
         .unwrap();
-    background(pixel(&mut h, lower), 0x0000ff, 0.25);
+    background(pixel(&mut h, lower), 0x0000ff, 1.);
+    background(pixel(&mut h, blank), bg, 0.25);
+    background(pixel(&mut h, explicit_default), bg, 0.25);
     h.activate();
-    background(pixel(&mut h, lower), 0x0000ff, 0.5);
+    background(pixel(&mut h, lower), 0x0000ff, 1.);
+    background(pixel(&mut h, blank), bg, 0.5);
     h.cx.update(|cx| {
         other
             .update(cx, |_, window, _| window.remove_window())
@@ -202,7 +217,8 @@ fn only_backgrounds_follow_pane_and_window_focus() {
     h.wait("second focused", |m| {
         (m.view()?.active_window()?.focused_block_id.as_deref() == Some(&second)).then_some(())
     });
-    background(pixel(&mut h, lower), 0x0000ff, 0.25);
+    background(pixel(&mut h, lower), 0x0000ff, 1.);
+    background(pixel(&mut h, blank), bg, 0.25);
     background(pixel(&mut h, upper), 0xff0000, 1.);
     settings(&mut h, |s| s.interface.fade_inactive = FadeInactive::Both);
     let dim_blue =
@@ -211,14 +227,16 @@ fn only_backgrounds_follow_pane_and_window_focus() {
     let dim_blue = ((dim_blue.r * 255.).round() as u32) << 16
         | ((dim_blue.g * 255.).round() as u32) << 8
         | (dim_blue.b * 255.).round() as u32;
-    background(pixel(&mut h, lower), dim_blue, 0.25);
+    background(pixel(&mut h, lower), dim_blue, 1.);
     let dimmed = pixel(&mut h, upper);
     assert_eq!(dimmed[3], 255);
     assert!(dimmed[0] < red[0] - 50, "dimming still works: {dimmed:?}");
     h.screenshot("pane-opacity-inactive-dimmed");
 
     settings(&mut h, |s| s.interface.inactive_pane_opacity = 0.);
-    background(pixel(&mut h, lower), bg, 0.);
+    background(pixel(&mut h, lower), dim_blue, 1.);
+    background(pixel(&mut h, blank), bg, 0.);
+    background(pixel(&mut h, explicit_default), bg, 0.);
     background(pixel(&mut h, padding), bg, 0.);
     assert_eq!(pixel(&mut h, upper), dimmed);
     settings(&mut h, |s| s.interface.inactive_pane_opacity = 1.);
@@ -265,13 +283,13 @@ fn only_backgrounds_follow_pane_and_window_focus() {
             .then_some(())
     });
     h.screenshot("pane-opacity-fullscreen");
-    background(pixel(&mut h, blank), 0x0000ff, 0.5);
-    background(pixel(&mut h, padding), 0x0000ff, 0.5);
+    background(pixel(&mut h, blank), 0x0000ff, 1.);
+    background(pixel(&mut h, padding), 0x0000ff, 1.);
     let header = Point::new(
         blank.x + gpui::px(140.),
         padding.y - cell.height * 6.5 - gpui::px(30.),
     );
-    background(pixel(&mut h, header), 0x0000ff, 0.5);
+    background(pixel(&mut h, header), 0x0000ff, 1.);
     settings(&mut h, |s| {
         s.interface.pane_headers = rexia::settings::PaneHeaders::Hover
     });
@@ -286,7 +304,7 @@ fn only_backgrounds_follow_pane_and_window_focus() {
         pressed_button: None,
         modifiers: Default::default(),
     }));
-    background(pixel(&mut h, header), 0x0000ff, 0.5);
+    background(pixel(&mut h, header), 0x0000ff, 1.);
 
     for setting in [
         "interface.active_pane_opacity",

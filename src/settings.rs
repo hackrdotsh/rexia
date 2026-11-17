@@ -446,7 +446,7 @@ pub struct InterfaceSettings {
     pub tab_icons: u8,
     pub pane_style: PaneStyle,
     pub pane_headers: PaneHeaders,
-    /// Background alpha, from 0 (clear) to 1 (opaque); foregrounds stay readable.
+    /// Default-background alpha, from 0 (clear) to 1 (opaque); program colors stay opaque.
     pub active_pane_opacity: f32,
     pub inactive_pane_opacity: f32,
     pub highlight_active_pane: bool,

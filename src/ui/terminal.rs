@@ -240,6 +240,11 @@ fn background_fills(
 
 const INACTIVE_DIM: f32 = 0.4;
 
+/// Program colors stay opaque; only the terminal's default background is transparent.
+pub fn background_opacity(rgb: u32, default: u32, opacity: f32) -> f32 {
+    if rgb == default { opacity } else { 1. }
+}
+
 /// Dim RGB rather than alpha, so the desktop never leaks through glyphs or sprites.
 fn dim_color(value: Hsla, background: Hsla, dimmed: bool) -> Hsla {
     if !dimmed {
@@ -1717,13 +1722,15 @@ impl Render for TerminalPane {
                 window.with_content_mask(Some(gpui::ContentMask { bounds }), |window| {
                     for &(area, rgb, explicit) in &backgrounds {
                         if !explicit {
-                            window.paint_quad(fill(area, dim(color(rgb)).opacity(opacity)));
+                            let alpha = background_opacity(rgb, frame.bg, opacity);
+                            window.paint_quad(fill(area, dim(color(rgb)).opacity(alpha)));
                         }
                     }
                     paint_images(Layer::BelowBackground, window);
                     for &(area, rgb, explicit) in &backgrounds {
                         if explicit {
-                            window.paint_quad(fill(area, dim(color(rgb)).opacity(opacity)));
+                            let alpha = background_opacity(rgb, frame.bg, opacity);
+                            window.paint_quad(fill(area, dim(color(rgb)).opacity(alpha)));
                         }
                     }
                     let mut rows = Vec::with_capacity(frame.lines.len());
@@ -2418,5 +2425,15 @@ mod tests {
         let fg = gpui::Rgba::from(sprites[0].2);
         assert_eq!(fg.a, 1.);
         assert!((fg.r - 0.6).abs() < 0.001);
+    }
+
+    #[test]
+    fn opacity_only_applies_to_the_default_background_color() {
+        for default in [0x000000, 0xffffff, 0x203040] {
+            for opacity in [0., 0.25, 0.5, 1.] {
+                assert_eq!(background_opacity(default, default, opacity), opacity);
+                assert_eq!(background_opacity(0xe37a1c, default, opacity), 1.);
+            }
+        }
     }
 }

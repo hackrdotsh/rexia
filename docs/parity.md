@@ -125,8 +125,10 @@ Working:
 
 - Separate active and inactive pane background opacity controls default to 100%.
   The selected pane uses the active value only while its window is focused; all other
-  panes use the inactive value. Terminal colors, explicit cell backgrounds, padding,
-  and pane headers become translucent without fading text, cursors, or controls.
+  panes use the inactive value. Only the terminal's default background color becomes
+  translucent, including explicit cells of that same color. Other program colors stay
+  opaque, preserving prompts, TUIs, and half-block pictures. Padding and header fills
+  follow the same rule; ordinary pane headers follow the pane opacity.
   The sidebar and toolbar stay opaque. Blur is requested where the compositor exposes
   a supported protocol; transparency does not guarantee blur.
 
