@@ -91,6 +91,9 @@ when checked, and are built in this order; each moves to its section once it's d
 
 Working:
 
+- Braille draws with Ghostty's dot size and spacing: spare pixels widen the margins and the
+  gaps between dots before the dots grow, so btop's graphs look as they do in Ghostty.
+
 - The pointer hides while typing in a terminal, for every key the terminal takes (Return,
   Backspace, arrows and Ctrl combinations too, not only characters), until the mouse moves.
 
