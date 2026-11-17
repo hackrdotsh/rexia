@@ -59,9 +59,9 @@ fn spacing_contrast_and_theme_palette() {
     let bg = h.wait("the frame", |m| {
         let block = m.view()?.active_window()?.focused_block_id.clone()?;
         let frame = m.panes.get(&block)?.snapshot().frame?;
-        Some((frame.bg, frame.ansi))
+        Some((frame.bg, frame.fg, frame.ansi))
     });
-    let (background, ansi) = bg;
+    let (background, foreground, ansi) = bg;
 
     // As the program asked.
     let faint = drawn(&mut h, row, 0);
@@ -89,8 +89,19 @@ fn spacing_contrast_and_theme_palette() {
         s.terminal.theme_palette = true;
     });
     let themed = drawn(&mut h, row, 6);
-    println!("theme palette: RED #{themed:06x}, theme colors {ansi:06x?}");
-    assert_eq!(themed, ansi[1], "the red became the theme's red");
+    // The nearest of the theme's colors to this red depends on the palette Noctalia has
+    // now, so work it out the way the terminal does: nearest, then readable.
+    let mut theme_colors = ansi.to_vec();
+    theme_colors.push(foreground);
+    let expected = text_color::ensure_contrast(
+        text_color::nearest(0xff5f5f, &theme_colors),
+        background,
+        text_color::MIN_CONTRAST,
+    );
+    println!(
+        "theme palette: RED #{themed:06x}, expected #{expected:06x}, theme colors {ansi:06x?}"
+    );
+    assert_eq!(themed, expected, "the red became the nearest theme color");
     assert!(text_color::contrast(drawn(&mut h, row, 0), background) >= text_color::MIN_CONTRAST);
     h.screenshot("text-theme-palette");
     drop(sessions);
