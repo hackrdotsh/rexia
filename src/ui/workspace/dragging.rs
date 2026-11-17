@@ -22,7 +22,7 @@ pub(super) const SESSION_ROW_GAP: Pixels = px(2.);
 
 /// A temporary order based on the unshifted group bounds at the start of the drag.
 pub(super) struct SessionPreview {
-    host: usize,
+    list: SidebarList,
     grabbed: String,
     grab_offset: Option<Pixels>,
     spots: Vec<(String, Bounds<Pixels>)>,
@@ -30,6 +30,12 @@ pub(super) struct SessionPreview {
     offsets: HashMap<String, Pixels>,
     started: Instant,
     pending: bool,
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub(super) enum SidebarList {
+    Sessions(usize),
+    Tabs(usize, String),
 }
 
 pub(super) struct SessionPreviewRows<'a> {
@@ -127,6 +133,19 @@ pub enum Grab {
     Pane(String),
     /// A session in the sidebar: its host and ID.
     Session(usize, String),
+    SidebarTab(usize, String, String),
+}
+
+impl Grab {
+    fn sidebar(&self) -> Option<(SidebarList, &str)> {
+        match self {
+            Self::Session(host, id) => Some((SidebarList::Sessions(*host), id)),
+            Self::SidebarTab(host, session, id) => {
+                Some((SidebarList::Tabs(*host, session.clone()), id))
+            }
+            _ => None,
+        }
+    }
 }
 
 pub(super) struct Moving {
@@ -170,6 +189,14 @@ struct TabSpot {
 }
 
 impl Workspace {
+    pub(super) fn sidebar_drag_has_ghost(&self) -> bool {
+        self.moving.as_ref().is_some_and(|moving| {
+            moving.active
+                && moving.grab.sidebar().is_some()
+                && (moving.at.x - moving.start.x).abs() >= px(1.)
+        })
+    }
+
     /// A press on a tab or pane that may become a drag.
     pub(super) fn press_for_drag(&mut self, grab: Grab, at: Point<Pixels>) {
         let Some(session) = self.model().selected else {
@@ -186,6 +213,11 @@ impl Workspace {
 
     /// A press on a session row that may become a drag to reorder it.
     pub(super) fn press_session_for_drag(&mut self, host: usize, id: String, at: Point<Pixels>) {
+        self.press_sidebar_drag(Grab::Session(host, id.clone()), id, at);
+    }
+
+    pub(super) fn press_sidebar_drag(&mut self, grab: Grab, session: String, at: Point<Pixels>) {
+        self.sidebar_drag_consumed = false;
         if self
             .session_preview
             .as_ref()
@@ -194,8 +226,8 @@ impl Workspace {
             return;
         }
         self.moving = Some(Moving {
-            grab: Grab::Session(host, id.clone()),
-            session: id,
+            grab,
+            session,
             start: at,
             at,
             active: false,
@@ -203,11 +235,33 @@ impl Workspace {
     }
 
     /// The session rows of `host` where they're drawn, in order.
-    fn session_spots(&self, host: usize) -> Vec<(String, Bounds<Pixels>)> {
-        self.session_order(host)
+    fn sidebar_order(&self, list: &SidebarList) -> Vec<String> {
+        match list {
+            SidebarList::Sessions(host) => self.session_order(*host),
+            SidebarList::Tabs(host, id) => self
+                .hosts
+                .get(*host)
+                .and_then(|host| {
+                    host.handle.snapshot().views.get(id).map(|view| {
+                        view.windows
+                            .iter()
+                            .map(|window| window.id().to_owned())
+                            .collect()
+                    })
+                })
+                .unwrap_or_default(),
+        }
+    }
+
+    fn sidebar_spots(&self, list: &SidebarList) -> Vec<(String, Bounds<Pixels>)> {
+        self.sidebar_order(list)
             .into_iter()
             .filter_map(|id| {
-                let bounds = self.element_bounds(&format!("session-group:{host}:{id}"))?;
+                let key = match list {
+                    SidebarList::Sessions(host) => format!("session-group:{host}:{id}"),
+                    SidebarList::Tabs(..) => format!("side-tab:{id}"),
+                };
+                let bounds = self.element_bounds(&key)?;
                 Some((id, bounds))
             })
             .collect()
@@ -215,19 +269,16 @@ impl Workspace {
 
     /// Where a dragged session would go: before the first row whose middle is below the
     /// pointer, among its own host's rows.
-    fn session_landing(&self, host: usize, id: &str, at: Point<Pixels>) -> Option<Landing> {
+    fn sidebar_landing(&self, list: &SidebarList, id: &str, at: Point<Pixels>) -> Option<Landing> {
         let preview = self
             .session_preview
             .as_ref()
-            .filter(|preview| preview.host == host)?;
+            .filter(|preview| &preview.list == list)?;
         let spots = &preview.spots;
         let first = spots.first()?.1;
         let last = spots.last()?.1;
         let slack = px(16.);
-        let over = at.x >= first.left() - slack
-            && at.x <= first.right() + slack
-            && at.y >= first.top() - slack
-            && at.y <= last.bottom() + slack;
+        let over = at.y >= first.top() - slack && at.y <= last.bottom() + slack;
         if !over {
             return None;
         }
@@ -235,14 +286,17 @@ impl Workspace {
             .iter()
             .find(|(other, b)| other != id && at.y < b.center().y)
             .map(|(id, _)| id.clone());
-        Some(Landing::SessionBefore(before))
+        Some(match list {
+            SidebarList::Sessions(_) => Landing::SessionBefore(before),
+            SidebarList::Tabs(..) => Landing::TabBefore(before),
+        })
     }
 
-    fn update_session_preview(&mut self, host: usize, id: &str, at: Point<Pixels>) {
+    fn update_session_preview(&mut self, list: SidebarList, id: &str, at: Point<Pixels>) {
         if self.session_preview.is_none() {
-            let spots = self.session_spots(host);
+            let spots = self.sidebar_spots(&list);
             self.session_preview = Some(SessionPreview {
-                host,
+                list: list.clone(),
                 grabbed: id.to_owned(),
                 grab_offset: None,
                 order: spots.iter().map(|(id, _)| id.clone()).collect(),
@@ -252,12 +306,12 @@ impl Workspace {
                 pending: false,
             });
         }
-        let landing = self.session_landing(host, id, at);
+        let landing = self.sidebar_landing(&list, id, at);
         let valid = landing.is_some();
         let start = self.moving.as_ref().map_or(at.y, |moving| moving.start.y);
         let preview = self.session_preview.as_mut().unwrap();
         let mut order: Vec<_> = preview.spots.iter().map(|(key, _)| key.clone()).collect();
-        if let Some(Landing::SessionBefore(before)) = landing
+        if let Some(Landing::SessionBefore(before) | Landing::TabBefore(before)) = landing
             && let Some(from) = order.iter().position(|key| key == id)
         {
             let key = order.remove(from);
@@ -276,18 +330,19 @@ impl Workspace {
         };
     }
 
-    pub(super) fn session_preview_rows(
+    pub(super) fn sidebar_preview_rows<'a>(
         &self,
-        host: usize,
-        sessions: &[view::SessionSummary],
+        list: SidebarList,
+        ids: impl Iterator<Item = &'a str> + Clone,
     ) -> Option<SessionPreviewRows<'_>> {
         let preview = self
             .session_preview
             .as_ref()
-            .filter(|preview| preview.host == host)?;
-        let ids = || sessions.iter().map(|session| &session.session_id);
-        if !(ids().eq(preview.spots.iter().map(|(id, _)| id))
-            || preview.pending && ids().eq(preview.order.iter()))
+            .filter(|preview| preview.list == list)?;
+        if !(ids
+            .clone()
+            .eq(preview.spots.iter().map(|(id, _)| id.as_str()))
+            || preview.pending && ids.eq(preview.order.iter().map(String::as_str)))
         {
             return None;
         }
@@ -304,7 +359,7 @@ impl Workspace {
         if let Some(preview) = &self.session_preview
             && preview.pending
         {
-            let order = self.session_order(preview.host);
+            let order = self.sidebar_order(&preview.list);
             let at_target = order == preview.order;
             let at_source = order.iter().eq(preview.spots.iter().map(|(id, _)| id));
             if (at_target && preview.remaining(self.settings.interface.animation) == 0.)
@@ -329,9 +384,14 @@ impl Workspace {
                 return false;
             }
             moving.active = true;
+            if cx.try_global::<super::hover_card::ShownCard>().is_some() {
+                cx.set_global(super::hover_card::ShownCard::default());
+            }
         }
-        if let Grab::Session(host, id) = moving.grab.clone() {
-            self.update_session_preview(host, &id, at);
+        if let Some((list, id)) = moving.grab.sidebar() {
+            let id = id.to_owned();
+            self.sidebar_drag_consumed = true;
+            self.update_session_preview(list, &id, at);
         }
         cx.notify();
         true
@@ -340,7 +400,7 @@ impl Workspace {
     /// Escape: drop the drag without doing anything.
     pub fn cancel_drag(&mut self, cx: &mut Context<Self>) -> bool {
         let dragging = self.moving.take().is_some_and(|m| {
-            if matches!(m.grab, Grab::Session(..))
+            if m.grab.sidebar().is_some()
                 && let Some(preview) = &mut self.session_preview
             {
                 let original = preview.spots.iter().map(|(id, _)| id.clone()).collect();
@@ -402,8 +462,8 @@ impl Workspace {
     }
 
     fn landing(&self, grab: &Grab, at: Point<Pixels>) -> Option<Landing> {
-        if let Grab::Session(host, id) = grab {
-            return self.session_landing(*host, id, at);
+        if let Some((list, id)) = grab.sidebar() {
+            return self.sidebar_landing(&list, id, at);
         }
         let spots = self.tab_spots();
         // Over the tab strip: its row (or column), with some room either side.
@@ -432,7 +492,7 @@ impl Workspace {
         };
         match grab {
             // Handled above, among the session rows.
-            Grab::Session(..) => None,
+            Grab::Session(..) | Grab::SidebarTab(..) => None,
             Grab::Tab(tab) => {
                 if !over_strip {
                     return None;
@@ -538,10 +598,10 @@ impl Workspace {
             return false;
         }
         cx.notify();
-        if let Grab::Session(host, _) = &moving.grab
+        if let Some((list, _)) = moving.grab.sidebar()
             && let Some(preview) = &self.session_preview
             && !self
-                .session_order(*host)
+                .sidebar_order(&list)
                 .iter()
                 .eq(preview.spots.iter().map(|(id, _)| id))
         {
@@ -549,14 +609,17 @@ impl Workspace {
             return true;
         }
         let Some(landing) = self.landing(&moving.grab, moving.at) else {
-            if matches!(moving.grab, Grab::Session(..)) {
+            if moving.grab.sidebar().is_some() {
                 self.session_preview = None;
             }
             return true;
         };
         let session = moving.session;
         match (moving.grab, landing) {
-            (Grab::Session(host, id), Landing::SessionBefore(before)) => {
+            (
+                grab @ (Grab::Session(..) | Grab::SidebarTab(..)),
+                Landing::SessionBefore(before) | Landing::TabBefore(before),
+            ) => {
                 if let Some(preview) = &mut self.session_preview
                     && !preview
                         .order
@@ -565,7 +628,17 @@ impl Workspace {
                 {
                     preview.settle(self.settings.interface.animation);
                     let started = preview.started;
-                    self.place_session(host, &id, before);
+                    match grab {
+                        Grab::Session(host, id) => self.place_session(host, &id, before),
+                        Grab::SidebarTab(host, session, id) => {
+                            let mut payload = json!({"session_id": session, "window_id": id});
+                            if let Some(before) = before {
+                                payload["before_window_id"] = json!(before);
+                            }
+                            self.hosts[host].handle.call("session.move_window", payload);
+                        }
+                        _ => unreachable!(),
+                    }
                     cx.spawn(async move |this, cx| {
                         cx.background_executor().timer(Duration::from_secs(2)).await;
                         let _ = this.update(cx, |ws, cx| {
@@ -582,6 +655,13 @@ impl Workspace {
                     .detach();
                 } else if let Some(preview) = &mut self.session_preview {
                     preview.settle(self.settings.interface.animation);
+                    if preview
+                        .offsets
+                        .values()
+                        .all(|offset| *offset == Pixels::ZERO)
+                    {
+                        self.session_preview = None;
+                    }
                 }
             }
             (Grab::Tab(tab), Landing::TabBefore(before)) => {
@@ -688,16 +768,18 @@ impl Workspace {
     /// The dragged thing under the pointer, and where it would land.
     pub(super) fn render_drag(&self, theme: &Theme) -> Option<AnyElement> {
         let moving = self.moving.as_ref().filter(|m| m.active)?;
-        if let Grab::Session(host, id) = &moving.grab {
-            if self.session_landing(*host, id, moving.at).is_some() {
+        if let Some((list, id)) = moving.grab.sidebar() {
+            if self.sidebar_landing(&list, id, moving.at).is_some()
+                && (moving.at.x - moving.start.x).abs() < px(1.)
+            {
                 return None;
             }
-            return self.render_session_drag(*host, id, moving.at, theme);
+            return self.render_sidebar_drag(&list, id, moving, theme);
         }
         let model = self.model();
         let view = model.view()?;
         let title = match &moving.grab {
-            Grab::Session(..) => String::new(),
+            Grab::Session(..) | Grab::SidebarTab(..) => String::new(),
             Grab::Tab(id) => view
                 .window(id)
                 .map(|w| titles::tab_title(w, &model))
@@ -815,28 +897,40 @@ impl Workspace {
     }
 
     /// A session dragged outside its host's list: its name follows the pointer.
-    fn render_session_drag(
+    fn render_sidebar_drag(
         &self,
-        host: usize,
+        list: &SidebarList,
         id: &str,
-        at: Point<Pixels>,
+        moving: &Moving,
         theme: &Theme,
     ) -> Option<AnyElement> {
-        let label = self
-            .hosts
-            .get(host)?
-            .handle
-            .snapshot()
-            .sessions
+        let label = match list {
+            SidebarList::Sessions(host) => self
+                .hosts
+                .get(*host)?
+                .handle
+                .snapshot()
+                .session(id)?
+                .label
+                .clone(),
+            SidebarList::Tabs(host, session) => {
+                let model = self.hosts.get(*host)?.handle.snapshot();
+                titles::tab_title(model.views.get(session)?.window(id)?, &model)
+            }
+        };
+        let bounds = self
+            .session_preview
+            .as_ref()?
+            .spots
             .iter()
-            .find(|s| s.session_id == id)
-            .map(|s| s.label.clone())
-            .unwrap_or_default();
+            .find(|(key, _)| key == id)?
+            .1;
+        let delta = moving.at - moving.start;
         let chip = div()
             .absolute()
-            .left(at.x + px(12.))
-            .top(at.y + px(10.))
-            .max_w(px(260.))
+            .left(bounds.left() + delta.x)
+            .top(bounds.top() + delta.y)
+            .w(bounds.size.width)
             .px(px(10.))
             .py(px(5.))
             .rounded(theme.radius_small())

@@ -170,6 +170,7 @@ pub struct Workspace {
     /// A tab or pane pressed for dragging, and the drag once it moves.
     moving: Option<dragging::Moving>,
     session_preview: Option<dragging::SessionPreview>,
+    sidebar_drag_consumed: bool,
     /// The sidebar's edge while it's dragged, and the width it's being dragged to.
     sidebar_resizing: Option<sidebar_width::Resizing>,
     /// Change Shortcut came from the Shortcuts page, so it goes back there after.
@@ -405,6 +406,7 @@ impl Workspace {
             fetching_tabs: HashSet::new(),
             moving: None,
             session_preview: None,
+            sidebar_drag_consumed: false,
             sidebar_resizing: None,
             shortcut_return: false,
             tab_selected_at_press: None,
@@ -1016,8 +1018,7 @@ impl Workspace {
         if self.moving.is_some() {
             if event.pressed_button != Some(MouseButton::Left) {
                 // The press ended somewhere we didn't hear about.
-                self.moving = None;
-                cx.notify();
+                self.cancel_drag(cx);
             } else if self.drag_moved(event.position, cx) {
                 return;
             }
@@ -1287,6 +1288,7 @@ impl Workspace {
     }
 
     fn render_sidebar(&self, window: &Window, theme: &Theme, cx: &mut Context<Self>) -> AnyElement {
+        let hover = self.dragging().is_none();
         let (session_text, tab_text, tab_height) =
             self.settings.interface.sidebar_text_size.metrics();
         let mut list = div().flex().flex_col().gap(px(8.));
@@ -1319,7 +1321,7 @@ impl Workspace {
                         .items_center()
                         .rounded(theme.radius_small())
                         .cursor_pointer()
-                        .hover(|d| d.bg(theme.overlay(0.06)))
+                        .when(hover, |d| d.hover(|d| d.bg(theme.overlay(0.06))))
                         .child(self.track_bounds(format!("host-disclosure:{host_id}"), cx))
                         .on_click(cx.listener({
                             let host_id = host_id.clone();
@@ -1374,6 +1376,7 @@ impl Workspace {
                                 theme,
                                 cx.listener(move |ws, _, _, cx| ws.new_session(index, cx)),
                             )
+                            .when(!hover, |d| d.invisible())
                             .tooltip(self.tip("session.new", None)),
                         ),
                 );
@@ -1391,7 +1394,13 @@ impl Workspace {
                         .child(status),
                 );
             }
-            let preview = self.session_preview_rows(index, &model.sessions);
+            let preview = self.sidebar_preview_rows(
+                dragging::SidebarList::Sessions(index),
+                model
+                    .sessions
+                    .iter()
+                    .map(|session| session.session_id.as_str()),
+            );
             let mut sessions: Vec<_> = model.sessions.iter().collect();
             if let Some(preview) = &preview {
                 sessions.sort_by_key(|s| preview.order.iter().position(|id| id == &s.session_id));
@@ -1419,7 +1428,10 @@ impl Workspace {
                     .flex()
                     .flex_col()
                     .gap(dragging::SESSION_ROW_GAP)
-                    .when(grabbed, |d| d.bg(host_surface))
+                    .when(grabbed, |d| {
+                        d.bg(host_surface)
+                            .when(self.sidebar_drag_has_ghost(), |d| d.opacity(0.))
+                    })
                     .child(self.track_bounds(format!("session-group:{index}:{id}"), cx))
                     .child(
                         div()
@@ -1435,7 +1447,7 @@ impl Workspace {
                             .rounded(theme.radius_small())
                             .cursor_pointer()
                             .text_color(theme.text_muted)
-                            .hover(|d| d.bg(theme.overlay(0.06)))
+                            .when(hover, |d| d.hover(|d| d.bg(theme.overlay(0.06))))
                             .when(grabbed, |d| d.bg(theme.overlay(0.16)))
                             .child(
                                 div()
@@ -1474,7 +1486,7 @@ impl Workspace {
                                 div()
                                     .flex()
                                     .invisible()
-                                    .group_hover("session-row", |d| d.visible())
+                                    .when(hover, |d| d.group_hover("session-row", |d| d.visible()))
                                     .child(
                                         small_icon_button(
                                             SharedString::from(format!(
@@ -1542,21 +1554,42 @@ impl Workspace {
                                 })
                             })
                             .on_click(cx.listener(move |ws, _, _, cx| {
+                                if ws.sidebar_drag_consumed {
+                                    return;
+                                }
                                 ws.set_session_expanded(index, id.clone(), !expanded);
                                 cx.notify();
                             })),
                     );
                 if expanded && let Some(view) = model.views.get(&session.session_id) {
-                    for (number, window) in view.windows.iter().enumerate() {
+                    let preview = self.sidebar_preview_rows(
+                        dragging::SidebarList::Tabs(index, session.session_id.clone()),
+                        view.windows.iter().map(|window| window.id()),
+                    );
+                    let mut tabs: Vec<_> = view.windows.iter().enumerate().collect();
+                    if let Some(preview) = &preview {
+                        tabs.sort_by_key(|(_, window)| {
+                            preview.order.iter().position(|id| id == window.id())
+                        });
+                        if preview.animating && !cx.reduce_motion() {
+                            window.request_animation_frame();
+                        }
+                    }
+                    for (number, window) in tabs {
                         let active =
                             selected && view.active_window_id.as_deref() == Some(window.id());
                         let window_id = window.id().to_owned();
                         let (label, path) = titles::sidebar_tab_title(window, &model);
                         let active_fill = theme.overlay(0.16);
+                        let (offset, grabbed) =
+                            preview.as_ref().map_or((px(0.), false), |preview| {
+                                preview.placement(&window_id, cx.reduce_motion())
+                            });
                         session_group = session_group.child(
                             div()
                                 .id(SharedString::from(format!("side-tab-{window_id}")))
                                 .group("side-tab")
+                                .top(offset)
                                 .flex()
                                 .items_center()
                                 .gap(px(8.))
@@ -1568,7 +1601,11 @@ impl Workspace {
                                 .when(active, |d| d.bg(active_fill).text_color(theme.text))
                                 .when(!active, |d| {
                                     d.text_color(theme.text_muted)
-                                        .hover(|d| d.bg(theme.overlay(0.06)))
+                                        .when(hover, |d| d.hover(|d| d.bg(theme.overlay(0.06))))
+                                })
+                                .when(grabbed, |d| {
+                                    d.bg(host_surface.blend(active_fill))
+                                        .when(self.sidebar_drag_has_ghost(), |d| d.opacity(0.))
                                 })
                                 .children(tab_icons::render_icons(
                                     &self.icons_for_tab(window, &model, active, true),
@@ -1623,7 +1660,9 @@ impl Workspace {
                                     d.child(
                                         div()
                                             .invisible()
-                                            .group_hover("side-tab", |d| d.visible())
+                                            .when(hover, |d| {
+                                                d.group_hover("side-tab", |d| d.visible())
+                                            })
                                             .child(
                                                 small_icon_button(
                                                     SharedString::from(format!(
@@ -1655,18 +1694,22 @@ impl Workspace {
                                 })
                                 .on_mouse_down(MouseButton::Left, {
                                     let id = window_id.clone();
+                                    let session = session.session_id.clone();
                                     cx.listener(move |ws, event: &gpui::MouseDownEvent, _, _| {
                                         ws.tab_pressed(
                                             &id,
                                             active && index == ws.active,
                                             event.click_count,
                                         );
-                                        if selected {
-                                            ws.press_for_drag(
-                                                dragging::Grab::Tab(id.clone()),
-                                                event.position,
-                                            );
-                                        }
+                                        ws.press_sidebar_drag(
+                                            dragging::Grab::SidebarTab(
+                                                index,
+                                                session.clone(),
+                                                id.clone(),
+                                            ),
+                                            session.clone(),
+                                            event.position,
+                                        );
                                     })
                                 })
                                 .when(selected, |d| {
@@ -1683,7 +1726,7 @@ impl Workspace {
                                         )
                                     })
                                 })
-                                .when(selected, |d| {
+                                .when(selected && hover, |d| {
                                     d.hoverable_tooltip(self.hover_card(
                                         hover_card::CardTarget::Tab(window_id.clone()),
                                         cx,
@@ -1694,6 +1737,9 @@ impl Workspace {
                                 .on_click(cx.listener({
                                     let session = session.session_id.clone();
                                     move |ws, event: &gpui::ClickEvent, window, cx| {
+                                        if ws.sidebar_drag_consumed {
+                                            return;
+                                        }
                                         if selected {
                                             ws.tab_clicked(
                                                 window_id.clone(),

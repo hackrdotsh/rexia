@@ -165,6 +165,48 @@ fn sidebar_tabs_close_on_hover_and_menus_beat_cards() {
         h.wait_ui("the sidebar row", move |ws| ws.element_bounds(&key))
     };
 
+    let a = row(&mut h, &first);
+    let b = row(&mut h, &second);
+    let target = point(a.right() + px(150.), a.top() + px(4.));
+    move_to(&mut h, b.center());
+    h.cx.advance_clock(Duration::from_millis(700));
+    h.pump();
+    assert!(card(&mut h), "a card is visible before dragging");
+    h.input(PlatformInput::MouseDown(MouseDownEvent {
+        button: MouseButton::Left,
+        position: b.center(),
+        modifiers: Modifiers::default(),
+        click_count: 1,
+        first_mouse: false,
+    }));
+    h.input(PlatformInput::MouseMove(MouseMoveEvent {
+        position: target,
+        pressed_button: Some(MouseButton::Left),
+        modifiers: Modifiers::default(),
+    }));
+    h.wait_ui(
+        "the sidebar tab previews its drop outside the sidebar",
+        |ws| {
+            let neighbor = ws.element_bounds(&format!("side-tab:{first}"))?;
+            (ws.drag_landing().is_some() && neighbor.top() > a.top() + px(10.)).then_some(())
+        },
+    );
+    assert!(!card(&mut h), "dragging hides the hover card");
+    assert_eq!(tabs(&h.host.snapshot()), ids);
+    h.input(PlatformInput::MouseUp(MouseUpEvent {
+        button: MouseButton::Left,
+        position: target,
+        modifiers: Modifiers::default(),
+        click_count: 1,
+    }));
+    h.wait("sidebar tabs reordered", |model| {
+        (tabs(model) == [second.clone(), first.clone()]).then_some(())
+    });
+    h.wait_ui("the reordered tab settles into its slot", |ws| {
+        let dropped = ws.element_bounds(&format!("side-tab:{second}"))?;
+        ((dropped.top() - a.top()).abs() <= px(1.)).then_some(())
+    });
+
     // Rest on the first tab's row: its card shows. Right-click it: the menu wins.
     let bounds = row(&mut h, &first);
     let middle = point(bounds.origin.x + px(60.), bounds.center().y);

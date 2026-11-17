@@ -93,23 +93,41 @@ fn session_rows_rename_move_reorder_and_close() {
     });
     println!("after Move Down: {moved:?}");
 
+    // Returning to the original slot before releasing is still a drag, not a click.
+    let active = row(&mut h, &ours[0]).center();
+    let active_tab = h
+        .host
+        .snapshot()
+        .view()
+        .unwrap()
+        .active_window_id
+        .clone()
+        .unwrap();
+    down(&mut h, active, MouseButton::Left, 1);
+    move_to(&mut h, point(active.x + px(20.), active.y), true);
+    move_to(&mut h, active, true);
+    up(&mut h, active, MouseButton::Left);
+    h.pump();
+    assert!(h.workspace(|ws| {
+        ws.element_bounds(&format!("side-tab:{active_tab}"))
+            .is_some()
+    }));
+
     // Drag c above the top row.
     let c = row(&mut h, &ours[2]);
     let top = row(&mut h, &ours[1]);
     down(&mut h, c.center(), MouseButton::Left, 1);
     move_to(&mut h, point(c.center().x, c.center().y - px(20.)), true);
-    let target = point(top.center().x, top.top() + px(4.));
+    let target = point(top.right() + px(150.), top.top() + px(4.));
     move_to(&mut h, target, true);
-    h.wait_ui(
-        "the grabbed row follows the pointer and its neighbor makes room",
-        |ws| {
-            let dragged = ws.element_bounds(&format!("session:0:{}", ours[2]))?;
-            let neighbor = ws.element_bounds(&format!("session:0:{}", ours[1]))?;
-            ((dragged.center().y - target.y).abs() <= px(1.)
-                && neighbor.top() > top.top() + px(10.))
-            .then_some(())
-        },
+    assert!(
+        h.workspace(|ws| ws.drag_landing().is_some()),
+        "drag must have a landing outside the sidebar"
     );
+    h.wait_ui("the off-axis drag still makes room in the list", |ws| {
+        let neighbor = ws.element_bounds(&format!("session:0:{}", ours[1]))?;
+        (ws.drag_landing().is_some() && neighbor.top() > top.top() + px(10.)).then_some(())
+    });
     assert_eq!(order(&h.host.snapshot(), &ours), [1, 0, 2]);
     h.screenshot("session-drag");
     up(&mut h, target, MouseButton::Left);

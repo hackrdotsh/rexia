@@ -169,16 +169,16 @@ impl Render for HoverCard {
         let Some(workspace) = self.workspace.upgrade() else {
             return div().into_any_element();
         };
-        let (model, local, menu_open) = {
+        let (model, local, obscures_interaction) = {
             let ws = workspace.read(cx);
             (
                 ws.model(),
                 ws.host().handle.endpoint.is_local(),
-                ws.context_menu_open(),
+                ws.context_menu_open() || ws.dragging().is_some(),
             )
         };
-        // A right-click menu is what the pointer is using; the card would cover it.
-        if menu_open {
+        // Keep cards out of the way of context menus and drag targets.
+        if obscures_interaction {
             if cx
                 .try_global::<ShownCard>()
                 .is_some_and(|s| s.target.is_some())
