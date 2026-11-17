@@ -40,24 +40,36 @@ fn piece(x: f32, y: f32, w: f32, h: f32) -> Piece {
     }
 }
 
-/// Square dots on a 2 × 4 grid, sized and spaced as Ghostty sizes them: as big as fits, with
-/// even gaps, and the leftover pixels shared out.
+/// Square dots on a 2 × 4 grid, sized and spaced as Ghostty's sprite font does
+/// (`font/sprite/draw/braille.zig`): dots a quarter of the width or an eighth of the
+/// height, gaps the same, and leftover pixels go to margins and gaps before the dots, so the
+/// dots keep clear space between them.
 fn braille(bits: u8, width: f32, height: f32) -> Vec<Piece> {
     let w = width as i32;
     let h = height as i32;
-    let mut dot = (w / 4).min(h / 8).max(1);
+    let mut dot = (w / 4).min(h / 8);
     let mut x_gap = w / 4;
     let mut y_gap = h / 8;
     let mut x_margin = x_gap / 2;
     let mut y_margin = y_gap / 2;
     let mut x_left = w - 2 * x_margin - x_gap - 2 * dot;
     let mut y_left = h - 2 * y_margin - 3 * y_gap - 4 * dot;
-    // Spare pixels make the dots bigger first, then the gaps, then the margins.
-    if x_left >= 2 && y_left >= 4 {
+    // First, dots that show at all.
+    if x_left >= 2 && y_left >= 4 && dot == 0 {
         dot += 1;
         x_left -= 2;
         y_left -= 4;
     }
+    // Then a margin, rather than dots against the cell's edge.
+    if x_left >= 2 && x_margin == 0 {
+        x_margin = 1;
+        x_left -= 2;
+    }
+    if y_left >= 2 && y_margin == 0 {
+        y_margin = 1;
+        y_left -= 2;
+    }
+    // Then wider gaps between the dots.
     if x_left >= 1 {
         x_gap += 1;
         x_left -= 1;
@@ -66,12 +78,20 @@ fn braille(bits: u8, width: f32, height: f32) -> Vec<Piece> {
         y_gap += 1;
         y_left -= 3;
     }
+    // Then wider margins.
     if x_left >= 2 {
         x_margin += 1;
+        x_left -= 2;
     }
     if y_left >= 2 {
         y_margin += 1;
+        y_left -= 2;
     }
+    // Last, bigger dots.
+    if x_left >= 2 && y_left >= 4 {
+        dot += 1;
+    }
+    let dot = dot.max(1);
     // Dots 1-3 and 7 run down the left, 4-6 and 8 down the right.
     const DOTS: [(i32, i32); 8] = [
         (0, 0),
@@ -173,6 +193,29 @@ mod tests {
             assert!(p.x >= 0. && p.x + p.w <= 9. && p.y >= 0. && p.y + p.h <= 19.);
             assert_eq!(p.w, p.w.round(), "whole pixels");
         }
+    }
+
+    /// Where each dot of `⣿` starts and how big it is, across and down.
+    fn grid(width: f32, height: f32) -> (Vec<f32>, Vec<f32>, f32) {
+        let dots = pieces('⣿', width, height);
+        let mut xs: Vec<f32> = dots.iter().map(|p| p.x).collect();
+        let mut ys: Vec<f32> = dots.iter().map(|p| p.y).collect();
+        xs.sort_by(f32::total_cmp);
+        xs.dedup();
+        ys.sort_by(f32::total_cmp);
+        ys.dedup();
+        (xs, ys, dots[0].w)
+    }
+
+    #[test]
+    fn braille_spaces_dots_as_ghostty_does() {
+        // A 9.5 × 19 pt cell at 2×, as DM Mono 16 px draws: Ghostty's 4 px dots, 5 px
+        // apart, not 5 px dots 4 px apart.
+        assert_eq!(grid(19., 38.), (vec![3., 12.], vec![3., 12., 21., 30.], 4.));
+        // A 10 × 20 cell at 1×: 2 px dots.
+        assert_eq!(grid(10., 20.), (vec![1., 6.], vec![1., 6., 11., 16.], 2.));
+        // A tiny cell still shows its dots.
+        assert_eq!(grid(3., 7.).2, 1.);
     }
 
     #[test]
