@@ -232,6 +232,17 @@ fn spawn_ssh(target: &SshTarget) -> Result<(SshStream, Stderr)> {
     ))
 }
 
+/// Whether a handshake failed because the other end closed before answering.
+fn quiet_close(error: &tokio_tungstenite::tungstenite::Error) -> bool {
+    use tokio_tungstenite::tungstenite::{Error, error::ProtocolError};
+    matches!(
+        error,
+        Error::Protocol(ProtocolError::HandshakeIncomplete)
+            | Error::ConnectionClosed
+            | Error::AlreadyClosed
+    ) || matches!(error, Error::Io(e) if e.kind() == std::io::ErrorKind::UnexpectedEof)
+}
+
 /// The last thing ssh or the host's rex said, once it's had a moment to say it.
 async fn ssh_failure(log: &Stderr) -> Option<String> {
     tokio::time::sleep(std::time::Duration::from_millis(300)).await;
@@ -380,6 +391,18 @@ async fn open(endpoint: &Endpoint, path: &str, protocol: &str) -> Result<Socket>
         (Ok(done), _) => done,
         (Err(error), Some(log)) => match ssh_failure(&log).await {
             Some(reason) => bail!("ssh: {reason}"),
+            // ssh got in, but the rex it ran there ended without a word: a rex too old to
+            // relay (`rex __internal dial-stdio`), first on the host's PATH.
+            None if matches!(endpoint, Endpoint::Ssh(_)) && quiet_close(&error) => {
+                let Endpoint::Ssh(target) = endpoint else {
+                    unreachable!()
+                };
+                bail!(
+                    "the rex on {} closed the connection without answering; it may be too \
+                     old (check `rex version` there, and which rex comes first on its PATH)",
+                    target.host
+                )
+            }
             None => return Err(error.into()),
         },
         (Err(error), None) => return Err(error.into()),
