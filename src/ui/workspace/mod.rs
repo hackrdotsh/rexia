@@ -238,6 +238,8 @@ pub struct Workspace {
     drag: Option<Drag>,
     /// The block this client last focused for the server's focused block.
     focused: Option<String>,
+    /// Hosts whose session lists are hidden in this window.
+    collapsed_hosts: HashSet<String>,
     /// Sidebar disclosure by host ID and session ID; an explicit collapse survives selection.
     session_disclosure: HashMap<(String, String), bool>,
     pub notice: Option<String>,
@@ -446,6 +448,7 @@ impl Workspace {
             window_active: true,
             drag: None,
             focused: None,
+            collapsed_hosts: HashSet::new(),
             session_disclosure: HashMap::new(),
             notice: None,
             keymap: fallback,
@@ -1279,6 +1282,8 @@ impl Workspace {
             self.settings.interface.sidebar_text_size.metrics();
         let mut list = div().flex().flex_col().gap(px(8.));
         for (index, host) in self.hosts.iter().enumerate() {
+            let host_id = &host.config.id;
+            let collapsed = self.collapsed_hosts.contains(host_id);
             let host_surface = if index == self.active {
                 theme.surface
             } else {
@@ -1301,16 +1306,55 @@ impl Workspace {
                     div()
                         .flex()
                         .items_center()
-                        .justify_between()
+                        .child(
+                            small_icon_button(
+                                SharedString::from(format!("host-disclosure-{host_id}")),
+                                if collapsed {
+                                    "chevron-right"
+                                } else {
+                                    "chevron-down"
+                                },
+                                theme.text_muted,
+                                theme,
+                                cx.listener({
+                                    let host_id = host_id.clone();
+                                    move |ws, _, _, cx| {
+                                        if !ws.collapsed_hosts.remove(&host_id) {
+                                            ws.collapsed_hosts.insert(host_id.clone());
+                                        }
+                                        cx.notify();
+                                    }
+                                }),
+                            )
+                            .relative()
+                            .child(self.track_bounds(format!("host-disclosure:{host_id}"), cx))
+                            .tooltip(self.tip(
+                                "",
+                                Some(if collapsed {
+                                    "Expand Host"
+                                } else {
+                                    "Collapse Host"
+                                }),
+                            )),
+                        )
                         .child(
                             heading("", theme)
                                 .flex()
+                                .flex_1()
+                                .min_w_0()
                                 .items_center()
                                 .children(
                                     self.host_icon(&host.config.id, index == self.active)
                                         .map(|icon| div().mr(px(6.)).child(icon)),
                                 )
-                                .child(host.config.label.clone()),
+                                .child(
+                                    div()
+                                        .min_w_0()
+                                        .overflow_hidden()
+                                        .text_ellipsis()
+                                        .whitespace_nowrap()
+                                        .child(host.config.label.clone()),
+                                ),
                         )
                         .child(
                             small_icon_button(
@@ -1323,6 +1367,10 @@ impl Workspace {
                             .tooltip(self.tip("session.new", None)),
                         ),
                 );
+            if collapsed {
+                list = list.child(group);
+                continue;
+            }
             if let Some(status) = status {
                 group = group.child(
                     div()

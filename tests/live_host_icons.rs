@@ -50,7 +50,7 @@ fn sidebar_host_gif_only_animates_for_the_selected_host_in_the_focused_window() 
             .capture_screenshot(harness.window.into())
             .unwrap();
         let mut icons = Vec::new();
-        let x = image.width() / 40;
+        let x = image.width() * 47 / 1000;
         let mut previous = None;
         for y in 0..image.height() {
             let pixel = image.get_pixel(x, y).0;

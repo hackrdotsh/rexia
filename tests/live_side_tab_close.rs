@@ -95,6 +95,19 @@ fn sidebar_spaces_expand_without_switching_and_stay_open_on_focus_changes() {
     assert!(h.workspace(|ws| ws.element_bounds(&row(&first_tab)).is_none()));
     assert!(h.workspace(|ws| ws.element_bounds(&row(&second_tab)).is_some()));
 
+    toggle(&mut h, "host-disclosure:test");
+    h.wait_ui("collapsed host hides sessions and tabs", |ws| {
+        (ws.element_bounds(&format!("session:0:{first}")).is_none()
+            && ws.element_bounds(&row(&second_tab)).is_none())
+        .then_some(())
+    });
+    assert_eq!(h.host.snapshot().selected.as_deref(), Some(first.as_str()));
+    toggle(&mut h, "host-disclosure:test");
+    h.wait_ui("expanded host restores the open session", |ws| {
+        ws.element_bounds(&row(&second_tab))
+    });
+    assert!(h.workspace(|ws| ws.element_bounds(&row(&first_tab)).is_none()));
+
     h.run("session.expand", Value::Null);
     h.wait_ui("Expand Session restores its tabs", |ws| {
         ws.element_bounds(&row(&first_tab))
