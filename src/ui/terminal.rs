@@ -472,6 +472,11 @@ impl TerminalPane {
         colors
     }
 
+    /// The terminal's own background color now, as the program or palette sets it.
+    pub fn background(&self) -> Option<u32> {
+        Some(self.frame()?.bg)
+    }
+
     /// The color the pane header takes to match the program, while the padding fills.
     pub fn header_fill(&self) -> Option<u32> {
         top_fill(&*self.frame()?, self.padding_fill)

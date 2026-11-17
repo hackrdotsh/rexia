@@ -297,6 +297,9 @@ pub fn terminal_font(settings: &Settings) -> TerminalFont {
     font
 }
 
+/// How much of a faded pane's content the background sheet over it hides.
+pub const FADED_SHEET: f32 = 0.4;
+
 impl Workspace {
     pub fn new(
         settings: Settings,
@@ -1636,10 +1639,21 @@ impl Workspace {
                     div()
                         .flex_1()
                         .min_h_0()
-                        .when(faded_content, |d| d.opacity(0.6))
+                        .relative()
                         .child(match &terminal {
                             Some(terminal) => terminal.clone().into_any_element(),
                             None => self.render_onboarding(&session, &pane.block_id, theme, cx),
+                        })
+                        // A sheet of the terminal's background over it, rather than
+                        // opacity: GPUI fades each cell's background and glyph apart, so
+                        // they'd show through each other, as half-block pictures do.
+                        .when(faded_content, |d| {
+                            let under = terminal
+                                .as_ref()
+                                .and_then(|t| t.read(cx).background())
+                                .map(|bg| Hsla::from(gpui::rgb(bg)))
+                                .unwrap_or(theme.background);
+                            d.child(div().absolute().inset_0().bg(under.opacity(FADED_SHEET)))
                         }),
                 );
             let bordered = theme.card_borders || floating.is_some();
