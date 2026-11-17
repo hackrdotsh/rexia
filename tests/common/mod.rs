@@ -154,6 +154,15 @@ impl Harness {
 
     /// A workspace window with these settings, as rexia launched with them would be.
     pub fn open_with(settings: Settings, width: f32, height: f32) -> Self {
+        Self::open_with_path(settings, None, width, height)
+    }
+
+    pub fn open_with_path(
+        settings: Settings,
+        path: Option<PathBuf>,
+        width: f32,
+        height: f32,
+    ) -> Self {
         let mut cx = HeadlessAppContext::with_platform(
             Arc::new(gpui_wgpu::CosmicTextSystem::new("DM Sans")),
             Arc::new(Assets),
@@ -162,7 +171,7 @@ impl Harness {
         cx.update(|cx| cx.set_global(Theme::from_noctalia(&noctalia::load())));
         let window = cx
             .open_window(size(px(width), px(height)), |window, cx| {
-                cx.new(|cx| Workspace::new(settings, None, false, window, cx))
+                cx.new(|cx| Workspace::new(settings, path, false, window, cx))
             })
             .unwrap();
         let host = cx.update(|cx| window.read(cx).unwrap().host().handle.clone());

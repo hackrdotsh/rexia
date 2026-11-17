@@ -51,7 +51,7 @@ impl Section {
         Section::Developer,
     ];
 
-    fn title(self) -> &'static str {
+    pub(super) fn title(self) -> &'static str {
         match self {
             Section::Interface => "Interface",
             Section::Terminal => "Terminal",
@@ -80,9 +80,9 @@ impl Section {
 
 pub struct SettingsPage {
     pub section: Section,
-    label: Entity<TextInput>,
-    font: Entity<TextInput>,
-    fallbacks: Entity<TextInput>,
+    pub(super) label: Entity<TextInput>,
+    pub(super) font: Entity<TextInput>,
+    pub(super) fallbacks: Entity<TextInput>,
     /// Tailscale's preferred hostname, tags and control server, read when signing in.
     pub(super) ts_hostname: Entity<TextInput>,
     pub(super) ts_tags: Entity<TextInput>,
@@ -97,7 +97,13 @@ pub struct SettingsPage {
     pub(super) rex_source: Entity<TextInput>,
     /// Narrows the Shortcuts page as you type.
     pub(super) shortcut_filter: Entity<TextInput>,
-    _subscriptions: [Subscription; 8],
+    pub(super) search: Entity<TextInput>,
+    pub(super) setting_value: Entity<TextInput>,
+    pub(super) setting_target: Option<String>,
+    pub(super) setting_group: Option<String>,
+    pub(super) setting_error: Option<String>,
+    pub(super) search_selected: usize,
+    _subscriptions: [Subscription; 10],
 }
 
 fn state_mut(settings: &mut Settings, state: ProgramState) -> &mut StateActivity {
@@ -241,6 +247,8 @@ impl Workspace {
         let origin = cx.new(|cx| TextInput::new("https://*.example.com", cx));
         let rex_source = cx.new(|cx| TextInput::new("~/src/rex", cx));
         let shortcut_filter = cx.new(|cx| TextInput::new("Filter actions and keys", cx));
+        let search = cx.new(|cx| TextInput::new("Search settings", cx));
+        let setting_value = cx.new(|cx| TextInput::new("Value", cx));
         if let Some(location) = &self.settings.rex_location {
             let text = location.display().to_string();
             rex_source.update(cx, |input, cx| input.set_text(text, cx));
@@ -251,6 +259,22 @@ impl Workspace {
             ssh_socket.update(cx, |input, cx| input.set_text(text, cx));
         }
         let subscriptions = [
+            cx.subscribe_in(
+                &search,
+                window,
+                |ws: &mut Workspace, _, event: &InputEvent, window, cx| {
+                    ws.settings_search_event(event, window, cx);
+                },
+            ),
+            cx.subscribe_in(
+                &setting_value,
+                window,
+                |ws: &mut Workspace, _, event: &InputEvent, _, cx| {
+                    if let InputEvent::Submit { .. } = event {
+                        ws.submit_setting_value(cx);
+                    }
+                },
+            ),
             cx.subscribe_in(&label, window, on_submit),
             cx.subscribe_in(&font, window, on_submit),
             cx.subscribe_in(&fallbacks, window, on_submit),
@@ -327,6 +351,12 @@ impl Workspace {
             origin,
             rex_source,
             shortcut_filter,
+            search,
+            setting_value,
+            setting_target: None,
+            setting_group: None,
+            setting_error: None,
+            search_selected: 0,
             _subscriptions: subscriptions,
         })));
         cx.notify();
@@ -350,6 +380,9 @@ impl Workspace {
             return;
         };
         page.section = section;
+        page.setting_target = None;
+        page.setting_group = None;
+        page.search.update(cx, |input, cx| input.set_text("", cx));
         // The Server section asks the server about itself each time it opens, and the
         // hosts section asks the SSH agent how it is.
         if section == Section::Server {
@@ -389,6 +422,11 @@ impl Workspace {
             return false;
         };
         match keystroke.key.as_str() {
+            "f" if keystroke.modifiers.control => {
+                if let Some(Overlay::Settings(page)) = &self.overlay {
+                    window.focus(&gpui::Focusable::focus_handle(page.search.read(cx), cx), cx);
+                }
+            }
             "escape" => self.close_overlay(window, cx),
             "tab" => {
                 let index = Section::ALL.iter().position(|s| *s == current).unwrap_or(0);
@@ -636,6 +674,7 @@ impl Workspace {
         row(id, title, detail, theme)
             .cursor_pointer()
             .child(switch(on, theme))
+            .children(self.reset_setting_control(id, theme, cx))
             .on_click(cx.listener(move |ws, _, _, cx| ws.update_settings(|s| set(s, !on), cx)))
             .into_any_element()
     }
@@ -660,6 +699,7 @@ impl Workspace {
         });
         row(id, title, detail, theme)
             .child(div().flex().flex_none().gap(px(4.)).children(buttons))
+            .children(self.reset_setting_control(id, theme, cx))
             .into_any_element()
     }
 
@@ -699,6 +739,7 @@ impl Workspace {
         }
         row("font-style", "Font style", detail, theme)
             .child(choices)
+            .children(self.reset_setting_control("font-weight", theme, cx))
             .into_any_element()
     }
 
@@ -723,6 +764,7 @@ impl Workspace {
         cx: &mut Context<Self>,
     ) -> AnyElement {
         row(id, title, detail, theme)
+            .children(self.reset_setting_control(id, theme, cx))
             .child(
                 div()
                     .flex()
@@ -1054,12 +1096,13 @@ impl Workspace {
     ) -> Vec<AnyElement> {
         let t = &self.settings.terminal;
         let mut rows = vec![
-            Self::field_row(
+            self.indexed_field_row(
                 "font",
                 "Terminal font",
                 "Empty uses Ghostty's font or fontconfig's monospace. Enter applies.",
                 &page.font,
                 theme,
+                cx,
             ),
             self.stepper_row(
                 "font-size",
@@ -1365,12 +1408,13 @@ impl Workspace {
             cx,
         ));
         rows.push(section_label("Shell", theme));
-        rows.push(Self::field_row(
+        rows.push(self.indexed_field_row(
             "startup-command",
             "Startup command",
             "The program and arguments new terminals on this computer run, or empty for the login shell. Enter applies.",
             &page.startup,
             theme,
+            cx,
         ));
         rows.push(section_label("Advanced font", theme));
         rows.push(self.stepper_row(
@@ -1407,12 +1451,13 @@ impl Workspace {
             theme,
             cx,
         ));
-        rows.push(Self::field_row(
+        rows.push(self.indexed_field_row(
             "fallback-fonts",
             "Fallback fonts",
             "For characters the terminal font lacks, in order, separated by commas. Enter applies.",
             &page.fallbacks,
             theme,
+            cx,
         ));
         rows.push(section_label("Colors", theme));
         rows.push(self.toggle_row(
@@ -1478,6 +1523,7 @@ impl Workspace {
                 }))
         });
         row(id, title, detail, theme)
+            .children(self.reset_setting_control(id, theme, cx))
             .child(
                 div()
                     .flex()
@@ -1529,6 +1575,7 @@ impl Workspace {
             "The accent, the terminal's text color, or one of its 16 colors.",
             theme,
         )
+        .children(self.reset_setting_control("highlight-color", theme, cx))
         .child(
             div()
                 .flex()
@@ -1586,6 +1633,7 @@ impl Workspace {
             current.label(),
             theme,
         )
+        .children(self.reset_setting_control("notice-position", theme, cx))
         .child(
             div()
                 .flex()
@@ -1702,6 +1750,7 @@ impl Workspace {
         let volume = n.sound_volume;
         rows.push(
             row("volume", "Sound volume", "", theme)
+                .children(self.reset_setting_control("volume", theme, cx))
                 .child(
                     button("volume-test", "Test", false, theme).on_click(move |_, _, _| {
                         sound::play(Cue::Done, volume);
@@ -1803,6 +1852,7 @@ impl Workspace {
             };
             rows.push(
                 row(format!("state-{title}"), title, "", theme)
+                    .children(self.reset_setting_control(&format!("state-{title}"), theme, cx))
                     .child(cell(0, current.tabs))
                     .child(cell(1, current.notify))
                     .child(cell(2, current.sound))
@@ -1818,12 +1868,13 @@ impl Workspace {
         theme: &Theme,
         cx: &mut Context<Self>,
     ) -> Vec<AnyElement> {
-        let mut rows = vec![Self::field_row(
+        let mut rows = vec![self.indexed_field_row(
             "client-label",
             "Client label",
             "Names this computer in `rex client ls`. Enter applies.",
             &page.label,
             theme,
+            cx,
         )];
         rows.push(
             div()
@@ -1937,19 +1988,26 @@ impl Workspace {
         theme: &Theme,
         cx: &mut Context<Self>,
     ) -> AnyElement {
-        let rows = match page.section {
-            Section::Interface => self.interface_section(theme, cx),
-            Section::Terminal => self.terminal_section(page, theme, cx),
-            Section::Notifications => self.notifications_section(theme, cx),
-            Section::Hosts => self.hosts_section(page, theme, cx),
-            Section::Server => self.server_section(theme, cx),
-            Section::Integrations => self.integrations_section(theme, cx),
-            Section::Developer => self.developer_section(page, theme, cx),
-            Section::Shortcuts => {
-                let filter = page.shortcut_filter.read(cx).text().to_owned();
-                let mut rows = vec![page.shortcut_filter.clone().into_any_element()];
-                rows.extend(self.shortcuts_section(&filter, theme, cx));
-                rows
+        let rows = if !page.search.read(cx).text().trim().is_empty() || page.setting_group.is_some()
+        {
+            self.settings_search_rows(page, theme, cx)
+        } else if page.setting_target.is_some() {
+            self.setting_editor_rows(page, theme, cx)
+        } else {
+            match page.section {
+                Section::Interface => self.interface_section(theme, cx),
+                Section::Terminal => self.terminal_section(page, theme, cx),
+                Section::Notifications => self.notifications_section(theme, cx),
+                Section::Hosts => self.hosts_section(page, theme, cx),
+                Section::Server => self.server_section(theme, cx),
+                Section::Integrations => self.integrations_section(theme, cx),
+                Section::Developer => self.developer_section(page, theme, cx),
+                Section::Shortcuts => {
+                    let filter = page.shortcut_filter.read(cx).text().to_owned();
+                    let mut rows = vec![page.shortcut_filter.clone().into_any_element()];
+                    rows.extend(self.shortcuts_section(&filter, theme, cx));
+                    rows
+                }
             }
         };
         let nav: Vec<_> = Section::ALL
@@ -2022,8 +2080,13 @@ impl Workspace {
                                     .text_size(px(16.))
                                     .font_weight(FontWeight::BOLD)
                                     .pb(px(6.))
-                                    .child(page.section.title()),
+                                    .child(if page.search.read(cx).text().is_empty() {
+                                        page.section.title()
+                                    } else {
+                                        "Search results"
+                                    }),
                             )
+                            .child(page.search.clone())
                             .children(rows),
                     ),
             )

@@ -124,6 +124,7 @@ pub enum Choice {
         label: String,
         address: String,
     },
+    Setting(String),
 }
 
 #[derive(Clone, Debug)]
@@ -256,6 +257,26 @@ fn command_items(ws: &Workspace) -> Vec<Item> {
             },
         })
         .collect();
+    items.extend(
+        crate::settings_index::entries()
+            .into_iter()
+            .map(|entry| Item {
+                title: entry.title.clone(),
+                detail: Some(format!(
+                    "Settings › {} · {}",
+                    entry.section,
+                    crate::settings_index::display(&crate::settings_index::value(
+                        &ws.settings,
+                        &entry.path
+                    ))
+                )),
+                keys: None,
+                icon: "settings",
+                status: None,
+                current: false,
+                choice: Choice::Setting(entry.path),
+            }),
+    );
     for action in &ws.keymap.actions {
         // Block methods without a title are for bindings, not menus.
         let Some(title) = action.title.clone() else {
@@ -967,6 +988,9 @@ impl Workspace {
         cx: &mut Context<Self>,
     ) {
         match choice {
+            Choice::Setting(path) => {
+                if let Err(error) = self.open_indexed_setting(&path, window, cx) { self.notice = Some(error); }
+            }
             Choice::Action { name, args } => {
                 if let Err((_, message)) = self.run_action(&name, args, "palette", Target::default(), window, cx) {
                     self.notice = Some(message);

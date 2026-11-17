@@ -117,7 +117,11 @@ impl Workspace {
             )
             .on_click(cx.listener(move |ws, _, _, cx| ws.choose_cursor_shader(shader, cx)))
         });
-        rows.push(row("cursor-shader", "Shader", current.description(), theme).into_any_element());
+        rows.push(
+            row("cursor-shader", "Shader", current.description(), theme)
+                .children(self.reset_setting_control("cursor-shader", theme, cx))
+                .into_any_element(),
+        );
         rows.push(
             div()
                 .flex()

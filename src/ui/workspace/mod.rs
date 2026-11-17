@@ -25,6 +25,7 @@ pub mod quick_look;
 pub mod remote;
 pub mod server_status;
 pub mod sessions;
+pub mod settings_search;
 pub mod shortcuts_page;
 pub mod sidebar_width;
 mod ssh;
@@ -206,6 +207,7 @@ pub struct Workspace {
     preview_generation: u64,
     preview_cancel: Option<std::sync::Arc<std::sync::atomic::AtomicBool>>,
     quick_preview: Option<quick_look::Preview>,
+    pending_settings_link: Option<String>,
     /// Onboarding walkthroughs' steps as the server last answered rexia, by block, and
     /// the blocks already asked.
     onboarding: HashMap<String, (u64, String)>,
@@ -428,6 +430,7 @@ impl Workspace {
             preview_generation: 0,
             preview_cancel: None,
             quick_preview: None,
+            pending_settings_link: None,
             onboarding: HashMap::new(),
             onboarding_asked: Default::default(),
             origin_error: None,
@@ -2155,7 +2158,7 @@ impl Workspace {
     }
 
     /// Records where its parent is drawn under `key`; the parent must be `relative`.
-    fn track_bounds(&self, key: String, cx: &mut Context<Self>) -> impl IntoElement + use<> {
+    fn track_bounds(&self, key: String, cx: &Context<Self>) -> impl IntoElement + use<> {
         let entity = cx.entity();
         canvas(
             move |bounds, _, cx| {
@@ -2274,6 +2277,16 @@ impl Focusable for Workspace {
 
 impl Render for Workspace {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+        if let Some(link) = self.pending_settings_link.take() {
+            cx.spawn_in(window, async move |this, cx| {
+                let _ = this.update_in(cx, |ws, window, cx| {
+                    if let Err(error) = ws.open_settings_link(&link, window, cx) {
+                        ws.notice = Some(error);
+                    }
+                });
+            })
+            .detach();
+        }
         self.window_active = window.is_window_active();
         if self.settings_changed.take() {
             self.share_settings(cx);

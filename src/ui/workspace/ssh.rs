@@ -127,12 +127,13 @@ impl Workspace {
                 .pb(px(8.))
                 .children(buttons)
                 .into_any_element(),
-            Self::field_row(
+            self.indexed_field_row(
                 "ssh-agent-socket",
                 "SSH agent socket",
                 "The path of a custom agent's socket. Enter uses it.",
                 &page.ssh_socket,
                 theme,
+                cx,
             ),
             div()
                 .id("ssh-agent-status")

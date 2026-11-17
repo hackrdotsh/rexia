@@ -163,12 +163,13 @@ impl Workspace {
             .into_any_element(),
         );
         if custom {
-            rows.push(Self::field_row(
+            rows.push(self.indexed_field_row(
                 "rex-source",
                 "Source directory",
                 "A rex executable, or a checkout with one in bin, build, dist or out. Enter uses it.",
                 &page.rex_source,
                 theme,
+                cx,
             ));
         }
         let (status, details) = match self.rex_check() {
