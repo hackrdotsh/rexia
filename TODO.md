@@ -1,6 +1,10 @@
 # Deferred work
 
-These are future considerations, not current implementation tasks.
+These are future tasks and considerations; none are being implemented yet.
+
+- [ ] Implement QR-code device pairing (`client.pair_device`). This is a required
+  parity feature, not a Linux exclusion. Manually adding a host remains a
+  workaround, not a replacement for pairing.
 
 - [ ] Revisit distribution and updates for other Linux distributions. Nix is the
   current packaging approach, not a permanent requirement. Evaluate native
