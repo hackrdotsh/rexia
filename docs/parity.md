@@ -99,7 +99,8 @@ Working:
   be dragged to a corner or moved through Settings. A new window returns to its
   previous session when its only tab closes. The macOS traffic-light fix does
   not apply to Linux. Single-cell Unicode glyphs are sized and clipped to avoid
-  overpainting adjacent cells; ISO/JIS keys retain their physical identities.
+  overpainting adjacent cells, except for private-use prompt glyphs such as Nerd
+  Fonts and Powerline icons that intentionally overhang. ISO/JIS keys retain their physical identities.
   macOS-specific layout switching is not reproduced on Linux.
 
 - **Settings → Interface → Show Activity below Sessions** starts Activity halfway down

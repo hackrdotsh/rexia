@@ -1551,7 +1551,12 @@ fn segments(
             sprites.push((col, c, fg));
             continue;
         }
-        let fit_cell = !cell.has(flags::WIDE) && !cell.text.is_ascii();
+        // Nerd Fonts and Powerline use private-use glyphs that can deliberately
+        // extend into adjacent whitespace. Keep their original size and overhang.
+        let private_use = cell.text.chars().next().is_some_and(|c| {
+            matches!(c, '\u{e000}'..='\u{f8ff}' | '\u{f0000}'..='\u{ffffd}' | '\u{100000}'..='\u{10fffd}')
+        });
+        let fit_cell = !cell.has(flags::WIDE) && !cell.text.is_ascii() && !private_use;
         let alone = cell.has(flags::WIDE) || cell.text.chars().count() > 1 || fit_cell;
         if alone {
             segments.push(Segment {
@@ -2382,6 +2387,24 @@ mod tests {
         let (segments, _, _) = segments(&row, &look());
         let cells: Vec<_> = segments.iter().map(|s| (s.col, s.fit_cell)).collect();
         assert_eq!(cells, [(0, false), (1, true), (2, false), (4, false)]);
+    }
+
+    #[test]
+    fn prompt_icons_keep_their_original_shaping() {
+        let row = [
+            cell("\u{f313}", 0),
+            cell("\u{e0b0}", 0),
+            cell("\u{f0001}", 0),
+            cell("a", 0),
+        ];
+        let (segments, _, _) = segments(&row, &look());
+        assert_eq!(
+            segments.len(),
+            1,
+            "prompt icons remain in the normal text run"
+        );
+        assert!(!segments[0].fit_cell);
+        assert_eq!(segments[0].forced, Some(4));
     }
 
     #[test]
