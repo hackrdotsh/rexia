@@ -996,6 +996,16 @@ impl Workspace {
                 theme,
                 cx,
             ),
+            self.choice_row(
+                "minimized-corner", "Minimized floating windows", "",
+                &[
+                    (crate::settings::MinimizedCorner::TopLeft, "Top left"),
+                    (crate::settings::MinimizedCorner::TopRight, "Top right"),
+                    (crate::settings::MinimizedCorner::BottomLeft, "Bottom left"),
+                    (crate::settings::MinimizedCorner::BottomRight, "Bottom right"),
+                ],
+                i.minimized_corner, |s, corner| s.interface.minimized_corner = corner, theme, cx,
+            ),
             self.stepper_row(
                 "active-pane-opacity",
                 "Active pane background opacity",

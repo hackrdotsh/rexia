@@ -262,26 +262,26 @@ fn command_items(ws: &Workspace) -> Vec<Item> {
             },
         })
         .collect();
-    items.extend(
-        crate::settings_index::entries()
-            .into_iter()
-            .map(|entry| Item {
-                title: entry.title.clone(),
-                detail: Some(format!(
-                    "Settings › {} · {}",
-                    entry.section,
-                    crate::settings_index::display(&crate::settings_index::value(
-                        &ws.settings,
-                        &entry.path
-                    ))
-                )),
-                keys: None,
-                icon: "settings",
-                status: None,
-                current: false,
-                choice: Choice::Setting(entry.path),
-            }),
-    );
+    items.extend(crate::settings_index::entries().into_iter().map(|entry| {
+        Item {
+            title: entry.title.clone(),
+            detail: Some(format!(
+                "Settings › {} · {}",
+                entry.section,
+                crate::settings_index::display(&crate::settings_index::value(
+                    &ws.settings,
+                    &entry.path
+                ))
+            )),
+            keys: actions::setting_action(&entry.path)
+                .and_then(|action| ws.keymap.keys_for(action, None))
+                .map(keymap::display),
+            icon: "settings",
+            status: None,
+            current: false,
+            choice: Choice::Setting(entry.path),
+        }
+    }));
     for action in &ws.keymap.actions {
         // Block methods without a title are for bindings, not menus.
         let Some(title) = action.title.clone() else {
@@ -566,8 +566,7 @@ fn shader_items(ws: &Workspace) -> Vec<Item> {
 }
 
 fn shortcut_items(ws: &Workspace) -> Vec<Item> {
-    actions::ACTIONS
-        .iter()
+    actions::all()
         .filter(|a| actions::rebindable(a) && a.name != "client.key.forward")
         .map(|a| Item {
             title: a.title.to_owned(),

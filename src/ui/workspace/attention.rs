@@ -39,6 +39,7 @@ struct Row {
     block: String,
     title: String,
     detail: Option<String>,
+    message: Option<String>,
     icon: &'static str,
     mark: Option<(ProgramState, &'static str)>,
     state: ProgramState,
@@ -355,12 +356,8 @@ impl Workspace {
                             session_label: session_label.clone(),
                             block: block.clone(),
                             title,
-                            detail: record.and_then(|r| match (&r.app, &r.msg) {
-                                (Some(app), Some(msg)) => Some(format!("{app}: {msg}")),
-                                (None, Some(msg)) => Some(msg.clone()),
-                                (Some(app), None) => Some(app.clone()),
-                                (None, None) => None,
-                            }),
+                            detail: record.and_then(|r| r.app.clone()),
+                            message: record.and_then(|r| r.msg.clone()),
                             icon: titles::program_icon(block_state),
                             mark,
                             state,
@@ -389,7 +386,8 @@ impl Workspace {
                         .map(str::to_owned)
                         .or(state.process.name.clone())
                         .unwrap_or_else(|| "Shell".into()),
-                    detail: state.status().and_then(|r| r.msg.clone()),
+                    detail: state.status().and_then(|r| r.app.clone()),
+                    message: state.status().and_then(|r| r.msg.clone()),
                     icon: titles::program_icon(Some(state)),
                     mark: Some(mark),
                     state: mark.0,
@@ -428,7 +426,7 @@ impl Workspace {
                 div()
                     .id(SharedString::from(format!("activity-{index}")))
                     .flex()
-                    .items_center()
+                    .items_start()
                     .gap(px(8.))
                     .px(px(10.))
                     .py(px(6.))
@@ -476,6 +474,25 @@ impl Workspace {
                                         .text_size(px(11.))
                                         .text_color(theme.text_muted)
                                         .child(row.session_label.clone()),
+                                )
+                            })
+                            .when_some(row.message.clone(), |d, message| {
+                                d.child(
+                                    div()
+                                        .id("activity-message")
+                                        .mt(px(4.))
+                                        .px(px(6.))
+                                        .py(px(3.))
+                                        .text_size(px(11.))
+                                        .text_color(theme.text_muted)
+                                        .bg(theme.overlay(0.08))
+                                        .when(row.state == ProgramState::Working, |d| {
+                                            d.rounded_full().whitespace_nowrap().overflow_x_scroll()
+                                        })
+                                        .when(row.state != ProgramState::Working, |d| {
+                                            d.rounded(theme.radius_small())
+                                        })
+                                        .child(message),
                                 )
                             }),
                     )

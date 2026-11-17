@@ -173,6 +173,51 @@ impl Workspace {
         Ok(())
     }
 
+    pub(super) fn perform_indexed_setting(
+        &mut self,
+        entry: &index::Entry,
+        args: &Value,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) -> Result<(), String> {
+        let path = &entry.path;
+        let current = index::value(&self.settings, path);
+        let flag = |name: &str| args[name].as_bool() == Some(true);
+        let value = if flag("reset") {
+            entry.default.clone()
+        } else if let Some(value) = args.get("value") {
+            value.clone()
+        } else if flag("increase") || flag("decrease") {
+            let (min, max, step) =
+                index::number_range(path).ok_or("This setting is not a number")?;
+            let step = if flag("decrease") { -step } else { step };
+            let next = (current
+                .as_f64()
+                .or_else(|| entry.default.as_f64())
+                .unwrap_or(min)
+                + step)
+                .clamp(min, max);
+            if current.is_i64() || current.is_u64() {
+                json!(next as i64)
+            } else {
+                json!(next)
+            }
+        } else if let Some(on) = current.as_bool() {
+            json!(!on)
+        } else {
+            let choices = index::choices(path);
+            if choices.is_empty() {
+                return self.open_indexed_setting(path, window, cx);
+            }
+            let next = choices
+                .iter()
+                .position(|choice| choice == &current)
+                .map_or(0, |i| (i + 1) % choices.len());
+            choices[next].clone()
+        };
+        self.update_indexed_setting(path, value, cx)
+    }
+
     fn sync_indexed_field(&mut self, path: &str, cx: &mut Context<Self>) {
         let value = index::value(&self.settings, path);
         let Some(Overlay::Settings(page)) = &mut self.overlay else {

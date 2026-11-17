@@ -420,6 +420,35 @@ impl Default for TerminalSettings {
     }
 }
 
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum MinimizedCorner {
+    TopLeft,
+    TopRight,
+    BottomLeft,
+    #[default]
+    BottomRight,
+}
+
+impl MinimizedCorner {
+    pub fn from_position(x: f64, y: f64) -> Self {
+        match (x >= 0.5, y >= 0.5) {
+            (false, false) => Self::TopLeft,
+            (true, false) => Self::TopRight,
+            (false, true) => Self::BottomLeft,
+            (true, true) => Self::BottomRight,
+        }
+    }
+
+    pub fn top(self) -> bool {
+        matches!(self, Self::TopLeft | Self::TopRight)
+    }
+
+    pub fn right(self) -> bool {
+        matches!(self, Self::TopRight | Self::BottomRight)
+    }
+}
+
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(default)]
 pub struct InterfaceSettings {
@@ -446,6 +475,7 @@ pub struct InterfaceSettings {
     pub tab_icons: u8,
     pub pane_style: PaneStyle,
     pub pane_headers: PaneHeaders,
+    pub minimized_corner: MinimizedCorner,
     /// Default-background alpha, from 0 (clear) to 1 (opaque); program colors stay opaque.
     pub active_pane_opacity: f32,
     pub inactive_pane_opacity: f32,
@@ -487,6 +517,7 @@ impl Default for InterfaceSettings {
             tab_icons: 3,
             pane_style: PaneStyle::Comfortable,
             pane_headers: PaneHeaders::Always,
+            minimized_corner: MinimizedCorner::default(),
             active_pane_opacity: 1.,
             inactive_pane_opacity: 1.,
             highlight_active_pane: true,

@@ -108,6 +108,29 @@ async fn run(
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
         .kill_on_drop(true);
+    #[cfg(target_os = "linux")]
+    {
+        let parent = std::process::id();
+        // SAFETY: the child only makes signal-safe syscalls before exec. Check for
+        // the parent exiting before the kernel's parent-death signal is installed.
+        unsafe {
+            command.pre_exec(move || {
+                unsafe extern "C" {
+                    fn prctl(option: std::ffi::c_int, ...) -> std::ffi::c_int;
+                    fn getppid() -> std::ffi::c_int;
+                }
+                const PR_SET_PDEATHSIG: std::ffi::c_int = 1;
+                const SIGTERM: std::ffi::c_ulong = 15;
+                if prctl(PR_SET_PDEATHSIG, SIGTERM, 0u64, 0u64, 0u64) == -1 {
+                    return Err(std::io::Error::last_os_error());
+                }
+                if getppid() as u32 != parent {
+                    return Err(std::io::Error::from(std::io::ErrorKind::BrokenPipe));
+                }
+                Ok(())
+            });
+        }
+    }
     let mut child = match command.spawn() {
         Ok(child) => child,
         Err(error) => {

@@ -332,6 +332,11 @@ impl Workspace {
         window: &mut Window,
         cx: &mut Context<Self>,
     ) -> Outcome {
+        if let Some(entry) = actions::setting_entry(name) {
+            self.perform_indexed_setting(entry, args, window, cx)
+                .map_err(refused)?;
+            return Ok(Value::Null);
+        }
         let model = self.model();
         let session = target.session_id.clone().or(model.selected.clone());
         let view = session.as_ref().and_then(|s| model.views.get(s)).cloned();

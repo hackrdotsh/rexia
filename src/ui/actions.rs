@@ -826,8 +826,53 @@ pub const ACTIONS: &[ActionDef] = &[
     ),
 ];
 
+static SETTING_ENTRIES: std::sync::LazyLock<Vec<(String, crate::settings_index::Entry)>> =
+    std::sync::LazyLock::new(|| {
+        crate::settings_index::entries()
+            .into_iter()
+            .map(|entry| {
+                let suffix = if entry.path == "interface.pane_style" {
+                    "interface.panes.density"
+                } else {
+                    &entry.path
+                };
+                (format!("client.setting.{suffix}"), entry)
+            })
+            .collect()
+    });
+
+static SETTING_ACTIONS: std::sync::LazyLock<Vec<ActionDef>> = std::sync::LazyLock::new(|| {
+    SETTING_ENTRIES.iter().map(|(name, entry)| ActionDef {
+        name, title: &entry.title, category: "Settings", keywords: &entry.path, keys: &[],
+        args: Some(r#"{"type":"object","properties":{"value":{},"increase":{"type":"boolean"},"decrease":{"type":"boolean"},"reset":{"type":"boolean"}}}"#),
+        repeats: false,
+    }).collect()
+});
+
+pub fn setting_action(path: &str) -> Option<&'static str> {
+    SETTING_ENTRIES
+        .iter()
+        .find(|(_, entry)| entry.path == path)
+        .map(|(name, _)| name.as_str())
+}
+
+pub fn setting_entry(name: &str) -> Option<&'static crate::settings_index::Entry> {
+    name.starts_with("client.setting.")
+        .then(|| {
+            SETTING_ENTRIES
+                .iter()
+                .find(|(action, _)| action == name)
+                .map(|(_, entry)| entry)
+        })
+        .flatten()
+}
+
+pub fn all() -> impl Iterator<Item = &'static ActionDef> {
+    ACTIONS.iter().chain(SETTING_ACTIONS.iter())
+}
+
 pub fn find(name: &str) -> Option<&'static ActionDef> {
-    ACTIONS.iter().find(|a| a.name == name)
+    all().find(|a| a.name == name)
 }
 
 /// The `client.keymap` request: rexia's actions and its default bindings as the bottom layer,
@@ -842,8 +887,7 @@ pub fn rebindable(action: &ActionDef) -> bool {
 }
 
 pub fn keymap_request(shortcuts: &Shortcuts) -> Value {
-    let actions: Vec<Value> = ACTIONS
-        .iter()
+    let actions: Vec<Value> = all()
         .map(|a| {
             let mut action = json!({"name": a.name, "kind": "client", "title": a.title,
                 "category": a.category, "keywords": a.keywords});
@@ -858,8 +902,7 @@ pub fn keymap_request(shortcuts: &Shortcuts) -> Value {
         .collect();
     // A key the user gave one action leaves every other action's defaults.
     let claimed: Vec<&Vec<String>> = shortcuts.values().filter(|k| !k.is_empty()).collect();
-    let bindings: Vec<Value> = ACTIONS
-        .iter()
+    let bindings: Vec<Value> = all()
         .flat_map(|a| -> Vec<Value> {
             if let Some(keys) = shortcuts.get(a.name).filter(|_| rebindable(a)) {
                 return if keys.is_empty() {
@@ -964,7 +1007,7 @@ mod tests {
     fn request_lists_actions_with_schemas_and_bindings() {
         let request = keymap_request(&Shortcuts::new());
         let actions = request["actions"].as_array().unwrap();
-        assert_eq!(actions.len(), ACTIONS.len());
+        assert_eq!(actions.len(), all().count());
         let goto = actions
             .iter()
             .find(|a| a["name"] == "client.tab.goto")

@@ -59,6 +59,57 @@ pub struct ShortcutRow {
 }
 
 impl Workspace {
+    /// Watch the containing directory so atomic replacement by an editor still works.
+    pub(super) fn watch_shortcuts(
+        path: std::path::PathBuf,
+        cx: &mut Context<Self>,
+    ) -> Option<(::notify::RecommendedWatcher, gpui::Task<()>)> {
+        use ::notify::Watcher as _;
+        let directory = path.parent()?.to_owned();
+        std::fs::create_dir_all(&directory).ok()?;
+        let (send, changes) = flume::bounded(1);
+        let watched = path.clone();
+        let mut watcher =
+            ::notify::recommended_watcher(move |event: ::notify::Result<::notify::Event>| {
+                if let Ok(event) = event
+                    && (event.kind.is_modify() || event.kind.is_create())
+                    && event.paths.contains(&watched)
+                {
+                    let _ = send.try_send(());
+                }
+            })
+            .ok()?;
+        watcher
+            .watch(&directory, ::notify::RecursiveMode::NonRecursive)
+            .ok()?;
+        let task = cx.spawn(async move |this, cx| {
+            while changes.recv_async().await.is_ok() {
+                let read_path = path.clone();
+                let Ok(settings) = cx
+                    .background_executor()
+                    .spawn(async move { crate::settings::Settings::load(&read_path) })
+                    .await
+                else {
+                    continue;
+                };
+                if this
+                    .update(cx, |ws, cx| {
+                        if ws.settings.shortcuts != settings.shortcuts {
+                            ws.settings.shortcuts = settings.shortcuts;
+                            ws.keymap = actions::fallback_keymap(&ws.settings.shortcuts);
+                            ws.send_keymap();
+                            cx.notify();
+                        }
+                    })
+                    .is_err()
+                {
+                    break;
+                }
+            }
+        });
+        Some((watcher, task))
+    }
+
     /// Every action, rexia's then the server's, with its keys, matching `filter` (title,
     /// name, category or keys).
     pub fn shortcut_rows(&self, filter: &str) -> Vec<ShortcutRow> {
@@ -85,8 +136,7 @@ impl Workspace {
                 .collect();
             (keys, config)
         };
-        let mut rows: Vec<ShortcutRow> = actions::ACTIONS
-            .iter()
+        let mut rows: Vec<ShortcutRow> = actions::all()
             .filter(|a| a.name != "client.key.forward")
             .map(|a| {
                 let (keys, config) = keys_of(a.name);

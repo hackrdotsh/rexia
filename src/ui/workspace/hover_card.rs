@@ -356,12 +356,7 @@ impl Render for HoverCard {
                                 .child(div().flex_none().text_color(state).child(report.badge)),
                         )
                         .when_some(report.message.clone(), |d, message| {
-                            d.child(
-                                div()
-                                    .text_color(theme.text_muted)
-                                    .line_clamp(3)
-                                    .child(message),
-                            )
+                            d.child(div().text_color(theme.text_muted).child(message))
                         })
                         .when_some(report.progress, |d, p| {
                             d.child(progress_bar(p, state, &theme))

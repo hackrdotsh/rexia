@@ -144,6 +144,10 @@ enum Drag {
         origin: Rect,
         bounds: Rect,
     },
+    Minimized {
+        start: Point<Pixels>,
+        moved: bool,
+    },
 }
 
 pub struct Workspace {
@@ -270,6 +274,7 @@ pub struct Workspace {
     notifier: Option<crate::notify::Notifier>,
     _tasks: Vec<Task<()>>,
     _watcher: Option<noctalia::Watcher>,
+    _shortcuts_watcher: Option<::notify::RecommendedWatcher>,
 }
 
 fn endpoint_for(config: &HostConfig) -> Endpoint {
@@ -332,6 +337,11 @@ impl Workspace {
             .and_then(|id| settings.hosts.iter().position(|h| &h.id == id))
             .unwrap_or(0);
         let mut tasks = vec![Self::listen_for_ssh_questions(window, cx)];
+        let shortcuts_watcher = settings_path.as_ref().and_then(|path| {
+            let (watcher, task) = Self::watch_shortcuts(path.clone(), cx)?;
+            tasks.push(task);
+            Some(watcher)
+        });
         let hosts: Vec<HostEntry> = settings
             .hosts
             .iter()
@@ -474,6 +484,7 @@ impl Workspace {
             notifier: None,
             _tasks: tasks,
             _watcher: watcher,
+            _shortcuts_watcher: shortcuts_watcher,
         }
     }
 
@@ -1059,6 +1070,14 @@ impl Workspace {
                 bounds.x = (origin.x + fx - sx).clamp(0., 1. - origin.w);
                 bounds.y = (origin.y + fy - sy).clamp(0., 1. - origin.h);
             }
+            Some(Drag::Minimized { start, moved }) => {
+                if pressed {
+                    let delta = event.position - *start;
+                    *moved |= delta.x.abs() > px(4.) || delta.y.abs() > px(4.);
+                } else {
+                    self.drag = None;
+                }
+            }
             None => return,
         }
         if let Some((method, payload)) = send {
@@ -1067,7 +1086,7 @@ impl Workspace {
         cx.notify();
     }
 
-    fn on_mouse_up(&mut self, _: &MouseUpEvent, _: &mut Window, cx: &mut Context<Self>) {
+    fn on_mouse_up(&mut self, event: &MouseUpEvent, _: &mut Window, cx: &mut Context<Self>) {
         if self.sidebar_resize_released(cx) {
             return;
         }
@@ -1092,6 +1111,12 @@ impl Workspace {
                 json!({"session_id": session, "layer_id": layer_id,
                     "bounds": [bounds.x, bounds.y, bounds.w, bounds.h]}),
             ),
+            Some(Drag::Minimized { moved: true, .. }) => {
+                let (x, y) = self.fraction(event.position);
+                let corner = crate::settings::MinimizedCorner::from_position(x, y);
+                self.update_settings(|s| s.interface.minimized_corner = corner, cx);
+            }
+            Some(Drag::Minimized { .. }) => {}
             None => return,
         }
         cx.notify();
@@ -2044,6 +2069,16 @@ impl Workspace {
         }
         let minimized = window.minimized_layers();
         if !minimized.is_empty() {
+            let corner = self.settings.interface.minimized_corner;
+            let header_offset = if self
+                .focused
+                .as_deref()
+                .is_some_and(|block| self.header_shown(block))
+            {
+                px(34.)
+            } else {
+                px(0.)
+            };
             let chips = minimized.into_iter().filter_map(|layer| {
                 let layer_id = layer.layer_id.clone()?;
                 let block = layer.blocks.first()?;
@@ -2067,16 +2102,29 @@ impl Workspace {
                         .text_size(px(12.))
                         .child(icon("picture-in-picture").size(px(14.)))
                         .child(label)
-                        .on_click(
-                            cx.listener(move |ws, _, _, _| ws.restore_layer(layer_id.clone())),
-                        ),
+                        .on_mouse_down(
+                            MouseButton::Left,
+                            cx.listener(|ws, event: &gpui::MouseDownEvent, _, _| {
+                                ws.drag = Some(Drag::Minimized {
+                                    start: event.position,
+                                    moved: false,
+                                });
+                            }),
+                        )
+                        .on_click(cx.listener(move |ws, _, _, _| {
+                            if !matches!(ws.drag, Some(Drag::Minimized { moved: true, .. })) {
+                                ws.restore_layer(layer_id.clone());
+                            }
+                        })),
                 )
             });
             area = area.child(
                 div()
                     .absolute()
-                    .bottom(px(12.))
-                    .right(px(12.))
+                    .when(corner.top(), |d| d.top(px(12.) + header_offset))
+                    .when(!corner.top(), |d| d.bottom(px(12.)))
+                    .when(corner.right(), |d| d.right(px(12.)))
+                    .when(!corner.right(), |d| d.left(px(12.)))
                     .flex()
                     .gap(px(6.))
                     .children(chips),

@@ -62,6 +62,24 @@ fn settings_search_links_resets_and_palette_share_the_index() {
     );
     h.screenshot("settings-search-edit");
 
+    h.run(
+        "client.setting.terminal.font_size",
+        serde_json::json!({"increase": true}),
+    );
+    assert_eq!(h.workspace(|ws| ws.settings.terminal.font_size), Some(20.));
+    h.run(
+        "client.setting.terminal.font_size",
+        serde_json::json!({"value": 19}),
+    );
+    h.run(
+        "client.setting.interface.panes.density",
+        serde_json::json!({"value": "compact"}),
+    );
+    assert_eq!(
+        h.workspace(|ws| ws.settings.interface.pane_style),
+        rexia::settings::PaneStyle::Compact
+    );
+
     // Bad values don't silently clamp or overwrite the last good value.
     h.press("ctrl-a");
     h.type_text("-4");
@@ -169,6 +187,28 @@ fn settings_search_links_resets_and_palette_share_the_index() {
     h.wait_ui("settings group link", |ws| {
         (ws.settings_group() == Some("typography")).then_some(())
     });
+    h.press("escape");
+    let action = "client.setting.interface.panes.density";
+    let mut edited = rexia::settings::Settings::load(&path).unwrap();
+    edited
+        .shortcuts
+        .insert(action.into(), vec!["ctrl+alt+9".into()]);
+    edited.save(&path).unwrap();
+    h.wait_ui("externally edited shortcut", |ws| {
+        ws.settings.shortcuts.get(action).cloned()
+    });
+    h.cx.update(|cx| {
+        window
+            .update(cx, |ws, window, cx| ws.close_overlay(window, cx))
+            .unwrap()
+    });
+    h.pump();
+    assert!(h.workspace(|ws| ws.settings_section().is_none()));
+    h.press("ctrl-alt-9");
+    assert_eq!(
+        h.workspace(|ws| ws.settings.interface.pane_style),
+        rexia::settings::PaneStyle::Comfortable
+    );
     println!(
         "Search, palette, scalar edit, invalid value, Reset and internal setting/group links passed"
     );

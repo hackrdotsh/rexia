@@ -140,6 +140,11 @@ const NAMES: &[(&str, &str, &str)] = &[
         "Sort activity by priority",
     ),
     ("interface.pane_style", "pane-style", "Pane style"),
+    (
+        "interface.minimized_corner",
+        "minimized-corner",
+        "Move Minimized Floating Windows",
+    ),
     ("interface.pane_headers", "pane-headers", "Pane headers"),
     (
         "interface.active_pane_opacity",
@@ -497,6 +502,7 @@ pub fn choices(path: &str) -> Vec<Value> {
         "interface.tab_icon_color" => &["always", "active_panes", "active_tabs", "never"],
         "interface.shell_icon_theme" => &["default", "theme", "accent"],
         "interface.pane_style" => &["comfortable", "compact"],
+        "interface.minimized_corner" => &["top_left", "top_right", "bottom_left", "bottom_right"],
         "interface.highlight_animation" => &["fade", "move", "instant"],
         "interface.fade_inactive" => &["off", "surface", "content", "both"],
         "terminal.anchor" => &["top", "bottom"],
