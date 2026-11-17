@@ -89,6 +89,10 @@ when checked, and are built in this order; each moves to its section once it's d
 
 Working:
 
+- Fractional Wayland scaling stays at the compositor's requested scale, including on
+  older `wl_surface` versions. At 150%, terminal pixels are rendered at 150%, not at
+  200% and then shrunk; braille retains sharp, evenly spaced edges under umbriel.
+
 - Typing a host's address in the command palette (`alice@studio`, `ssh://…`, `https://…`,
   `studio.tail1234.ts.net`, an IP, with a port or not) offers Add Host as the last row; it
   opens Add Remote Host with the address and a name from it filled in. Single words and
