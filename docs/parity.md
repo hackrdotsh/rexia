@@ -47,7 +47,6 @@ when checked, and are built in this order; each moves to its section once it's d
 
 | Gap | Source |
 | --- | --- |
-| Quick Look every link on screen, stepping with the arrow keys; files on remote hosts downloaded first; Ctrl-click a remote file link saves a copy under ~/Downloads/Rex/HOST and opens it | preview.28, 29 |
 | Settings search, `rex://settings/...` links to a group or setting, reset buttons on changed settings, every simple setting as a palette row | preview.20, 25, 28 |
 
 ## Settings
@@ -223,12 +222,14 @@ Working:
   Reset Terminal (the server's block actions), Copy Pane ID and Close Pane. Items show their
   shortcuts; the arrow keys and Enter choose, and Escape or a click elsewhere closes it.
 
-- Quick Look (`client.quick_look`, ctrl+shift+y) previews what's under the pointer in the
-  focused pane: a program's link first, else a path or URL in the text (a `:line:col`
-  suffix is dropped, and relative paths start from the pane's directory). Files go to
-  GNOME's previewer (Sushi, `org.gnome.NautilusPreviewer` over D-Bus); without it, and for
-  web links, the desktop's opener (`xdg-open`) shows them. Files on a remote host aren't
-  previewed.
+- Quick Look (`client.quick_look`, ctrl+shift+y) collects the focused pane's visible
+  file and web links, including OSC 8 links with arbitrary labels. It starts at the
+  pointer's link, or the first link, and the arrow keys or on-screen arrows step through
+  them. Escape closes navigation. Context-menu Quick Look and ctrl+shift+click preview
+  only the chosen link. Files go to GNOME's previewer (Sushi); without it, and for web
+  links, the desktop's opener shows them. Remote files are downloaded through Rex's
+  authenticated data stream first. Ctrl-click also downloads and opens remote file
+  links. Copies go under `~/Downloads/Rex/HOST`; existing copies are never overwritten.
 
 - Open Onboarding Session… (`client.onboarding`) opens a session with the server's
   onboarding block (`com.superlogical.onboarding`), or shows the one already open. The
