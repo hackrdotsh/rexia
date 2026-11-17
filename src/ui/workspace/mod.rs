@@ -781,17 +781,24 @@ impl Workspace {
         let Some(session) = self.session_id() else {
             return;
         };
+        self.new_tab_in(self.active, session, cx);
+    }
+
+    fn new_tab_in(&self, index: usize, session: String, cx: &mut Context<Self>) {
+        let host = self.hosts[index].handle.clone();
+        let source = host
+            .snapshot()
+            .views
+            .get(&session)
+            .and_then(view::View::active_window)
+            .and_then(|window| window.focused_block_id.clone());
         let mut payload = json!({"session_id": session, "focus": true});
-        let source = self.focused_block();
-        if !self.pinned(self.active, &session) {
-            self.create_terminal("session.new_window", payload, source, cx);
-            return;
-        }
-        // A window showing its own tab shows the new one once it exists.
-        let host = self.host().handle.clone();
+        let pinned = self.pinned(index, &session);
         cx.spawn(async move |_, _| {
             payload["layout"] = host.shell_layout_from(&session, source.as_deref()).await;
-            if let Ok(created) = host.request("session.new_window", payload).await
+            if !pinned {
+                host.call("session.new_window", payload);
+            } else if let Ok(created) = host.request("session.new_window", payload).await
                 && let Some(window) = created["window_id"].as_str()
             {
                 host.send(HostCommand::Pin {
@@ -1392,11 +1399,6 @@ impl Workspace {
                     .copied()
                     .unwrap_or(selected);
                 let activity = self.session_mark(index, &session.session_id, &model);
-                let windows = model
-                    .views
-                    .get(&session.session_id)
-                    .map(|v| v.windows.len())
-                    .unwrap_or(0);
                 group = group.child(
                     div()
                         .id(SharedString::from(format!(
@@ -1443,14 +1445,40 @@ impl Workspace {
                             activity
                                 .map(|(state, badge)| activity_mark(state, badge, false, theme)),
                         )
-                        .when(windows > 0, |d| {
-                            d.child(div().text_size(px(12.)).child(windows.to_string()))
-                        })
-                        // Close, shown while the pointer is on the row.
+                        // Row actions, shown while the pointer is on the row.
                         .child(
                             div()
+                                .flex()
+                                .gap(px(2.))
                                 .invisible()
                                 .group_hover("session-row", |d| d.visible())
+                                .child(
+                                    small_icon_button(
+                                        SharedString::from(format!("session-new-tab-{index}-{id}")),
+                                        "plus",
+                                        theme.text_muted,
+                                        theme,
+                                        cx.listener({
+                                            let id = id.clone();
+                                            move |ws, _, _, cx| {
+                                                ws.set_session_expanded(index, id.clone(), true);
+                                                ws.new_tab_in(index, id.clone(), cx);
+                                                cx.notify();
+                                            }
+                                        }),
+                                    )
+                                    .on_mouse_down(MouseButton::Left, |_, _, cx| {
+                                        cx.stop_propagation()
+                                    })
+                                    .relative()
+                                    .child(
+                                        self.track_bounds(
+                                            format!("session-new-tab:{index}:{id}"),
+                                            cx,
+                                        ),
+                                    )
+                                    .tooltip(self.tip("client.tab.new", None)),
+                                )
                                 .child(
                                     small_icon_button(
                                         SharedString::from(format!("session-close-{index}-{id}")),
@@ -1514,7 +1542,7 @@ impl Workspace {
                                         .hover(|d| d.bg(theme.overlay(0.06)))
                                 })
                                 .children(tab_icons::render_icons(
-                                    &self.tab_icon_list(&window_id, true, &model),
+                                    &self.icons_for_tab(window, &model, active, true),
                                     self.settings.interface.shell_icon_theme,
                                     if active { theme.text } else { theme.text_muted },
                                     if active {

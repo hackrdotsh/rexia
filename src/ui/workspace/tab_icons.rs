@@ -168,6 +168,16 @@ impl Workspace {
             return Vec::new();
         };
         let selected = view.active_window_id.as_deref() == Some(window_id);
+        self.icons_for_tab(window, model, selected, vertical)
+    }
+
+    pub(super) fn icons_for_tab(
+        &self,
+        window: &Window,
+        model: &HostModel,
+        selected: bool,
+        vertical: bool,
+    ) -> Vec<TabIcon> {
         let interface = &self.settings.interface;
         tab_icons(
             window,

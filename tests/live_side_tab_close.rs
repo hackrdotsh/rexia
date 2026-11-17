@@ -10,7 +10,10 @@ use gpui::{
 };
 use rexia::{rex::host::HostModel, ui::workspace::hover_card::ShownCard};
 use serde_json::Value;
-use std::time::Duration;
+use std::{sync::Mutex, time::Duration};
+
+// Both tests share a server; creating or deleting sessions moves sidebar click targets.
+static SIDEBAR_FIXTURE: Mutex<()> = Mutex::new(());
 
 fn move_to(h: &mut Harness, at: Point<Pixels>) {
     h.input(PlatformInput::MouseMove(MouseMoveEvent {
@@ -54,6 +57,9 @@ fn sidebar_spaces_expand_without_switching_and_stay_open_on_focus_changes() {
     let Some(address) = common::server() else {
         return;
     };
+    let _fixture = SIDEBAR_FIXTURE
+        .lock()
+        .unwrap_or_else(|err| err.into_inner());
     let control = common::connect(&address);
     let mut sessions = Sessions::create(&control, "rexia-space-first");
     let first = sessions.ids[0].clone();
@@ -70,6 +76,25 @@ fn sidebar_spaces_expand_without_switching_and_stay_open_on_focus_changes() {
         m.views.get(&second)?.active_window_id.clone()
     });
     let row = |id: &str| format!("side-tab:{id}");
+    let add = h.wait_ui("add tab button in the second space", |ws| {
+        ws.element_bounds(&format!("session-new-tab:0:{second}"))
+    });
+    move_to(&mut h, add.center());
+    click(&mut h, add.center(), MouseButton::Left);
+    let added = h.wait("a new tab in the background space", |m| {
+        m.views
+            .get(&second)?
+            .windows
+            .iter()
+            .find(|w| w.id() != second_tab)
+            .map(|w| w.id().to_owned())
+    });
+    h.wait_ui("new background tab row", |ws| {
+        ws.element_bounds(&row(&added))
+    });
+    assert_eq!(h.host.snapshot().selected.as_deref(), Some(first.as_str()));
+    assert_eq!(tabs(&h.host.snapshot()), std::slice::from_ref(&first_tab));
+    h.screenshot("sidebar-background-tabs");
     let second_bounds = h.wait_ui("background tab row", |ws| {
         ws.element_bounds(&row(&second_tab))
     });
@@ -120,6 +145,9 @@ fn sidebar_tabs_close_on_hover_and_menus_beat_cards() {
     let Some(address) = common::server() else {
         return;
     };
+    let _fixture = SIDEBAR_FIXTURE
+        .lock()
+        .unwrap_or_else(|err| err.into_inner());
     let control = common::connect(&address);
     let sessions = Sessions::create(&control, "rexia-side-tab-close");
     let mut h = Harness::open(&address, &sessions.ids[0], 1200., 760.);
