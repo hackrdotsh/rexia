@@ -1407,8 +1407,8 @@ impl Workspace {
                         )))
                         .flex()
                         .items_center()
-                        .gap(px(8.))
-                        .px(px(10.))
+                        .gap(px(4.))
+                        .px(px(4.))
                         .h(px(tab_height))
                         .rounded(theme.radius_small())
                         .cursor_pointer()
@@ -1449,7 +1449,6 @@ impl Workspace {
                         .child(
                             div()
                                 .flex()
-                                .gap(px(2.))
                                 .invisible()
                                 .group_hover("session-row", |d| d.visible())
                                 .child(
