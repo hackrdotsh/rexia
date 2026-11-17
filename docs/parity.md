@@ -96,6 +96,15 @@ when checked, and are built in this order; each moves to its section once it's d
 
 Working:
 
+- Settings › Shortcuts (Rex for Mac's Shortcuts page, from preview.8): every action,
+  rexia's and the server's own, with its keys and where they come from (Default, Yours,
+  or the init.lua line, both when init.lua binds it too), filtered as you type. Change…
+  records a new key and comes back to the page; Remove leaves an action without a key;
+  Reset puts the default back, asking first when another action has taken that key and
+  taking it back from it. Keys two actions share are called out, the server's keymap
+  problems are listed, and Copy as Lua gives your changes as `rex.unbind`/`rex.bind`
+  lines for init.lua. Tab now steps through all eight Settings sections.
+
 - Session rows in the sidebar: right-click for Rename Session…, Move Up, Move Down and
   Close Session…; double-click to rename; a close button under the pointer (closing a
   session always asks, naming busy programs); and drag a row up or down to reorder its
