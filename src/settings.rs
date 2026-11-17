@@ -317,6 +317,9 @@ pub struct TerminalSettings {
     /// Overrides the font found in the Ghostty config or fontconfig.
     pub font_family: Option<String>,
     pub font_size: Option<f32>,
+    /// The weight of ordinary terminal text, 100 to 900: a face of the font such as Light,
+    /// or a step of a variable font. None draws the regular weight.
+    pub font_weight: Option<u16>,
     pub line_height: f32,
     pub padding_x: f32,
     pub padding_y: f32,
@@ -384,6 +387,7 @@ impl Default for TerminalSettings {
         Self {
             font_family: None,
             font_size: None,
+            font_weight: None,
             line_height: 1.0,
             padding_x: 8.,
             padding_y: 6.,

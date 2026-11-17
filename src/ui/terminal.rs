@@ -717,6 +717,7 @@ impl TerminalPane {
 
     fn terminal_font(&self) -> Font {
         let mut font = font(SharedString::from(self.font.family.clone()));
+        font.weight = FontWeight(self.font.weight);
         if !self.font.ligatures {
             font.features = gpui::FontFeatures::disable_ligatures();
         }
@@ -1548,10 +1549,11 @@ impl Render for TerminalPane {
                                 .map(|(len, style)| TextRun {
                                     len: *len,
                                     font: Font {
+                                        // Bold is heavier than the chosen weight.
                                         weight: if style.bold {
-                                            FontWeight::BOLD
+                                            FontWeight((terminal_font.weight.0 + 300.).min(900.))
                                         } else {
-                                            FontWeight::NORMAL
+                                            terminal_font.weight
                                         },
                                         style: if style.italic {
                                             FontStyle::Italic

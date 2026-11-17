@@ -178,6 +178,8 @@ pub struct Workspace {
     tab_hint_generation: u64,
     /// Each host's Tailscale as rexia last saw it, for its notifications.
     tailscale_seen: HashMap<usize, tailscale_notes::Seen>,
+    /// The terminal font family's faces, read from fontconfig when the family changes.
+    font_faces: Option<(String, Vec<fonts::Face>)>,
     sidebar_drag_width: Option<f32>,
     reveal: toolbar::Reveal,
     highlight: highlight::Track,
@@ -276,6 +278,9 @@ pub fn terminal_font(settings: &Settings) -> TerminalFont {
         font.size = size.clamp(6., 72.);
     }
     font.line_height = settings.terminal.line_height.clamp(0.8, 2.0);
+    if let Some(weight) = settings.terminal.font_weight {
+        font.weight = f32::from(weight).clamp(100., 900.);
+    }
     let terminal = &settings.terminal;
     font.spacing = terminal.character_spacing.clamp(-4., 16.);
     font.ligatures = terminal.ligatures;
@@ -366,6 +371,11 @@ impl Workspace {
 
         let filter = filter::TabFilter::new(window, cx);
         let fallback = super::actions::fallback_keymap(&settings.shortcuts);
+        let font_faces = {
+            let family = terminal_font(&settings).family;
+            let faces = fonts::faces(&family);
+            Some((family, faces))
+        };
         Self {
             font: terminal_font(&settings),
             settings,
@@ -388,6 +398,7 @@ impl Workspace {
             tab_hints_shown: false,
             tab_hint_generation: 0,
             tailscale_seen: HashMap::new(),
+            font_faces,
             sidebar_drag_width: None,
             reveal: Default::default(),
             highlight: Default::default(),

@@ -417,6 +417,13 @@ impl Workspace {
         crate::rex::ssh_agent::choose(self.settings.ssh_agent.clone());
         super::apply_global_settings(&self.settings);
         self.font = super::terminal_font(&self.settings);
+        if self
+            .font_faces
+            .as_ref()
+            .is_none_or(|(family, _)| *family != self.font.family)
+        {
+            self.font_faces = Some((self.font.family.clone(), fonts::faces(&self.font.family)));
+        }
         let font = self.font.clone();
         let terminal = &self.settings.terminal;
         let padding = point(px(terminal.padding_x), px(terminal.padding_y));
@@ -654,6 +661,53 @@ impl Workspace {
         row(id, title, detail, theme)
             .child(div().flex().flex_none().gap(px(4.)).children(buttons))
             .into_any_element()
+    }
+
+    /// The terminal font's upright faces, such as Light, Regular and Medium: choosing one
+    /// sets the weight.
+    fn font_style_row(&self, theme: &Theme, cx: &mut Context<Self>) -> AnyElement {
+        let faces = self
+            .font_faces
+            .as_ref()
+            .map(|(_, faces)| faces.clone())
+            .unwrap_or_default();
+        let current = self.font.weight as u16;
+        let detail = if faces.len() > 1 {
+            "The face of the terminal font ordinary text uses."
+        } else {
+            "This font has one upright face; Font weight still asks for others."
+        };
+        let mut choices = div()
+            .flex()
+            .flex_wrap()
+            .gap(px(6.))
+            .max_w(px(360.))
+            .justify_end();
+        for face in faces {
+            let weight = face.weight;
+            choices = choices.child(
+                button(
+                    format!("font-face-{}", face.name),
+                    &face.name,
+                    face.weight == current,
+                    theme,
+                )
+                .on_click(cx.listener(move |ws, _, _, cx| {
+                    ws.update_settings(|s| s.terminal.font_weight = Some(weight), cx)
+                })),
+            );
+        }
+        row("font-style", "Font style", detail, theme)
+            .child(choices)
+            .into_any_element()
+    }
+
+    /// The terminal font family's faces, for tests.
+    pub fn font_faces(&self) -> Vec<fonts::Face> {
+        self.font_faces
+            .as_ref()
+            .map(|(_, faces)| faces.clone())
+            .unwrap_or_default()
     }
 
     #[allow(clippy::too_many_arguments)]
@@ -1025,6 +1079,27 @@ impl Workspace {
                         .font_size
                         .unwrap_or(fonts::TerminalFont::DEFAULT_SIZE);
                     s.terminal.font_size = Some((size + 1.).min(72.));
+                },
+                theme,
+                cx,
+            ),
+            self.font_style_row(theme, cx),
+            self.stepper_row(
+                "font-weight",
+                "Font weight",
+                "How heavy ordinary text is; bold text draws heavier. Fonts without that \
+                 weight use their nearest face.",
+                {
+                    let weight = self.font.weight as u16;
+                    format!("{weight} {}", fonts::weight_name(weight))
+                },
+                |s| {
+                    let weight = s.terminal.font_weight.unwrap_or(400);
+                    s.terminal.font_weight = Some(weight.saturating_sub(100).max(100));
+                },
+                |s| {
+                    let weight = s.terminal.font_weight.unwrap_or(400);
+                    s.terminal.font_weight = Some((weight + 100).min(900));
                 },
                 theme,
                 cx,

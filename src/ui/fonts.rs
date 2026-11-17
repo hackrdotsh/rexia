@@ -16,10 +16,98 @@ pub struct TerminalFont {
     pub bold: bool,
     pub italic: bool,
     pub fallbacks: Vec<String>,
+    /// The weight of ordinary text, 100 to 900; bold text draws 300 heavier.
+    pub weight: f32,
+}
+
+/// One upright face of a font family, as fontconfig lists it: its name (such as Light or
+/// Book) and its weight on the CSS scale.
+#[derive(Clone, Debug, PartialEq)]
+pub struct Face {
+    pub name: String,
+    pub weight: u16,
+}
+
+/// Fontconfig's weight scale on the CSS one.
+fn css_weight(fontconfig: u32) -> u16 {
+    match fontconfig {
+        0..=20 => 100,
+        21..=45 => 200,
+        46..=52 => 300,
+        53..=62 => 350,
+        63..=77 => 380,
+        78..=90 => 400,
+        91..=140 => 500,
+        141..=190 => 600,
+        191..=202 => 700,
+        203..=207 => 800,
+        _ => 900,
+    }
+}
+
+/// The upright faces of `family` installed here, lightest first.
+pub fn faces(family: &str) -> Vec<Face> {
+    let Ok(output) = std::process::Command::new("fc-list")
+        .args([&format!("{family}:slant=0"), "style", "weight"])
+        .output()
+    else {
+        return Vec::new();
+    };
+    faces_from(&String::from_utf8_lossy(&output.stdout))
+}
+
+/// Faces from `fc-list FAMILY style weight` output, such as `:style=Light,Regular:weight=50`.
+fn faces_from(listing: &str) -> Vec<Face> {
+    let mut faces: Vec<Face> = Vec::new();
+    for line in listing.lines() {
+        let field = |name: &str| {
+            line.split(':')
+                .find_map(|part| part.strip_prefix(&format!("{name}=")))
+                .map(str::to_owned)
+        };
+        let (Some(style), Some(weight)) = (field("style"), field("weight")) else {
+            continue;
+        };
+        // The first style name is the face's own; later ones are translations.
+        let name = style
+            .split(',')
+            .next()
+            .unwrap_or_default()
+            .trim()
+            .to_owned();
+        let Ok(weight) = weight.trim().parse::<u32>() else {
+            continue;
+        };
+        if name.is_empty() || faces.iter().any(|f| f.name == name) {
+            continue;
+        }
+        faces.push(Face {
+            name,
+            weight: css_weight(weight),
+        });
+    }
+    faces.sort_by_key(|f| f.weight);
+    faces
+}
+
+/// A weight's name, for the settings.
+pub fn weight_name(weight: u16) -> &'static str {
+    match weight {
+        0..=149 => "Thin",
+        150..=249 => "Extra Light",
+        250..=349 => "Light",
+        350..=449 => "Regular",
+        450..=549 => "Medium",
+        550..=649 => "Semibold",
+        650..=749 => "Bold",
+        750..=849 => "Extra Bold",
+        _ => "Black",
+    }
 }
 
 impl TerminalFont {
     pub const DEFAULT_SIZE: f32 = 12.;
+    pub const DEFAULT_WEIGHT: f32 = 400.;
 
     /// Pixels at 96 DPI; GPUI scales them for the display.
     pub fn pixels(&self) -> f32 {
@@ -80,6 +168,7 @@ pub fn default_terminal_font() -> TerminalFont {
         bold: true,
         italic: true,
         fallbacks: Vec::new(),
+        weight: TerminalFont::DEFAULT_WEIGHT,
     }
 }
 
@@ -95,5 +184,16 @@ mod tests {
             (Some("DepartureMono Nerd Font".into()), Some(11.))
         );
         assert_eq!(from_ghostty("# nothing\n"), (None, None));
+    }
+
+    #[test]
+    fn faces_come_from_fontconfig_lightest_first() {
+        let listing = "DM Mono,DM Mono Medium:style=Medium,Regular:weight=100\n\
+                       DM Mono:style=Regular:weight=80\n\
+                       DM Mono,DM Mono Light:style=Light,Regular:weight=50\n";
+        let faces = faces_from(listing);
+        let names: Vec<_> = faces.iter().map(|f| (f.name.as_str(), f.weight)).collect();
+        assert_eq!(names, [("Light", 300), ("Regular", 400), ("Medium", 500)]);
+        assert_eq!(weight_name(400), "Regular");
     }
 }
