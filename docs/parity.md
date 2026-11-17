@@ -47,7 +47,6 @@ when checked, and are built in this order; each moves to its section once it's d
 
 | Gap | Source |
 | --- | --- |
-| Double-click a tab or a pane's title to rename it | preview.15, 27 |
 | Hold Ctrl to show each tab's shortcut | preview.16 |
 | Tailscale notifications: sign-in needed, device approval needed, failures | Notifications › System Notifications |
 | Terminal font style (an installed face such as Light) and weight | Terminal › Typography |
@@ -95,6 +94,10 @@ when checked, and are built in this order; each moves to its section once it's d
 ## Behavior
 
 Working:
+
+- Double-click to rename: the selected tab, in the tab bar or the sidebar, and a pane's
+  title in its header. A double-click on a tab that wasn't selected only selects it, as
+  in Rex for Mac.
 
 - What floats over the panes keeps its clicks: Settings, dialogs and lists, ssh's
   questions, the right-click menu, notices, upload progress, hover cards and a floating
