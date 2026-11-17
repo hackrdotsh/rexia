@@ -1496,7 +1496,14 @@ impl Workspace {
                     .px(px(6.))
                     .pb(px(4.))
                     .child(icon("server").size(px(20.)).text_color(theme.primary))
-                    .child(title("Sessions", theme)),
+                    .child(title(
+                        if cfg!(debug_assertions) {
+                            "Sessions (dev)"
+                        } else {
+                            "Sessions"
+                        },
+                        theme,
+                    )),
             )
             .child(self.render_filter_field())
             .map(|d| {
