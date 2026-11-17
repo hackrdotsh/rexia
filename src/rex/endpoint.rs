@@ -243,6 +243,59 @@ fn quiet_close(error: &tokio_tungstenite::tungstenite::Error) -> bool {
     ) || matches!(error, Error::Io(e) if e.kind() == std::io::ErrorKind::UnexpectedEof)
 }
 
+/// A refusal ssh won't get past by trying again: the host's key isn't trusted, or the host
+/// turned the login down. Rex stops retrying after a few in a row and says what to check.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Refusal {
+    HostKey,
+    Login,
+}
+
+impl Refusal {
+    /// How many refusals in a row stop the retries.
+    pub const LIMIT: u32 = 3;
+
+    /// What ssh's failure says, if it's a refusal.
+    pub fn of(failure: &str) -> Option<Self> {
+        let failure = failure.to_ascii_lowercase();
+        if failure.contains("host key verification failed")
+            || failure.contains("remote host identification has changed")
+            || failure.contains("host key for") && failure.contains("has changed")
+        {
+            Some(Self::HostKey)
+        } else if failure.contains("permission denied")
+            || failure.contains("too many authentication failures")
+            || failure.contains("no more authentication methods")
+        {
+            Some(Self::Login)
+        } else {
+            None
+        }
+    }
+
+    /// The notice once the retries stop: what happened, and what to check.
+    pub fn advice(self, endpoint: &Endpoint) -> String {
+        let host = match endpoint {
+            Endpoint::Ssh(target) => target.host.clone(),
+            other => other.to_string(),
+        };
+        match self {
+            Self::HostKey => format!(
+                "Stopped after {n} tries: ssh doesn't trust {host}'s host key. If the host \
+                 was reinstalled, check its new key and remove the old one with \
+                 `ssh-keygen -R {host}`, then Retry.",
+                n = Self::LIMIT
+            ),
+            Self::Login => format!(
+                "Stopped after {n} tries: {host} refused the login. Check the account in \
+                 the address, that your key is in its ~/.ssh/authorized_keys or loaded in \
+                 ssh-agent, and the password, then Retry.",
+                n = Self::LIMIT
+            ),
+        }
+    }
+}
+
 /// The last thing ssh or the host's rex said, once it's had a moment to say it.
 async fn ssh_failure(log: &Stderr) -> Option<String> {
     tokio::time::sleep(std::time::Duration::from_millis(300)).await;
@@ -420,6 +473,40 @@ async fn open(endpoint: &Endpoint, path: &str, protocol: &str) -> Result<Socket>
 
 #[cfg(test)]
 mod tests {
+
+    #[test]
+    fn refusals_are_told_apart_from_other_failures() {
+        assert_eq!(
+            Refusal::of("Host key verification failed."),
+            Some(Refusal::HostKey)
+        );
+        assert_eq!(
+            Refusal::of("hackr@studio: Permission denied (publickey,password)."),
+            Some(Refusal::Login)
+        );
+        assert_eq!(
+            Refusal::of(
+                "Received disconnect from 10.0.0.2 port 22:2: Too many authentication failures"
+            ),
+            Some(Refusal::Login)
+        );
+        assert_eq!(
+            Refusal::of("ssh: connect to host studio port 22: Connection refused"),
+            None
+        );
+        assert_eq!(Refusal::of("rex isn't installed on the host"), None);
+        let ssh = Endpoint::parse("ssh://alice@studio").unwrap();
+        assert!(
+            Refusal::HostKey
+                .advice(&ssh)
+                .contains("ssh-keygen -R studio")
+        );
+        assert!(
+            Refusal::Login
+                .advice(&ssh)
+                .contains("studio refused the login")
+        );
+    }
     use super::*;
 
     #[test]

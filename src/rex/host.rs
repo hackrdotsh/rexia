@@ -551,29 +551,55 @@ async fn run(
     };
     let mut token: Option<String> = None;
     let mut retry = 0u32;
+    // The same refusal from ssh, and how many times in a row.
+    let mut refused: Option<(endpoint::Refusal, u32)> = None;
     loop {
         let outcome = host.session(&commands, &mut token).await;
         host.link.lock().expect("link").control = None;
+        let mut stopped = false;
         match outcome {
             Ok(Stop::Shutdown) => return,
-            Ok(Stop::Reconnect) => retry = 0,
+            Ok(Stop::Reconnect) => {
+                retry = 0;
+                refused = None;
+            }
             Err(error) => {
+                let failure = format!("{error:#}");
+                refused = match (endpoint::Refusal::of(&failure), refused) {
+                    (Some(now), Some((before, n))) if now == before => Some((now, n + 1)),
+                    (Some(now), _) => Some((now, 1)),
+                    (None, _) => None,
+                };
+                let message = match refused {
+                    Some((refusal, n)) if n >= endpoint::Refusal::LIMIT => {
+                        stopped = true;
+                        refusal.advice(&host.endpoint)
+                    }
+                    _ => failure,
+                };
                 host.shared.update(|m| {
-                    m.connection = Connection::Disconnected(format!("{error:#}"));
+                    m.connection = Connection::Disconnected(message);
                 });
                 retry += 1;
             }
         }
-        // Back off 1, 2, 4, 8 s; a Reconnect command or a selection retries at once.
-        let delay =
-            tokio::time::sleep(Duration::from_secs(1 << retry.min(3)).min(Duration::from_secs(8)));
+        // Back off 1, 2, 4, 8 s; a Reconnect command retries at once. After repeated
+        // refusals only a Reconnect (Retry) does: trying again can't fix them.
+        let backoff = Duration::from_secs(1 << retry.min(3)).min(Duration::from_secs(8));
+        let delay = async move {
+            if stopped {
+                std::future::pending::<()>().await
+            } else {
+                tokio::time::sleep(backoff).await
+            }
+        };
         tokio::pin!(delay);
         loop {
             tokio::select! {
                 _ = &mut delay => break,
                 command = commands.recv_async() => match command {
                     Ok(HostCommand::Shutdown) | Err(_) => return,
-                    Ok(HostCommand::Reconnect) => { retry = 0; break }
+                    Ok(HostCommand::Reconnect) => { retry = 0; refused = None; break }
                     Ok(HostCommand::Select(id)) => {
                         host.preferred = Some(id.clone());
                         host.shared.update(|m| m.selected = Some(id));
