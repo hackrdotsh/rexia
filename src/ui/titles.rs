@@ -77,17 +77,81 @@ pub fn tab_title(window: &Window, model: &HostModel) -> String {
     if !is_default_label(&window.label, window.id()) {
         return window.label.clone();
     }
-    let focused = window
-        .focused_block_id
-        .as_deref()
-        .and_then(|id| window.block(id))
-        .or_else(|| window.blocks().next());
-    match focused {
+    match title_block(window) {
         Some(block) => pane_title(
             block,
             block.block_id.as_ref().and_then(|id| model.blocks.get(id)),
         ),
         None => "Empty".into(),
+    }
+}
+
+fn title_block(window: &Window) -> Option<&Block> {
+    window
+        .focused_block_id
+        .as_deref()
+        .and_then(|id| window.block(id))
+        .or_else(|| window.blocks().next())
+}
+
+/// A sidebar tab's main label and optional working directory. A shell title that
+/// only names the directory can supply a host-relative spelling, such as `~/src`.
+pub(super) fn sidebar_tab_title(window: &Window, model: &HostModel) -> (String, Option<String>) {
+    let generated = PREFER_GENERATED.load(std::sync::atomic::Ordering::Relaxed);
+    sidebar_tab_title_with_preference(window, model, generated)
+}
+
+fn sidebar_tab_title_with_preference(
+    window: &Window,
+    model: &HostModel,
+    generated: bool,
+) -> (String, Option<String>) {
+    if !is_default_label(&window.label, window.id()) {
+        return (window.label.clone(), None);
+    }
+    let Some(block) = title_block(window) else {
+        return ("Empty".into(), None);
+    };
+    let id = block.block_id.as_deref().unwrap_or_default();
+    if !is_default_label(&block.label, id) {
+        return (block.label.clone(), None);
+    }
+    let Some(state) = model.blocks.get(id) else {
+        return ("Shell".into(), None);
+    };
+    let program = state
+        .process
+        .name
+        .as_deref()
+        .filter(|name| !name.is_empty());
+    let cwd = state
+        .pwd
+        .as_deref()
+        .filter(|path| !path.is_empty())
+        .or(state.process.cwd.as_deref().filter(|path| !path.is_empty()));
+    let title = state
+        .current_title()
+        .map(str::trim)
+        .filter(|t| !t.is_empty());
+    let path_title = title.filter(|title| {
+        cwd == Some(*title)
+            || program.is_some_and(|name| {
+                super::program_icons::find(name).is_some_and(|icon| icon.is_shell())
+                    && (*title == "~"
+                        || title.strip_prefix('~').is_some_and(|suffix| {
+                            suffix.starts_with('/') && cwd.is_none_or(|cwd| cwd.ends_with(suffix))
+                        })
+                        || (cwd.is_none() && title.starts_with('/')))
+            })
+    });
+    if !generated && let Some(title) = title.filter(|_| path_title.is_none()) {
+        return (title.into(), None);
+    }
+    let path = path_title.or(cwd);
+    match (program, path) {
+        (Some(program), path) => (program.into(), path.map(str::to_owned)),
+        (None, Some(path)) => (path.into(), None),
+        (None, None) => (title.unwrap_or("Shell").into(), None),
     }
 }
 
@@ -302,6 +366,52 @@ mod tests {
             ..window
         };
         assert_eq!(tab_title(&renamed, &model), "build");
+    }
+
+    #[test]
+    fn sidebar_tabs_split_directory_titles_but_keep_custom_names() {
+        let mut window = Window {
+            focused_block_id: Some("shell".into()),
+            layers: vec![crate::rex::view::Layer {
+                blocks: vec![block("shell", "shell")],
+                ..Default::default()
+            }],
+            ..Default::default()
+        };
+        let mut model = HostModel::default();
+        model.blocks.insert(
+            "shell".into(),
+            BlockState {
+                process: Process {
+                    name: Some("nu".into()),
+                    cwd: Some("/tmp/old".into()),
+                    ..Default::default()
+                },
+                pwd: Some("/home/remote/nixos".into()),
+                title: Some(("~/nixos".into(), None)),
+                ..Default::default()
+            },
+        );
+        let label = sidebar_tab_title_with_preference;
+        assert_eq!(
+            label(&window, &model, false),
+            ("nu".into(), Some("~/nixos".into()))
+        );
+
+        model.blocks.get_mut("shell").unwrap().title = Some(("Editing a config".into(), None));
+        assert_eq!(
+            label(&window, &model, false),
+            ("Editing a config".into(), None)
+        );
+        assert_eq!(
+            label(&window, &model, true),
+            ("nu".into(), Some("/home/remote/nixos".into()))
+        );
+
+        window.layers[0].blocks[0].label = "Nix config".into();
+        assert_eq!(label(&window, &model, true), ("Nix config".into(), None));
+        window.label = "Work".into();
+        assert_eq!(label(&window, &model, true), ("Work".into(), None));
     }
 
     #[test]

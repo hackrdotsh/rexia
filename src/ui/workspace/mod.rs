@@ -39,7 +39,7 @@ pub mod uploads;
 mod windows;
 
 use super::{
-    components::{dot, heading, icon_button, list_row, small_icon_button, title},
+    components::{dot, heading, icon_button, small_icon_button, title},
     fonts::{self, TerminalFont},
     icons::icon,
     terminal::{PaneEvent, TerminalPane},
@@ -1316,92 +1316,90 @@ impl Workspace {
                     .map(|v| v.windows.len())
                     .unwrap_or(0);
                 group = group.child(
-                    list_row(
-                        SharedString::from(format!("session-{index}-{}", session.session_id)),
-                        selected,
-                        theme,
-                    )
-                    .child(icon("layout-columns").size(px(16.)))
-                    .child(
-                        div()
-                            .flex_1()
-                            .min_w_0()
-                            .overflow_hidden()
-                            .text_ellipsis()
-                            .whitespace_nowrap()
-                            .text_size(px(session_text))
-                            .child(session.label.clone()),
-                    )
-                    .children(
-                        activity.map(|(state, badge)| activity_mark(state, badge, selected, theme)),
-                    )
-                    .when(windows > 0, |d| {
-                        d.child(
+                    div()
+                        .id(SharedString::from(format!(
+                            "session-{index}-{}",
+                            session.session_id
+                        )))
+                        .flex()
+                        .items_center()
+                        .gap(px(8.))
+                        .px(px(10.))
+                        .h(px(tab_height))
+                        .rounded(theme.radius_small())
+                        .cursor_pointer()
+                        .text_color(theme.text_muted)
+                        .hover(|d| d.bg(theme.overlay(0.06)))
+                        .child(
                             div()
-                                .text_size(px(12.))
-                                .text_color(if selected {
-                                    theme.on_primary
-                                } else {
-                                    theme.text_muted
-                                })
-                                .child(windows.to_string()),
+                                .flex_1()
+                                .min_w_0()
+                                .overflow_hidden()
+                                .text_ellipsis()
+                                .whitespace_nowrap()
+                                .text_size(px(session_text))
+                                .child(session.label.clone()),
                         )
-                    })
-                    // Close, shown while the pointer is on the row.
-                    .child(
-                        div()
-                            .invisible()
-                            .group_hover("session-row", |d| d.visible())
-                            .child(
-                                small_icon_button(
-                                    SharedString::from(format!("session-close-{index}-{id}")),
-                                    "x",
-                                    if selected {
-                                        theme.on_primary
-                                    } else {
-                                        theme.text_muted
-                                    },
-                                    theme,
-                                    {
-                                        let id = id.clone();
-                                        cx.listener(move |ws, _, window, cx| {
-                                            cx.stop_propagation();
-                                            ws.close_session(index, id.clone(), window, cx)
-                                        })
-                                    },
-                                )
-                                .tooltip(self.tip("session.close", None)),
-                            ),
-                    )
-                    .relative()
-                    .group("session-row")
-                    .child(self.track_bounds(format!("session:{index}:{id}"), cx))
-                    .on_mouse_down(MouseButton::Left, {
-                        let id = id.clone();
-                        cx.listener(move |ws, event: &gpui::MouseDownEvent, window, cx| {
-                            if event.click_count >= 2 {
-                                ws.rename_session(index, id.clone(), window, cx);
+                        .children(
+                            activity
+                                .map(|(state, badge)| activity_mark(state, badge, false, theme)),
+                        )
+                        .when(windows > 0, |d| {
+                            d.child(div().text_size(px(12.)).child(windows.to_string()))
+                        })
+                        // Close, shown while the pointer is on the row.
+                        .child(
+                            div()
+                                .invisible()
+                                .group_hover("session-row", |d| d.visible())
+                                .child(
+                                    small_icon_button(
+                                        SharedString::from(format!("session-close-{index}-{id}")),
+                                        "x",
+                                        theme.text_muted,
+                                        theme,
+                                        {
+                                            let id = id.clone();
+                                            cx.listener(move |ws, _, window, cx| {
+                                                cx.stop_propagation();
+                                                ws.close_session(index, id.clone(), window, cx)
+                                            })
+                                        },
+                                    )
+                                    .tooltip(self.tip("session.close", None)),
+                                ),
+                        )
+                        .relative()
+                        .group("session-row")
+                        .child(self.track_bounds(format!("session:{index}:{id}"), cx))
+                        .on_mouse_down(MouseButton::Left, {
+                            let id = id.clone();
+                            cx.listener(move |ws, event: &gpui::MouseDownEvent, window, cx| {
+                                if event.click_count >= 2 {
+                                    ws.rename_session(index, id.clone(), window, cx);
+                                    cx.stop_propagation();
+                                } else {
+                                    ws.press_session_for_drag(index, id.clone(), event.position);
+                                }
+                            })
+                        })
+                        .on_mouse_down(MouseButton::Right, {
+                            let id = id.clone();
+                            cx.listener(move |ws, event: &gpui::MouseDownEvent, _, cx| {
+                                ws.open_session_menu(index, id.clone(), event.position, cx);
                                 cx.stop_propagation();
-                            } else {
-                                ws.press_session_for_drag(index, id.clone(), event.position);
-                            }
+                            })
                         })
-                    })
-                    .on_mouse_down(MouseButton::Right, {
-                        let id = id.clone();
-                        cx.listener(move |ws, event: &gpui::MouseDownEvent, _, cx| {
-                            ws.open_session_menu(index, id.clone(), event.position, cx);
-                            cx.stop_propagation();
-                        })
-                    })
-                    .on_click(
-                        cx.listener(move |ws, _, _, cx| ws.select_session(index, id.clone(), cx)),
-                    ),
+                        .on_click(cx.listener(move |ws, _, _, cx| {
+                            ws.select_session(index, id.clone(), cx)
+                        })),
                 );
                 if selected && let Some(view) = model.views.get(&session.session_id) {
                     for (number, window) in view.windows.iter().enumerate() {
                         let active = view.active_window_id.as_deref() == Some(window.id());
                         let window_id = window.id().to_owned();
+                        let (label, path) = titles::sidebar_tab_title(window, &model);
+                        let active_fill = theme.overlay(0.16);
                         group = group.child(
                             div()
                                 .id(SharedString::from(format!("side-tab-{window_id}")))
@@ -1409,13 +1407,12 @@ impl Workspace {
                                 .flex()
                                 .items_center()
                                 .gap(px(8.))
-                                .ml(px(18.))
                                 .px(px(10.))
                                 .h(px(tab_height))
                                 .rounded(theme.radius_small())
                                 .cursor_pointer()
                                 .text_size(px(tab_text))
-                                .when(active, |d| d.bg(theme.overlay(0.1)).text_color(theme.text))
+                                .when(active, |d| d.bg(active_fill).text_color(theme.text))
                                 .when(!active, |d| {
                                     d.text_color(theme.text_muted)
                                         .hover(|d| d.bg(theme.overlay(0.06)))
@@ -1425,7 +1422,7 @@ impl Workspace {
                                     self.settings.interface.shell_icon_theme,
                                     if active { theme.text } else { theme.text_muted },
                                     if active {
-                                        theme.surface.blend(theme.overlay(0.1))
+                                        theme.surface.blend(active_fill)
                                     } else {
                                         theme.surface
                                     },
@@ -1434,12 +1431,30 @@ impl Workspace {
                                 ))
                                 .child(
                                     div()
+                                        .flex()
                                         .flex_1()
                                         .min_w_0()
-                                        .overflow_hidden()
-                                        .text_ellipsis()
-                                        .whitespace_nowrap()
-                                        .child(titles::tab_title(window, &model)),
+                                        .gap(px(4.))
+                                        .child(
+                                            div()
+                                                .min_w_0()
+                                                .when(path.is_some(), |d| d.max_w(relative(0.65)))
+                                                .overflow_hidden()
+                                                .text_ellipsis()
+                                                .whitespace_nowrap()
+                                                .font_weight(gpui::FontWeight::SEMIBOLD)
+                                                .child(label),
+                                        )
+                                        .children(path.map(|path| {
+                                            div()
+                                                .flex_1()
+                                                .min_w_0()
+                                                .overflow_hidden()
+                                                .text_ellipsis()
+                                                .whitespace_nowrap()
+                                                .text_color(theme.text_muted)
+                                                .child(path)
+                                        })),
                                 )
                                 .children(self.tab_hint_chip(number + 1, false, theme))
                                 .when(self.tab_muted(index, window.id()), |d| {

@@ -126,9 +126,9 @@ impl SidebarTextSize {
     /// Session title size, tab title size, and tab row height, in pixels.
     pub fn metrics(self) -> (f32, f32, f32) {
         match self {
-            Self::Small => (12., 11., 24.),
-            Self::Medium => (14., 13., 28.),
-            Self::Large => (16., 15., 32.),
+            Self::Small => (10., 11., 24.),
+            Self::Medium => (12., 13., 28.),
+            Self::Large => (14., 15., 32.),
         }
     }
 }
