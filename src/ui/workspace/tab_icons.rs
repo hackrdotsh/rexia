@@ -9,7 +9,8 @@ use crate::{
         titles::Program,
     },
 };
-use gpui::{AnyElement, Hsla, IntoElement, ParentElement, Styled, div, px};
+use gpui::prelude::FluentBuilder;
+use gpui::{AnyElement, BoxShadow, Hsla, IntoElement, ParentElement, Styled, div, px};
 
 /// Vertical tabs show up to three icons; horizontal tabs up to five.
 pub const VERTICAL_MAX: u8 = 3;
@@ -125,6 +126,12 @@ pub fn render_icons(
             .size(px(edge))
             .rounded(px(edge * 0.24))
             .bg(look.tile.unwrap_or(background))
+            .when(item.colored && index + 1 < items.len(), |tile| {
+                tile.shadow(vec![
+                    BoxShadow::new(px(0.75), px(0.5), theme.shadow.opacity(0.65))
+                        .blur_radius(px(1.5)),
+                ])
+            })
             .child(
                 icon(item.program.icon())
                     .size(px(if item.colored {

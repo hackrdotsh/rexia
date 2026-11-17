@@ -119,18 +119,26 @@ fn icon_stacks_keep_the_front_whole_and_show_small_rear_slices() {
             "row {row}: expected stack width {expected}, got {bounds:?}"
         );
     }
-    assert_eq!(pixel(2, TILE + 2., TILE / 2.), rgb(COLORS[1]));
-    assert_eq!(pixel(2, TILE + 6., TILE / 2.), rgb(COLORS[2]));
+    let assert_tile_color = |actual: [u8; 4], expected: u32| {
+        let expected = rgb(expected);
+        for (actual, expected) in actual[..3].iter().zip(&expected[..3]) {
+            assert!(*actual >= expected - expected / 4 && *actual <= *expected);
+        }
+    };
+    let shaded = pixel(2, TILE + 2., TILE / 2.);
+    assert!(shaded[1] < rgb(COLORS[1])[1], "front tile casts a shadow");
+    assert_tile_color(shaded, COLORS[1]);
+    assert_tile_color(pixel(2, TILE + 6., TILE / 2.), COLORS[2]);
     for (index, x) in [TILE + 2., TILE + 6., TILE + 9., TILE + 12.]
         .into_iter()
         .enumerate()
     {
         let row = index + 1;
         let inset = row as f32 * TILE * 0.05;
-        assert_eq!(pixel(row, x, inset - 0.5), rgb(0x102030));
-        assert_eq!(pixel(row, x, TILE - inset + 0.5), rgb(0x102030));
-        assert_eq!(pixel(row, x, inset + 7.), rgb(COLORS[row]));
-        assert_eq!(pixel(row, x, TILE - inset - 7.), rgb(COLORS[row]));
+        assert_tile_color(pixel(row, x, inset - 0.5), 0x102030);
+        assert_tile_color(pixel(row, x, TILE - inset + 0.5), 0x102030);
+        assert_tile_color(pixel(row, x, inset + 7.), COLORS[row]);
+        assert_tile_color(pixel(row, x, TILE - inset - 7.), COLORS[row]);
     }
     // Transparent monochrome glyphs must not show through the leading icon either.
     for row in 6..10 {
