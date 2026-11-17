@@ -31,6 +31,7 @@ use gpui::{
 pub enum Section {
     Interface,
     Terminal,
+    Shortcuts,
     Notifications,
     Hosts,
     Server,
@@ -39,9 +40,10 @@ pub enum Section {
 }
 
 impl Section {
-    pub const ALL: [Section; 7] = [
+    pub const ALL: [Section; 8] = [
         Section::Interface,
         Section::Terminal,
+        Section::Shortcuts,
         Section::Notifications,
         Section::Hosts,
         Section::Server,
@@ -53,6 +55,7 @@ impl Section {
         match self {
             Section::Interface => "Interface",
             Section::Terminal => "Terminal",
+            Section::Shortcuts => "Shortcuts",
             Section::Notifications => "Notifications",
             Section::Hosts => "Client & Hosts",
             Section::Server => "Server",
@@ -65,6 +68,7 @@ impl Section {
         match self {
             Section::Interface => "layout-sidebar",
             Section::Terminal => "terminal-2",
+            Section::Shortcuts => "keyboard",
             Section::Notifications => "bell",
             Section::Hosts => "server",
             Section::Server => "power",
@@ -91,7 +95,9 @@ pub struct SettingsPage {
     pub(super) origin: Entity<TextInput>,
     /// Where a rex of your own is; Enter uses it.
     pub(super) rex_source: Entity<TextInput>,
-    _subscriptions: [Subscription; 7],
+    /// Narrows the Shortcuts page as you type.
+    pub(super) shortcut_filter: Entity<TextInput>,
+    _subscriptions: [Subscription; 8],
 }
 
 fn state_mut(settings: &mut Settings, state: ProgramState) -> &mut StateActivity {
@@ -234,6 +240,7 @@ impl Workspace {
         }
         let origin = cx.new(|cx| TextInput::new("https://*.example.com", cx));
         let rex_source = cx.new(|cx| TextInput::new("~/src/rex", cx));
+        let shortcut_filter = cx.new(|cx| TextInput::new("Filter actions and keys", cx));
         if let Some(location) = &self.settings.rex_location {
             let text = location.display().to_string();
             rex_source.update(cx, |input, cx| input.set_text(text, cx));
@@ -295,6 +302,15 @@ impl Workspace {
                     }
                 },
             ),
+            cx.subscribe_in(
+                &shortcut_filter,
+                window,
+                |_: &mut Workspace, _: &Entity<TextInput>, event: &InputEvent, _, cx| {
+                    if let InputEvent::Changed(_) = event {
+                        cx.notify();
+                    }
+                },
+            ),
         ];
         // Keys go to the page, not the terminal underneath.
         window.focus(&self.focus, cx);
@@ -310,6 +326,7 @@ impl Workspace {
             startup,
             origin,
             rex_source,
+            shortcut_filter,
             _subscriptions: subscriptions,
         })));
         cx.notify();
@@ -354,6 +371,7 @@ impl Workspace {
         let handle = match section {
             Section::Terminal => gpui::Focusable::focus_handle(page.font.read(cx), cx),
             Section::Hosts => gpui::Focusable::focus_handle(page.label.read(cx), cx),
+            Section::Shortcuts => gpui::Focusable::focus_handle(page.shortcut_filter.read(cx), cx),
             _ => self.focus.clone(),
         };
         window.focus(&handle, cx);
@@ -374,8 +392,13 @@ impl Workspace {
             "escape" => self.close_overlay(window, cx),
             "tab" => {
                 let index = Section::ALL.iter().position(|s| *s == current).unwrap_or(0);
-                let step = if keystroke.modifiers.shift { 3 } else { 1 };
-                self.show_settings_section(Section::ALL[(index + step) % 4], window, cx);
+                let count = Section::ALL.len();
+                let step = if keystroke.modifiers.shift {
+                    count - 1
+                } else {
+                    1
+                };
+                self.show_settings_section(Section::ALL[(index + step) % count], window, cx);
             }
             _ => return false,
         }
@@ -1820,6 +1843,12 @@ impl Workspace {
             Section::Server => self.server_section(theme, cx),
             Section::Integrations => self.integrations_section(theme, cx),
             Section::Developer => self.developer_section(page, theme, cx),
+            Section::Shortcuts => {
+                let filter = page.shortcut_filter.read(cx).text().to_owned();
+                let mut rows = vec![page.shortcut_filter.clone().into_any_element()];
+                rows.extend(self.shortcuts_section(&filter, theme, cx));
+                rows
+            }
         };
         let nav: Vec<_> = Section::ALL
             .iter()

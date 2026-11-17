@@ -5,7 +5,7 @@ use super::{
 };
 use crate::{
     keymap,
-    rex::{endpoint::Endpoint, host::HostCommand},
+    rex::endpoint::Endpoint,
     ui::{actions, keys},
 };
 use gpui::{Context, Keystroke, Window};
@@ -155,6 +155,7 @@ impl Workspace {
         let keys = match keystroke.key.as_str() {
             "escape" if plain => {
                 self.close_overlay(window, cx);
+                self.back_to_shortcuts(window, cx);
                 return;
             }
             "backspace" if plain => Vec::new(),
@@ -164,11 +165,9 @@ impl Workspace {
             },
         };
         self.update_settings(|s| drop(s.shortcuts.insert(action, keys)), cx);
-        let request = actions::keymap_request(&self.settings.shortcuts);
-        for host in &self.hosts {
-            host.handle.send(HostCommand::Keymap(request.clone()));
-        }
+        self.send_keymap();
         self.close_overlay(window, cx);
+        self.back_to_shortcuts(window, cx);
     }
 
     /// The keys bound to an action in the keymap in use, as Rex spells them.

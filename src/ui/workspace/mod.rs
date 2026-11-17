@@ -24,6 +24,7 @@ pub mod quick_look;
 pub mod remote;
 pub mod server_status;
 pub mod sessions;
+pub mod shortcuts_page;
 pub mod sidebar_width;
 mod ssh;
 pub mod ssh_questions;
@@ -165,6 +166,8 @@ pub struct Workspace {
     moving: Option<dragging::Moving>,
     /// The sidebar's edge while it's dragged, and the width it's being dragged to.
     sidebar_resizing: Option<sidebar_width::Resizing>,
+    /// Change Shortcut came from the Shortcuts page, so it goes back there after.
+    shortcut_return: bool,
     sidebar_drag_width: Option<f32>,
     reveal: toolbar::Reveal,
     highlight: highlight::Track,
@@ -369,6 +372,7 @@ impl Workspace {
             fetching_tabs: HashSet::new(),
             moving: None,
             sidebar_resizing: None,
+            shortcut_return: false,
             sidebar_drag_width: None,
             reveal: Default::default(),
             highlight: Default::default(),

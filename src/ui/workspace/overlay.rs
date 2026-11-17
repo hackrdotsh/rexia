@@ -152,6 +152,11 @@ pub enum RenameTarget {
 
 #[derive(Clone, Debug, PartialEq)]
 pub enum Confirm {
+    /// Reset a shortcut, taking its default key back from the action that has it now.
+    ResetShortcut {
+        action: String,
+        from: String,
+    },
     /// Close a pane or tab with busy programs in it.
     Close(super::close_guard::CloseTarget),
     /// Paste text that could run a command before it's read.
@@ -172,7 +177,7 @@ impl Confirm {
     /// The button that leaves things as they are.
     fn keep_label(&self) -> &'static str {
         match self {
-            Self::Paste { .. } | Self::Close(_) => "Cancel",
+            Self::Paste { .. } | Self::Close(_) | Self::ResetShortcut { .. } => "Cancel",
             Self::RemoveHost { .. } => "Keep Host",
             Self::CloseSession { .. } | Self::RestartServer => "Keep Running",
         }
@@ -686,6 +691,10 @@ impl Workspace {
     pub fn close_overlay(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         self.overlay = None;
         self.refocus(window, cx);
+        // A question asked from the Shortcuts page goes back to it, either way.
+        if self.shortcut_return && self.recording_shortcut().is_none() {
+            self.back_to_shortcuts(window, cx);
+        }
         cx.notify();
     }
 
@@ -1161,6 +1170,7 @@ impl Workspace {
                 }
             }
             Confirm::Close(target) => self.close_now(target),
+            Confirm::ResetShortcut { action, from } => self.reset_now(&action, Some(from), cx),
             Confirm::RestartServer => self.restart_server(cx),
             Confirm::CloseSession { id } => self
                 .host()
