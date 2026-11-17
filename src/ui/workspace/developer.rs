@@ -71,8 +71,12 @@ impl Workspace {
                 .spawn(async move { crate::rex::install::check(checked.as_deref()) })
                 .await;
             let _ = this.update(cx, |ws, cx| {
-                ws.rex_check = Some((location, result));
-                cx.notify();
+                // A check of a location chosen before this one may finish after it; it
+                // mustn't replace the current one's result.
+                if location == ws.settings.rex_location {
+                    ws.rex_check = Some((location, result));
+                    cx.notify();
+                }
             });
         })
         .detach();
