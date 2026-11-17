@@ -1217,6 +1217,7 @@ impl Workspace {
                         list = list.child(
                             div()
                                 .id(SharedString::from(format!("side-tab-{window_id}")))
+                                .group("side-tab")
                                 .flex()
                                 .items_center()
                                 .gap(px(8.))
@@ -1253,6 +1254,35 @@ impl Workspace {
                                 .children(self.tab_mark(index, window, &model).map(
                                     |(state, badge)| activity_mark(state, badge, false, theme),
                                 ))
+                                // Close, shown while the pointer is on the row.
+                                .child(
+                                    div()
+                                        .invisible()
+                                        .group_hover("side-tab", |d| d.visible())
+                                        .child(
+                                            small_icon_button(
+                                                SharedString::from(format!(
+                                                    "side-tab-close-{window_id}"
+                                                )),
+                                                "x",
+                                                if active { theme.text } else { theme.text_muted },
+                                                theme,
+                                                {
+                                                    let id = window_id.clone();
+                                                    cx.listener(move |ws, _, _, cx| {
+                                                        cx.stop_propagation();
+                                                        ws.request_close(
+                                                            close_guard::CloseTarget::Tab(
+                                                                id.clone(),
+                                                            ),
+                                                            cx,
+                                                        )
+                                                    })
+                                                },
+                                            )
+                                            .tooltip(self.tip("client.tab.close", None)),
+                                        ),
+                                )
                                 .on_mouse_down(MouseButton::Left, {
                                     let id = window_id.clone();
                                     cx.listener(move |ws, event: &gpui::MouseDownEvent, _, _| {

@@ -173,10 +173,24 @@ impl Render for HoverCard {
         let Some(workspace) = self.workspace.upgrade() else {
             return div().into_any_element();
         };
-        let (model, local) = {
+        let (model, local, menu_open) = {
             let ws = workspace.read(cx);
-            (ws.model(), ws.host().handle.endpoint.is_local())
+            (
+                ws.model(),
+                ws.host().handle.endpoint.is_local(),
+                ws.context_menu_open(),
+            )
         };
+        // A right-click menu is what the pointer is using; the card would cover it.
+        if menu_open {
+            if cx
+                .try_global::<ShownCard>()
+                .is_some_and(|s| s.target.is_some())
+            {
+                cx.set_global(ShownCard::default());
+            }
+            return div().into_any_element();
+        }
         let (heading, panes) = panes_of(&self.target, &model, local);
         let tab = matches!(self.target, CardTarget::Tab(_));
 

@@ -236,6 +236,11 @@ impl Workspace {
         cx.notify();
     }
 
+    /// Whether a right-click menu (a pane's or a tab's) is open.
+    pub fn context_menu_open(&self) -> bool {
+        self.context_menu.is_some()
+    }
+
     /// The menu's labels, in order, while it's open, for tests. Disabled ones end in `(off)`.
     pub fn context_menu_labels(&self) -> Option<Vec<String>> {
         let menu = self.context_menu.as_ref()?;
