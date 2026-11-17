@@ -1180,6 +1180,7 @@ impl Workspace {
                     .when(!active, |d| d.hover(|d| d.bg(theme.overlay(0.06))))
                     .cursor_pointer()
                     .hoverable_tooltip(self.hover_card(hover_card::CardTarget::Tab(id.clone()), cx))
+                    .tooltip_show_delay(hover_card::SHOW_DELAY)
                     .relative()
                     .child(self.track_bounds(format!("tab:{id}"), cx))
                     .on_click(
@@ -1747,6 +1748,7 @@ impl Workspace {
                                         hover_card::CardTarget::Tab(window_id.clone()),
                                         cx,
                                     ))
+                                    .tooltip_show_delay(hover_card::SHOW_DELAY)
                                 })
                                 .relative()
                                 .child(self.track_bounds(format!("side-tab:{window_id}"), cx))
@@ -2215,6 +2217,7 @@ impl Workspace {
                     .hoverable_tooltip(
                         self.hover_card(hover_card::CardTarget::Pane(block_id.to_owned()), cx),
                     )
+                    .tooltip_show_delay(hover_card::SHOW_DELAY)
                     .relative()
                     .child(self.track_bounds(format!("header:{block_id}"), cx))
                     // A double-click on the title renames the pane.

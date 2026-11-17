@@ -12,6 +12,8 @@ use gpui::{
 };
 use serde_json::json;
 
+pub(super) const SHOW_DELAY: std::time::Duration = std::time::Duration::from_millis(650);
+
 /// What the card is about.
 #[derive(Clone, Debug, PartialEq)]
 pub enum CardTarget {

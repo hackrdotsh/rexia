@@ -49,11 +49,11 @@ fn rest_on(h: &mut Harness, at: Point<Pixels>) -> (CardTarget, Vec<String>) {
     h.cx.update(|cx| cx.set_global(ShownCard::default()));
     move_to(h, at);
     // GPUI's test clock moves only when told to.
-    h.cx.advance_clock(Duration::from_millis(300));
+    h.cx.advance_clock(Duration::from_millis(600));
     h.pump();
     let early = h.cx.update(|cx| cx.global::<ShownCard>().target.clone());
-    assert_eq!(early, None, "cards wait before showing");
-    h.cx.advance_clock(Duration::from_millis(300));
+    assert_eq!(early, None, "cards are still hidden at 600 ms");
+    h.cx.advance_clock(Duration::from_millis(60));
     h.pump();
     h.cx.update(|cx| {
         let card = cx.global::<ShownCard>();
