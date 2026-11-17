@@ -223,7 +223,7 @@ pub struct Workspace {
     agents: agents::AgentsState,
     shader_preview: cursor_shaders::ShaderPreview,
     /// The chosen SSH agent's status in words, and the socket it describes.
-    ssh_agent_status: Option<(Option<PathBuf>, String)>,
+    ssh_agent_status: ssh::AgentStatus,
     server_report: server_status::ServerReportState,
     /// The last Tailscale call's error, the call under way, and whether turning it on
     /// lets tailnet members in.
@@ -438,7 +438,7 @@ impl Workspace {
             motion: Default::default(),
             agents: Default::default(),
             shader_preview: Default::default(),
-            ssh_agent_status: None,
+            ssh_agent_status: Default::default(),
             server_report: Default::default(),
             tailscale_error: None,
             tailscale_busy: None,

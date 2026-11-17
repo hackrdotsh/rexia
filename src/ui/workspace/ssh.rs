@@ -7,6 +7,33 @@ use crate::{rex::ssh_agent, ui::theme::Theme};
 use gpui::{AnyElement, Context, IntoElement, ParentElement, Styled, div, prelude::*, px};
 use std::path::PathBuf;
 
+#[derive(Default)]
+pub(super) struct AgentStatus {
+    generation: u64,
+    value: Option<(Option<PathBuf>, String)>,
+}
+
+impl AgentStatus {
+    fn begin(&mut self) -> u64 {
+        self.generation = self.generation.wrapping_add(1);
+        self.generation
+    }
+
+    fn complete(&mut self, generation: u64, chosen: Option<PathBuf>, status: String) {
+        // A slower previous lookup must not overwrite the latest selection's result.
+        if generation == self.generation {
+            self.value = Some((chosen, status));
+        }
+    }
+
+    fn get(&self, chosen: &Option<PathBuf>) -> Option<&str> {
+        self.value
+            .as_ref()
+            .filter(|(socket, _)| socket == chosen)
+            .map(|(_, status)| status.as_str())
+    }
+}
+
 /// The socket ssh's own choice uses, when the environment names one.
 fn session_socket() -> Option<PathBuf> {
     std::env::var_os("SSH_AUTH_SOCK").map(PathBuf::from)
@@ -22,6 +49,7 @@ impl Workspace {
     /// Ask the chosen agent, or ssh's default one, how many keys it holds.
     pub fn refresh_ssh_agent_status(&mut self, cx: &mut Context<Self>) {
         let chosen = self.settings.ssh_agent.clone();
+        let generation = self.ssh_agent_status.begin();
         cx.spawn(async move |this, cx| {
             let asked = chosen.clone();
             let status = cx
@@ -36,7 +64,7 @@ impl Workspace {
                 })
                 .await;
             let _ = this.update(cx, |ws, cx| {
-                ws.ssh_agent_status = Some((chosen, status));
+                ws.ssh_agent_status.complete(generation, chosen, status);
                 cx.notify();
             });
         })
@@ -45,10 +73,7 @@ impl Workspace {
 
     /// The chosen agent's status, once asked, for the UI and tests.
     pub fn ssh_agent_status(&self) -> Option<&str> {
-        self.ssh_agent_status
-            .as_ref()
-            .filter(|(socket, _)| *socket == self.settings.ssh_agent)
-            .map(|(_, status)| status.as_str())
+        self.ssh_agent_status.get(&self.settings.ssh_agent)
     }
 
     pub(super) fn ssh_rows(
@@ -155,5 +180,36 @@ impl Workspace {
                 )
                 .into_any_element(),
         ]
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn old_agent_responses_cannot_replace_the_latest_selection() {
+        let mut status = AgentStatus::default();
+        let custom = Some(PathBuf::from("/test/custom-agent.sock"));
+        let default_request = status.begin();
+        let custom_request = status.begin();
+        status.complete(
+            custom_request,
+            custom.clone(),
+            "Answers, with 3 keys".into(),
+        );
+        status.complete(default_request, None, "Answers, but holds no keys".into());
+        assert_eq!(status.get(&custom), Some("Answers, with 3 keys"));
+    }
+
+    #[test]
+    fn revisiting_the_same_agent_does_not_accept_its_old_response() {
+        let mut status = AgentStatus::default();
+        let first = status.begin();
+        let _other = status.begin();
+        let newest = status.begin();
+        status.complete(newest, None, "Answers, with 2 keys".into());
+        status.complete(first, None, "Answers, with 1 key".into());
+        assert_eq!(status.get(&None), Some("Answers, with 2 keys"));
     }
 }
