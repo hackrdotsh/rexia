@@ -1279,6 +1279,11 @@ impl Workspace {
             self.settings.interface.sidebar_text_size.metrics();
         let mut list = div().flex().flex_col().gap(px(8.));
         for (index, host) in self.hosts.iter().enumerate() {
+            let host_surface = if index == self.active {
+                theme.surface
+            } else {
+                theme.background.blend(theme.surface.opacity(0.5))
+            };
             let model = host.handle.snapshot();
             let status = match &model.connection {
                 crate::rex::host::Connection::Connected => None,
@@ -1291,7 +1296,7 @@ impl Workspace {
                 .gap(px(2.))
                 .p(px(4.))
                 .rounded(theme.radius())
-                .bg(theme.surface)
+                .bg(host_surface)
                 .child(
                     div()
                         .flex()
@@ -1482,9 +1487,9 @@ impl Workspace {
                                     self.settings.interface.shell_icon_theme,
                                     if active { theme.text } else { theme.text_muted },
                                     if active {
-                                        theme.surface.blend(active_fill)
+                                        host_surface.blend(active_fill)
                                     } else {
-                                        theme.surface
+                                        host_surface
                                     },
                                     13.,
                                     theme,
