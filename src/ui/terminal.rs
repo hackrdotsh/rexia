@@ -1419,6 +1419,8 @@ struct Segment {
     runs: Vec<(usize, Style)>,
     /// Glyphs advance exactly one cell; wide and composed characters paint alone.
     forced: Option<u16>,
+    /// Shape single-cell Unicode separately so a wide fallback glyph stays in its cell.
+    fit_cell: bool,
 }
 
 #[derive(Clone, Copy)]
@@ -1549,13 +1551,15 @@ fn segments(
             sprites.push((col, c, fg));
             continue;
         }
-        let alone = cell.has(flags::WIDE) || cell.text.chars().count() > 1;
+        let fit_cell = !cell.has(flags::WIDE) && !cell.text.is_ascii();
+        let alone = cell.has(flags::WIDE) || cell.text.chars().count() > 1 || fit_cell;
         if alone {
             segments.push(Segment {
                 col,
                 text: cell.text.clone(),
                 runs: vec![(cell.text.len(), style)],
                 forced: None,
+                fit_cell,
             });
             continue;
         }
@@ -1568,6 +1572,7 @@ fn segments(
                 text: String::new(),
                 runs: Vec::new(),
                 forced: Some(0),
+                fit_cell: false,
             });
         }
         let segment = segments.last_mut().expect("segment");
@@ -1788,14 +1793,47 @@ impl Render for TerminalPane {
                                 })
                                 .collect();
                             let force = segment.forced.map(|_| cell.width);
-                            let line = window.text_system().shape_line(
-                                segment.text.into(),
+                            let text: SharedString = segment.text.into();
+                            let mut line = window.text_system().shape_line(
+                                text.clone(),
                                 font_size,
                                 &runs,
                                 force,
                             );
-                            let at = cell_bounds(segment.col, row, 1).origin;
-                            let _ = line.paint(at, cell.height, TextAlign::Left, None, window, cx);
+                            let bounds = cell_bounds(segment.col, row, 1);
+                            if segment.fit_cell {
+                                if line.width > cell.width {
+                                    let fitted_size = font_size * (cell.width / line.width);
+                                    line = window.text_system().shape_line(
+                                        text,
+                                        fitted_size,
+                                        &runs,
+                                        None,
+                                    );
+                                }
+                                window.with_content_mask(
+                                    Some(gpui::ContentMask { bounds }),
+                                    |window| {
+                                        let _ = line.paint(
+                                            bounds.origin,
+                                            cell.height,
+                                            TextAlign::Left,
+                                            None,
+                                            window,
+                                            cx,
+                                        );
+                                    },
+                                );
+                            } else {
+                                let _ = line.paint(
+                                    bounds.origin,
+                                    cell.height,
+                                    TextAlign::Left,
+                                    None,
+                                    window,
+                                    cx,
+                                );
+                            }
                         }
                     }
                     // Braille and block elements, drawn to fit the cell exactly.
@@ -2330,6 +2368,20 @@ mod tests {
             ansi: [0; 16],
             dimmed: false,
         }
+    }
+
+    #[test]
+    fn single_cell_unicode_is_fitted_without_resizing_wide_cells() {
+        let row = [
+            cell("a", 0),
+            cell("⌘", 0),
+            cell("界", flags::WIDE),
+            cell("", flags::SPACER),
+            cell("b", 0),
+        ];
+        let (segments, _, _) = segments(&row, &look());
+        let cells: Vec<_> = segments.iter().map(|s| (s.col, s.fit_cell)).collect();
+        assert_eq!(cells, [(0, false), (1, true), (2, false), (4, false)]);
     }
 
     #[test]
