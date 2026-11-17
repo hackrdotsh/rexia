@@ -1519,15 +1519,13 @@ impl Workspace {
                 }
             }
         }
-        div()
-            .id("sidebar")
+        let combined = self.settings.interface.activity_below_sessions;
+        let sessions = div()
             .flex()
             .flex_col()
-            .flex_1()
-            .min_h_0()
-            .p(px(10.))
+            .flex_none()
             .gap(px(6.))
-            .overflow_y_scroll()
+            .when(combined, |d| d.min_h(relative(0.5)).pb(px(14.)))
             .child(
                 div()
                     .flex()
@@ -1552,9 +1550,20 @@ impl Workspace {
                 } else {
                     d.child(self.render_filter_results(theme, cx))
                 }
-            })
-            .when(self.settings.interface.activity_below_sessions, |d| {
-                d.child(self.render_sidebar_activity(true, theme, cx))
+            });
+        div()
+            .id("sidebar")
+            .relative()
+            .flex()
+            .flex_col()
+            .flex_1()
+            .min_h_0()
+            .p(px(10.))
+            .overflow_y_scroll()
+            .child(sessions)
+            .when(combined, |d| {
+                d.child(self.track_bounds("sessions-sidebar".into(), cx))
+                    .child(self.render_sidebar_activity(true, theme, cx))
             })
             .into_any_element()
     }

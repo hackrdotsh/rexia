@@ -133,13 +133,20 @@ fn background_attention_notifies_badges_and_clicks_through() {
         .unwrap()
         .id()
         .to_owned();
-    let (tab, activity) = h.wait_ui("Sessions with Activity below", |ws| {
+    let (sidebar, tab, activity) = h.wait_ui("Sessions with Activity below", |ws| {
         Some((
+            ws.element_bounds("sessions-sidebar")?,
             ws.element_bounds(&format!("side-tab:{tab_id}"))?,
             ws.element_bounds("activity-below-sessions")?,
         ))
     });
     assert!(activity.origin.y >= tab.origin.y + tab.size.height);
+    let midpoint = sidebar.origin.y + sidebar.size.height / 2.;
+    assert!(
+        (activity.origin.y - midpoint).abs() <= gpui::px(1.),
+        "Activity starts at {:?}, expected {midpoint:?}",
+        activity.origin.y,
+    );
     assert!(
         rexia::settings::Settings::load(&settings_path)
             .unwrap()

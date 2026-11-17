@@ -515,7 +515,6 @@ impl Workspace {
             .gap(px(6.))
             .when(below_sessions, |d| {
                 d.flex_none()
-                    .mt(px(8.))
                     .pt(px(10.))
                     .border_t(theme.border_width)
                     .border_color(theme.overlay(0.12))
