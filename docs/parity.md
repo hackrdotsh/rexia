@@ -42,12 +42,10 @@ Not implemented yet:
 
 Every setting in the Mac settings reference, every Mac action, and every Mac changelog post
 from preview.4 to preview.30 was checked against rexia's code. Actions: all 116 accounted
-for (104 built, 12 excluded above). These settings and changelog features were missing
-when checked, and are built in this order; each moves to its section once it's done:
-
-| Gap | Source |
-| --- | --- |
-| Settings search, `rex://settings/...` links to a group or setting, reset buttons on changed settings, every simple setting as a palette row | preview.20, 25, 28 |
+for (104 built, 12 excluded above). No implementation gaps remain in that audit's
+Linux scope. This is not a claim of identical artwork, macOS integrations, or exhaustive
+runtime verification: sign-in, rename and sign-out against a real Tailscale account
+still need an account-owned test. The automated checks use an isolated Rex server.
 
 ## Settings
 
@@ -62,7 +60,7 @@ when checked, and are built in this order; each moves to its section once it's d
 | Interface › Tab icons, Window | Tab icons: show zero to five pane icons per tab (vertical tabs stop at three), focused pane first; use color always, for active panes, for active tabs, or never; shell icon theme (default artwork, terminal theme colors, or accent). Colored icons sit on a tile in their program's color from the terminal palette. Window: sidebar text size (small, medium or large; Linux has no system sidebar size to follow), and a gesture to toggle the sidebar (a two-finger touchpad swipe sideways, a swipe with Alt held, or off). Showing or hiding the sidebar always keeps the window's width, as tiling compositors expect. |
 | Interface › Gestures | Use trackpad gestures: spread two fingers over a pane to zoom it, pinch to restore it, and swipe for the sidebar. Pinches need a compositor with pointer gestures (Wayland `zwp_pointer_gestures_v1`). |
 | Interface › Padding | Padding X and Y, fill with program colors (off; automatic, which fills while a full-screen program runs along edges of one color; always, which extends every edge cell), and include pane header. |
-| Terminal › Typography | Font family, size and line height (font style and weight aren't built yet, see the audit). Defaults come from Ghostty's config, then fontconfig. |
+| Terminal › Typography | Font family, size, style, weight and line height. Installed upright faces supply the style choices; weight steps from 100 to 900. Defaults come from Ghostty's config, then fontconfig. |
 | Terminal › Cursor | Cursor style (block, bar, underline) for programs that don't choose one, force style, and blink speed (off, slow, normal, fast, or a custom interval). As in preview.30, a cursor blinks only when its program asks. When a pane attaches, a program's explicit steady block looks like the default, so it shows your style until the program sets the cursor again. Cursor shaders: a trail behind the focused cursor when it jumps two cells or more, in eight effects (Warp, Sweep, Comet, Blaze, Tapered, Rainbow, Gradient, Frozen), with a preview to click in. GPUI has no custom GPU shaders, so each effect is drawn as a shape with its own taper, gradient, glow and fade rather than as Rex's own shader code. |
 | Terminal › Advanced Font | Character spacing, ligatures, which of bold and italic draw in their style, and fallback fonts. Font smoothing and forced faux bold and italic are left to the system's font rasterizer. |
 | Terminal › Colors | Improve text contrast (text below a 3:1 contrast ratio against its background is lifted just enough) and force theme palette for text (program colors become the perceptually nearest theme color, then contrast is corrected). Display P3 doesn't apply on Linux. |
@@ -87,6 +85,16 @@ when checked, and are built in this order; each moves to its section once it's d
 ## Behavior
 
 Working:
+
+- Settings search (`Ctrl+F` in Settings) and the command palette share an index of 85
+  client preferences. Search matches names, sections, groups and setting paths; arrows
+  and Enter open a result's editor. Changed settings have Reset controls, including
+  text fields and per-state notification settings. Reset restores inheritance for
+  optional values such as the font rather than saving the current effective value.
+  `rex://settings/...` links clicked in a terminal stay in Rexia: a section opens its
+  page, a group lists its settings, and a setting opens its editor. Copy link in the
+  editor supplies its URI, such as `rex://settings/terminal/font_size`. These cover
+  preview.20, 25 and 28's settings-navigation additions.
 
 - Fractional Wayland scaling stays at the compositor's requested scale, including on
   older `wl_surface` versions. At 150%, terminal pixels are rendered at 150%, not at
