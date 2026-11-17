@@ -96,6 +96,11 @@ when checked, and are built in this order; each moves to its section once it's d
 
 Working:
 
+- What floats over the panes keeps its clicks: Settings, dialogs and lists, ssh's
+  questions, the right-click menu, notices, upload progress, hover cards and a floating
+  toolbar block the mouse for what's under them, so a click inside one never focuses the
+  terminal behind it. A click on the dimmed backdrop still closes Settings.
+
 - Settings › Shortcuts (Rex for Mac's Shortcuts page, from preview.8): every action,
   rexia's and the server's own, with its keys and where they come from (Default, Yours,
   or the init.lua line, both when init.lua binds it too), filtered as you type. Change…
