@@ -1526,23 +1526,14 @@ impl Workspace {
             .flex_none()
             .gap(px(6.))
             .when(combined, |d| d.min_h(relative(0.5)).pb(px(14.)))
-            .child(
-                div()
-                    .flex()
-                    .items_center()
-                    .gap(px(10.))
-                    .px(px(6.))
-                    .pb(px(4.))
-                    .child(icon("server").size(px(20.)).text_color(theme.primary))
-                    .child(title(
-                        if cfg!(debug_assertions) {
-                            "Sessions (dev)"
-                        } else {
-                            "Sessions"
-                        },
-                        theme,
-                    )),
-            )
+            .child(div().px(px(6.)).pb(px(4.)).child(title(
+                if cfg!(debug_assertions) {
+                    "Sessions (dev)"
+                } else {
+                    "Sessions"
+                },
+                theme,
+            )))
             .child(self.render_filter_field())
             .map(|d| {
                 if self.filter.query.trim().is_empty() {

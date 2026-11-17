@@ -11,7 +11,6 @@ use crate::{
     sound::{self, Cue},
     ui::{
         components::{heading, small_icon_button, title},
-        icons::icon,
         theme::Theme,
         titles,
     },
@@ -530,7 +529,6 @@ impl Workspace {
                     .gap(px(10.))
                     .px(px(6.))
                     .pb(px(4.))
-                    .child(icon("bell").size(px(20.)).text_color(theme.primary))
                     .child(div().flex_1().child(title("Activity", theme)))
                     .child(
                         small_icon_button(
