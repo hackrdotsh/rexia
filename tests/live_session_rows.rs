@@ -1,5 +1,5 @@
 //! Session rows in the sidebar against a real Rex server named by REXIA_TEST_SERVER:
-//! the right-click menu renames, moves and closes a session; a double-click renames it;
+//! the right-click menu renames, moves and closes a session; left clicks toggle disclosure;
 //! dragging a row reorders sessions on the server; and the row's close button closes it
 //! after asking.
 mod common;
@@ -108,14 +108,24 @@ fn session_rows_rename_move_reorder_and_close() {
     });
     println!("after dragging c to the top: {dragged:?}");
 
-    // A double-click renames.
+    // Double-clicking doesn't rename; the right-click menu does.
     let b = row(&mut h, &ours[1]);
     down(&mut h, b.center(), MouseButton::Left, 1);
     up(&mut h, b.center(), MouseButton::Left);
     down(&mut h, b.center(), MouseButton::Left, 2);
     up(&mut h, b.center(), MouseButton::Left);
+    assert!(h.workspace(|ws| ws.renaming().is_none()));
+    down(&mut h, b.center(), MouseButton::Right, 1);
+    up(&mut h, b.center(), MouseButton::Right);
+    h.wait_ui("the session menu", |ws| ws.context_menu_labels());
+    h.cx.update(|cx| {
+        window
+            .update(cx, |ws, window, cx| {
+                ws.choose_context_item("Rename Session…", window, cx)
+            })
+            .unwrap()
+    });
     let renaming = h.wait_ui("the rename dialog", |ws| ws.renaming());
-    println!("double-click: renaming {renaming}");
     assert_eq!(renaming, format!("session {}", ours[1]));
     h.press("escape");
 

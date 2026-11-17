@@ -1304,38 +1304,39 @@ impl Workspace {
                 .bg(host_surface)
                 .child(
                     div()
+                        .id(SharedString::from(format!("host-row-{host_id}")))
+                        .relative()
                         .flex()
                         .items_center()
+                        .rounded(theme.radius_small())
+                        .cursor_pointer()
+                        .hover(|d| d.bg(theme.overlay(0.06)))
+                        .child(self.track_bounds(format!("host-disclosure:{host_id}"), cx))
+                        .on_click(cx.listener({
+                            let host_id = host_id.clone();
+                            move |ws, _, _, cx| {
+                                if !ws.collapsed_hosts.remove(&host_id) {
+                                    ws.collapsed_hosts.insert(host_id.clone());
+                                }
+                                cx.notify();
+                            }
+                        }))
                         .child(
-                            small_icon_button(
-                                SharedString::from(format!("host-disclosure-{host_id}")),
-                                if collapsed {
-                                    "chevron-right"
-                                } else {
-                                    "chevron-down"
-                                },
-                                theme.text_muted,
-                                theme,
-                                cx.listener({
-                                    let host_id = host_id.clone();
-                                    move |ws, _, _, cx| {
-                                        if !ws.collapsed_hosts.remove(&host_id) {
-                                            ws.collapsed_hosts.insert(host_id.clone());
-                                        }
-                                        cx.notify();
-                                    }
-                                }),
-                            )
-                            .relative()
-                            .child(self.track_bounds(format!("host-disclosure:{host_id}"), cx))
-                            .tooltip(self.tip(
-                                "",
-                                Some(if collapsed {
-                                    "Expand Host"
-                                } else {
-                                    "Collapse Host"
-                                }),
-                            )),
+                            div()
+                                .flex()
+                                .flex_none()
+                                .items_center()
+                                .justify_center()
+                                .size(px(22.))
+                                .child(
+                                    icon(if collapsed {
+                                        "chevron-right"
+                                    } else {
+                                        "chevron-down"
+                                    })
+                                    .size(px(14.))
+                                    .text_color(theme.text_muted),
+                                ),
                         )
                         .child(
                             heading("", theme)
@@ -1411,37 +1412,23 @@ impl Workspace {
                         .cursor_pointer()
                         .text_color(theme.text_muted)
                         .hover(|d| d.bg(theme.overlay(0.06)))
-                        .child({
-                            let id = id.clone();
-                            let action = if expanded {
-                                "session.collapse"
-                            } else {
-                                "session.expand"
-                            };
-                            small_icon_button(
-                                SharedString::from(format!("session-disclosure-{index}-{id}")),
-                                if expanded {
-                                    "chevron-down"
-                                } else {
-                                    "chevron-right"
-                                },
-                                theme.text_muted,
-                                theme,
-                                cx.listener({
-                                    let id = id.clone();
-                                    move |ws, _, _, cx| {
-                                        ws.set_session_expanded(index, id.clone(), !expanded);
-                                        cx.notify();
-                                    }
-                                }),
-                            )
-                            .on_mouse_down(MouseButton::Left, |_, _, cx| cx.stop_propagation())
-                            .relative()
-                            .child(
-                                self.track_bounds(format!("session-disclosure:{index}:{id}"), cx),
-                            )
-                            .tooltip(self.tip(action, None))
-                        })
+                        .child(
+                            div()
+                                .flex()
+                                .flex_none()
+                                .items_center()
+                                .justify_center()
+                                .size(px(22.))
+                                .child(
+                                    icon(if expanded {
+                                        "chevron-down"
+                                    } else {
+                                        "chevron-right"
+                                    })
+                                    .size(px(14.))
+                                    .text_color(theme.text_muted),
+                                ),
+                        )
                         .child(
                             div()
                                 .flex_1()
@@ -1486,13 +1473,8 @@ impl Workspace {
                         .child(self.track_bounds(format!("session:{index}:{id}"), cx))
                         .on_mouse_down(MouseButton::Left, {
                             let id = id.clone();
-                            cx.listener(move |ws, event: &gpui::MouseDownEvent, window, cx| {
-                                if event.click_count >= 2 {
-                                    ws.rename_session(index, id.clone(), window, cx);
-                                    cx.stop_propagation();
-                                } else {
-                                    ws.press_session_for_drag(index, id.clone(), event.position);
-                                }
+                            cx.listener(move |ws, event: &gpui::MouseDownEvent, _, _| {
+                                ws.press_session_for_drag(index, id.clone(), event.position);
                             })
                         })
                         .on_mouse_down(MouseButton::Right, {
@@ -1503,7 +1485,8 @@ impl Workspace {
                             })
                         })
                         .on_click(cx.listener(move |ws, _, _, cx| {
-                            ws.select_session(index, id.clone(), cx)
+                            ws.set_session_expanded(index, id.clone(), !expanded);
+                            cx.notify();
                         })),
                 );
                 if expanded && let Some(view) = model.views.get(&session.session_id) {
