@@ -52,7 +52,7 @@ use crate::{
         activity::ProgramState,
         client::Identity,
         endpoint::Endpoint,
-        host::{HostCommand, HostHandle, HostModel, shell_layout_for},
+        host::{HostCommand, HostHandle, HostModel},
         view::{self, Rect},
     },
     settings::{
@@ -753,14 +753,16 @@ impl Workspace {
         let Some(session) = self.session_id() else {
             return;
         };
-        let payload = json!({"session_id": session, "layout": shell_layout_for(self.host().handle.endpoint.is_local(), None), "focus": true});
+        let mut payload = json!({"session_id": session, "focus": true});
+        let source = self.focused_block();
         if !self.pinned(self.active, &session) {
-            self.call("session.new_window", payload);
+            self.create_terminal("session.new_window", payload, source, cx);
             return;
         }
         // A window showing its own tab shows the new one once it exists.
         let host = self.host().handle.clone();
         cx.spawn(async move |_, _| {
+            payload["layout"] = host.shell_layout_from(&session, source.as_deref()).await;
             if let Ok(created) = host.request("session.new_window", payload).await
                 && let Some(window) = created["window_id"].as_str()
             {
@@ -815,21 +817,46 @@ impl Workspace {
     }
 
     /// Split the focused pane (or `anchor`): `horizontal` puts the new pane beside it.
-    pub fn split(&mut self, anchor: Option<String>, horizontal: bool, after: bool) {
+    pub fn split(
+        &mut self,
+        anchor: Option<String>,
+        horizontal: bool,
+        after: bool,
+        cx: &mut Context<Self>,
+    ) {
         let Some(session) = self.session_id() else {
             return;
         };
+        let anchor = anchor.or_else(|| self.focused_block());
         let mut payload = json!({
             "session_id": session,
             "direction": if horizontal { "horizontal" } else { "vertical" },
             "side": if after { "after" } else { "before" },
-            "layout": shell_layout_for(self.host().handle.endpoint.is_local(), None),
             "focus": true,
         });
-        if let Some(anchor) = anchor {
+        if let Some(anchor) = &anchor {
             payload["anchor_id"] = json!(anchor);
         }
-        self.call("session.new_split", payload);
+        self.create_terminal("session.new_split", payload, anchor, cx);
+    }
+
+    fn create_terminal(
+        &self,
+        method: &'static str,
+        mut payload: Value,
+        source: Option<String>,
+        cx: &mut Context<Self>,
+    ) {
+        let host = self.host().handle.clone();
+        let session = payload["session_id"]
+            .as_str()
+            .expect("terminal creation has a session")
+            .to_owned();
+        cx.spawn(async move |_, _| {
+            payload["layout"] = host.shell_layout_from(&session, source.as_deref()).await;
+            host.call(method, payload);
+        })
+        .detach();
     }
 
     pub fn close_pane(&mut self, block: String) {
@@ -1206,7 +1233,7 @@ impl Workspace {
                     "split-right",
                     "layout-columns",
                     theme,
-                    cx.listener(|ws, _, _, _| ws.split(None, true, true)),
+                    cx.listener(|ws, _, _, cx| ws.split(None, true, true, cx)),
                 )
                 .tooltip(self.tip("pane.split.right", None)),
             )
@@ -1215,7 +1242,7 @@ impl Workspace {
                     "split-down",
                     "layout-rows",
                     theme,
-                    cx.listener(|ws, _, _, _| ws.split(None, false, true)),
+                    cx.listener(|ws, _, _, cx| ws.split(None, false, true, cx)),
                 )
                 .tooltip(self.tip("pane.split.down", None)),
             )
@@ -1965,7 +1992,9 @@ impl Workspace {
                     "layout-columns",
                     muted,
                     theme,
-                    cx.listener(move |ws, _, _, _| ws.split(Some(split_id.clone()), true, true)),
+                    cx.listener(move |ws, _, _, cx| {
+                        ws.split(Some(split_id.clone()), true, true, cx)
+                    }),
                 )
                 .tooltip(self.tip("pane.split.right", None)),
             )

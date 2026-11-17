@@ -86,6 +86,11 @@ still need an account-owned test. The automated checks use an isolated Rex serve
 
 Working:
 
+- New splits, tabs, and floating terminals inherit the source pane's current working
+  directory, on local and remote hosts. Rexia queries the process directory when opening
+  the terminal, so shells without OSC 7 directory reporting work too. Explicitly chosen
+  directories and the configured local startup command are preserved.
+
 - Settings search (`Ctrl+F` in Settings) and the command palette share an index of 86
   client preferences. Search matches names, sections, groups and setting paths; arrows
   and Enter open a result's editor. Changed settings have Reset controls, including

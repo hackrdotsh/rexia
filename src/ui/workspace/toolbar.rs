@@ -202,7 +202,7 @@ impl Workspace {
                     "split-right",
                     "layout-columns",
                     theme,
-                    cx.listener(|ws, _, _, _| ws.split(None, true, true)),
+                    cx.listener(|ws, _, _, cx| ws.split(None, true, true, cx)),
                 )
                 .tooltip(self.tip("pane.split.right", None)),
             )
@@ -211,7 +211,7 @@ impl Workspace {
                     "split-down",
                     "layout-rows",
                     theme,
-                    cx.listener(|ws, _, _, _| ws.split(None, false, true)),
+                    cx.listener(|ws, _, _, cx| ws.split(None, false, true, cx)),
                 )
                 .tooltip(self.tip("pane.split.down", None)),
             )

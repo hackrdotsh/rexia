@@ -418,6 +418,37 @@ impl HostHandle {
             .unwrap_or_else(|_| Err("the host stopped".into()))
     }
 
+    /// Inherit the source process's current directory, even when its shell emits no OSC 7.
+    pub async fn shell_layout_from(&self, session: &str, source: Option<&str>) -> Value {
+        let cwd = if let Some(source) = source {
+            let cached = self
+                .model
+                .lock()
+                .expect("host model")
+                .blocks
+                .get(source)
+                .and_then(|b| {
+                    b.pwd
+                        .as_ref()
+                        .filter(|p| !p.is_empty())
+                        .or(b.process.cwd.as_ref().filter(|p| !p.is_empty()))
+                        .cloned()
+                });
+            self.request(
+                &format!("{TERMINAL_CREATOR}.process"),
+                json!({"session_id": session, "block_id": source, "args": {}}),
+            )
+            .await
+            .ok()
+            .and_then(|reply| Process::parse(&reply).cwd)
+            .filter(|path| !path.is_empty())
+            .or(cached)
+        } else {
+            None
+        };
+        shell_layout_for(self.endpoint.is_local(), cwd.as_deref())
+    }
+
     pub fn snapshot(&self) -> HostModel {
         self.model.lock().expect("host model").clone()
     }
@@ -1715,6 +1746,81 @@ async fn stream(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[tokio::test]
+    async fn new_shell_directory_prefers_live_process_and_handles_missing_data() {
+        let (commands, receiver) = flume::unbounded();
+        let (_, wake) = flume::bounded(1);
+        let host = HostHandle {
+            endpoint: Endpoint::parse("ssh://example.test").unwrap(),
+            model: Arc::default(),
+            commands,
+            wake,
+        };
+        for (response, reported, cached, expected) in [
+            (
+                Ok(json!({"foreground": {"cwd": "/live path"}})),
+                Some("/reported"),
+                Some("/cached"),
+                Some("/live path"),
+            ),
+            (
+                Ok(json!({})),
+                Some("/reported"),
+                Some("/cached"),
+                Some("/reported"),
+            ),
+            (
+                Err("not available".to_owned()),
+                None,
+                Some("/cached"),
+                Some("/cached"),
+            ),
+            (
+                Ok(json!({"foreground": {"cwd": ""}})),
+                Some(""),
+                Some(""),
+                None,
+            ),
+        ] {
+            host.model.lock().unwrap().blocks.insert(
+                "source".into(),
+                BlockState {
+                    pwd: reported.map(str::to_owned),
+                    process: Process {
+                        cwd: cached.map(str::to_owned),
+                        ..Default::default()
+                    },
+                    ..Default::default()
+                },
+            );
+            let answer = async {
+                let HostCommand::Call {
+                    method,
+                    payload,
+                    reply: Some(reply),
+                } = receiver.recv_async().await.unwrap()
+                else {
+                    panic!("expected directory request")
+                };
+                assert_eq!(method, format!("{TERMINAL_CREATOR}.process"));
+                assert_eq!(payload["session_id"], "session");
+                assert_eq!(payload["block_id"], "source");
+                reply.send(response).unwrap();
+            };
+            let (layout, ()) =
+                tokio::join!(host.shell_layout_from("session", Some("source")), answer);
+            assert_eq!(layout["block"]["options"]["cwd"].as_str(), expected);
+        }
+        assert_eq!(
+            host.shell_layout_from("session", None).await,
+            shell_layout()
+        );
+        assert!(
+            receiver.try_recv().is_err(),
+            "no source needs no process query"
+        );
+    }
 
     #[test]
     fn startup_commands_split_and_become_terminal_options() {

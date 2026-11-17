@@ -5,7 +5,7 @@ use super::{Workspace, overlay};
 use crate::{
     keymap::{Keymap, Lookup},
     rex::{
-        host::{HostCommand, PerformRequest, shell_layout_for},
+        host::{HostCommand, PerformRequest},
         view::{self, View},
     },
     ui::{actions, keys, terminal::TerminalPane, titles},
@@ -67,7 +67,7 @@ impl Workspace {
         self.panes.get(block).cloned()
     }
 
-    fn focused_block(&self) -> Option<String> {
+    pub(super) fn focused_block(&self) -> Option<String> {
         self.model()
             .view()
             .and_then(View::active_window)
@@ -691,7 +691,7 @@ impl Workspace {
                 };
                 let horizontal = matches!(wanted.as_str(), "left" | "right");
                 let after = matches!(wanted.as_str(), "right" | "down");
-                self.split(block.clone(), horizontal, after);
+                self.split(block.clone(), horizontal, after, cx);
             }
             "pane.focus" | "pane.focus.left" | "pane.focus.right" | "pane.focus.up"
             | "pane.focus.down" => {
@@ -735,10 +735,11 @@ impl Workspace {
                 );
             }
             "pane.float" => self.toggle_float(need_block()?),
-            "pane.new_floating" => call(
-                self,
+            "pane.new_floating" => self.create_terminal(
                 "session.new_layer",
-                json!({"session_id": need_session()?, "bounds": [0.15, 0.12, 0.7, 0.72], "layout": shell_layout_for(self.host().handle.endpoint.is_local(), None), "focus": true}),
+                json!({"session_id": need_session()?, "bounds": [0.15, 0.12, 0.7, 0.72], "focus": true}),
+                block.clone(),
+                cx,
             ),
             "pane.minimize_floating" | "pane.minimize_all_floating" => {
                 let window = window_view

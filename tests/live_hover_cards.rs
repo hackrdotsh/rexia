@@ -186,7 +186,11 @@ fn tabs_and_pane_headers_show_hover_cards() {
     let header = bounds(&mut h, &format!("header:{other}"));
     let (target, lines) = rest_on(&mut h, header.center());
     println!("other pane card {target:?}: {lines:?}");
-    assert_eq!(lines, ["~"], "a directory that is the title isn't repeated");
+    assert_eq!(
+        lines,
+        [wanted],
+        "the inherited directory title isn't repeated"
+    );
     assert_eq!(target, CardTarget::Pane(other.clone()));
     assert!(!lines.iter().any(|l| l.contains("builder")));
     h.screenshot("hover-card-pane");
