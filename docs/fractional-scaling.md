@@ -19,6 +19,18 @@ The test covers both scale protocols and the fallback when neither exists.
 It imports the same policy called by the vendored Wayland Enter and Leave
 handlers, rather than duplicating their condition.
 
+To exercise the real event ordering with an installed umbriel executable:
+
+```sh
+REXIA_TEST_UMBRIEL="$(command -v umbriel)" nix develop --command \
+  cargo test --test live_wayland_scale -- --nocapture
+```
+
+This launches an isolated headless compositor with a private runtime directory
+and a Rexia window pointed at an absent test socket. It checks the Wayland trace
+and buffer dimensions without contacting the user's server or changing their
+desktop. Without `REXIA_TEST_UMBRIEL`, this opt-in test is skipped.
+
 ## Desktop check
 
 1. Use an isolated umbriel instance at 150%, with a private Rex test server.
