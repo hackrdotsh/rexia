@@ -68,6 +68,24 @@ fn toolbar_layouts_behaviors_and_reveals() {
         y >= 48. && x >= 260.
     });
     println!("above: panes at {above:?}");
+    assert!(h.workspace(|ws| ws.element_bounds("toolbar-session-label").is_none()));
+
+    settings(&mut h, |s| s.interface.activity_view = true);
+    h.wait_ui("session name with Activity-only sidebar", |ws| {
+        ws.element_bounds("toolbar-session-label")
+    });
+    settings(&mut h, |s| {
+        s.interface.activity_view = false;
+        s.interface.sidebar = false;
+    });
+    panes(&mut h, "panes with no sidebar", |x, _, _| x < 10.);
+    assert!(h.workspace(|ws| ws.element_bounds("toolbar-session-label").is_some()));
+    settings(&mut h, |s| s.interface.sidebar = true);
+    h.wait_ui("no duplicate session name", |ws| {
+        ws.element_bounds("toolbar-session-label")
+            .is_none()
+            .then_some(())
+    });
 
     // Left side: tabs move into the sidebar, so the panes reach the window's top.
     settings(&mut h, |s| s.interface.toolbar_layout = ToolbarLayout::Left);
@@ -75,6 +93,7 @@ fn toolbar_layouts_behaviors_and_reveals() {
         y < 10. && x >= 260.
     });
     println!("left: panes at {left:?}");
+    assert!(h.workspace(|ws| ws.element_bounds("toolbar-session-label").is_none()));
     h.screenshot("toolbar-left");
 
     // Right side: the sidebar and its toolbar move to the right edge.

@@ -155,7 +155,7 @@ impl Workspace {
     /// The toolbar atop a vertical sidebar: the session's name and its buttons.
     pub(super) fn render_side_toolbar(
         &self,
-        session_label: String,
+        session_label: Option<String>,
         theme: &Theme,
         cx: &mut Context<Self>,
     ) -> AnyElement {
@@ -181,12 +181,18 @@ impl Workspace {
             )
             .child(
                 div()
+                    .relative()
                     .flex_1()
                     .min_w_0()
                     .overflow_hidden()
                     .text_ellipsis()
                     .whitespace_nowrap()
-                    .child(title(session_label, theme)),
+                    .map(|d| match session_label {
+                        Some(label) => d
+                            .child(self.track_bounds("toolbar-session-label".into(), cx))
+                            .child(title(label, theme)),
+                        None => d,
+                    }),
             )
             .child(
                 icon_button(

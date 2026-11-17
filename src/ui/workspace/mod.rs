@@ -1059,14 +1059,11 @@ impl Workspace {
     fn render_toolbar(
         &self,
         model: &HostModel,
+        session_label: Option<String>,
         theme: &Theme,
         cx: &mut Context<Self>,
     ) -> AnyElement {
         let view = model.view();
-        let session_label = view
-            .map(|v| v.label.clone())
-            .filter(|l| !l.is_empty())
-            .unwrap_or_else(|| "No session".into());
         let active_window = view.and_then(|v| v.active_window_id.clone());
         let fill = self.settings.interface.tabs_fill;
         let count = view.map_or(0, |v| v.windows.len());
@@ -1205,12 +1202,14 @@ impl Workspace {
                 )
                 .tooltip(self.tip("client.sidebar.toggle", None)),
             )
-            .child(
+            .children(session_label.map(|label| {
                 div()
+                    .relative()
                     .flex_none()
                     .mx(px(4.))
-                    .child(title(session_label, theme)),
-            )
+                    .child(self.track_bounds("toolbar-session-label".into(), cx))
+                    .child(title(label, theme))
+            }))
             .child(
                 div()
                     .id("tabs")
@@ -2409,13 +2408,20 @@ impl Render for Workspace {
         let layout = self.settings.interface.toolbar_layout;
         let floats = self.toolbar_floats();
         let shown = self.toolbar_visible();
-        let session_label = model
-            .view()
-            .map(|v| v.label.clone())
-            .filter(|l| !l.is_empty())
-            .unwrap_or_else(|| "No session".into());
+        let slide = self.sidebar_slide(self.settings.interface.sidebar, cx);
+        // A hiding sidebar is still drawn while it slides away.
+        let sidebar_drawn =
+            self.settings.interface.sidebar || slide.is_some_and(|(showing, _)| !showing);
+        let activity_only = self.settings.interface.activity_view;
+        let session_label = (!sidebar_drawn || activity_only).then(|| {
+            model
+                .view()
+                .map(|v| v.label.clone())
+                .filter(|l| !l.is_empty())
+                .unwrap_or_else(|| "No session".into())
+        });
         let top_bar = if !layout.vertical() && shown {
-            Some(self.render_toolbar(&model, &theme, cx))
+            Some(self.render_toolbar(&model, session_label.clone(), &theme, cx))
         } else {
             None
         };
@@ -2424,70 +2430,67 @@ impl Render for Workspace {
         } else {
             (top_bar, None)
         };
-        let slide = self.sidebar_slide(self.settings.interface.sidebar, cx);
         let sidebar_width = self.sidebar_width();
-        // A hiding sidebar is still drawn while it slides away.
-        let sidebar =
-            if self.settings.interface.sidebar || slide.is_some_and(|(showing, _)| !showing) {
-                let content = if self.settings.interface.activity_view {
-                    self.render_sidebar_activity(false, &theme, cx)
-                } else {
-                    self.render_sidebar(&theme, cx)
-                };
-                let side_bar = if layout.vertical() && shown {
-                    Some(self.render_side_toolbar(session_label, &theme, cx))
-                } else {
-                    None
-                };
-                let column = div()
-                    .relative()
-                    .flex()
-                    .flex_col()
-                    .flex_none()
-                    .w(px(sidebar_width))
-                    .h_full()
-                    .bg(theme.background)
-                    .when(layout == ToolbarLayout::Right, |d| {
-                        d.border_l(theme.border_width)
-                    })
-                    .when(layout != ToolbarLayout::Right, |d| {
-                        d.border_r(theme.border_width)
-                    })
-                    .border_color(theme.border);
-                // A floating toolbar covers the top of the list instead of pushing it down.
-                let column = match side_bar {
-                    Some(bar) if floats => column
-                        .child(content)
-                        .child(div().absolute().top_0().left_0().right_0().child(bar)),
-                    Some(bar) => column.child(bar).child(content),
-                    None => column.child(content),
-                };
-                // Sliding in or out, the sidebar's width grows or shrinks; its contents stay
-                // their width and are cut off.
-                Some(match slide {
-                    Some((showing, moves)) => {
-                        let style = self.settings.interface.animation;
-                        div()
-                            .flex_none()
-                            .h_full()
-                            .overflow_hidden()
-                            .child(column)
-                            .with_animation(
-                                ("sidebar-slide", moves as usize),
-                                gpui::Animation::new(style.duration().unwrap_or_default())
-                                    .with_easing(motion::easing(style)),
-                                move |el, t| {
-                                    let shown = if showing { t } else { 1. - t };
-                                    el.w(px(sidebar_width * shown))
-                                },
-                            )
-                            .into_any_element()
-                    }
-                    None => column.into_any_element(),
-                })
+        let sidebar = if sidebar_drawn {
+            let content = if activity_only {
+                self.render_sidebar_activity(false, &theme, cx)
+            } else {
+                self.render_sidebar(&theme, cx)
+            };
+            let side_bar = if layout.vertical() && shown {
+                Some(self.render_side_toolbar(session_label, &theme, cx))
             } else {
                 None
             };
+            let column = div()
+                .relative()
+                .flex()
+                .flex_col()
+                .flex_none()
+                .w(px(sidebar_width))
+                .h_full()
+                .bg(theme.background)
+                .when(layout == ToolbarLayout::Right, |d| {
+                    d.border_l(theme.border_width)
+                })
+                .when(layout != ToolbarLayout::Right, |d| {
+                    d.border_r(theme.border_width)
+                })
+                .border_color(theme.border);
+            // A floating toolbar covers the top of the list instead of pushing it down.
+            let column = match side_bar {
+                Some(bar) if floats => column
+                    .child(content)
+                    .child(div().absolute().top_0().left_0().right_0().child(bar)),
+                Some(bar) => column.child(bar).child(content),
+                None => column.child(content),
+            };
+            // Sliding in or out, the sidebar's width grows or shrinks; its contents stay
+            // their width and are cut off.
+            Some(match slide {
+                Some((showing, moves)) => {
+                    let style = self.settings.interface.animation;
+                    div()
+                        .flex_none()
+                        .h_full()
+                        .overflow_hidden()
+                        .child(column)
+                        .with_animation(
+                            ("sidebar-slide", moves as usize),
+                            gpui::Animation::new(style.duration().unwrap_or_default())
+                                .with_easing(motion::easing(style)),
+                            move |el, t| {
+                                let shown = if showing { t } else { 1. - t };
+                                el.w(px(sidebar_width * shown))
+                            },
+                        )
+                        .into_any_element()
+                }
+                None => column.into_any_element(),
+            })
+        } else {
+            None
+        };
         let panes = self.render_panes(&model, &theme, cx);
         let row = div().relative().flex().flex_1().min_h_0();
         // The sidebar's edge goes over both sides of the border, drawn after the panes so
