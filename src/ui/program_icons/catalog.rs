@@ -98,7 +98,7 @@ pub const PROGRAMS: &[ProgramIcon] = &[
     program!("ollama", "Ollama", ["ollama"], 14, 0x343840, None, IconKind::Brand, "ollama.svg"),
     program!("omp", "omp", ["omp", "oh-my-pi"], 13, 0x9b5682, None, IconKind::Brand, "omp.svg"),
     program!("openclaw", "OpenClaw", ["openclaw"], 9, 0x394a60, None, IconKind::Brand, "openclaw.svg"),
-    program!("opencode", "OpenCode", ["opencode"], 14, 0x343840, None, IconKind::Brand, "opencode.svg"),
+    program!("opencode", "OpenCode", ["opencode", "opencode2"], 14, 0x343840, None, IconKind::Brand, "opencode.svg"),
     program!("opscope", "Opscope", ["opscope"], 14, 0x387153, None, IconKind::Brand, "opscope.svg"),
     program!("orbstack", "OrbStack", ["orb", "orbctl", "orbstack"], 13, 0x6154be, None, IconKind::Brand, "orbstack.svg"),
     program!("oxide", "Oxide", ["oxide", "ox"], 10, 0x347255, None, IconKind::Brand, "oxide.svg"),

@@ -122,6 +122,9 @@ pub fn program_name(process: &Value) -> Option<String> {
 #[derive(Clone, Debug, Default, PartialEq)]
 pub struct Process {
     pub name: Option<String>,
+    /// Foreground script, invocation, and executable identities reported by the server.
+    /// Keep these separate from the display name so launchers can be unwrapped.
+    pub identities: Vec<String>,
     pub cwd: Option<String>,
     /// The foreground process and its ancestors.
     pub pids: Vec<u64>,
@@ -140,6 +143,11 @@ impl Process {
         );
         Self {
             name: program_name(foreground),
+            identities: ["script", "path", "invoked_path", "argv0", "name"]
+                .into_iter()
+                .filter_map(|key| foreground[key].as_str().filter(|value| !value.is_empty()))
+                .map(str::to_owned)
+                .collect(),
             cwd: foreground["cwd"].as_str().map(str::to_owned),
             pids,
         }
@@ -313,6 +321,7 @@ mod tests {
             process,
             BlockEvent::Process(Process {
                 name: Some("cli.js".into()),
+                identities: vec!["/usr/lib/claude/cli.js".into(), "node".into()],
                 cwd: Some("/home/me".into()),
                 pids: vec![9, 3],
             })

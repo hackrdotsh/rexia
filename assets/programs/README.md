@@ -18,6 +18,11 @@ white Claude Code, co, and Buildkite marks. Codex uses the OpenAI mark. Pixi use
 the user-selected Prefix mark. Clang uses LLVM's dragon with user approval.
 Delta is delta.dev, Sail is LakeSail, and Minimal is minimal.dev.
 
+Recognition follows the foreground script and executable identities reported by
+Rex, including Nix-wrapped binaries and OpenCode's `opencode2` executable. Shell
+aliases need no icon configuration. Display titles remain unchanged; arbitrary
+terminal titles and ancestor processes are not used to guess a program.
+
 The six shell pictograms, Browser, Git Changes, Inspector, DBCLI, and Gojo are
 functional symbols, not claims of distinct third-party logos. Gojo's branch and
 DBCLI's database/prompt were explicitly requested. The supplied Sofka reference

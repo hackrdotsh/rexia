@@ -90,6 +90,7 @@
               clippy
               rust-analyzer
               python3
+              nushell
               nixfmt
               dbus
             ];

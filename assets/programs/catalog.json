@@ -1874,7 +1874,8 @@
     "id": "opencode",
     "name": "OpenCode",
     "commands": [
-      "opencode"
+      "opencode",
+      "opencode2"
     ],
     "ansi": 14,
     "background": "343840",

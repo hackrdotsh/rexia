@@ -104,6 +104,12 @@ pub fn find(name: &str) -> Option<&'static ProgramIcon> {
         .next()?
         .trim_start_matches('-');
     let name = name.strip_suffix(".exe").unwrap_or(name);
+    // Nix makeWrapper hides binaries as .<command>-wrapped, sometimes with
+    // trailing underscores to avoid an existing filename. Do not strip arbitrary suffixes.
+    let name = name
+        .strip_prefix('.')
+        .and_then(|hidden| hidden.trim_end_matches('_').strip_suffix("-wrapped"))
+        .unwrap_or(name);
     PROGRAMS.iter().find(|program| {
         program.id.eq_ignore_ascii_case(name)
             || program.name.eq_ignore_ascii_case(name)
@@ -171,6 +177,14 @@ mod tests {
         assert_eq!(find("co.codes").unwrap().name, "co");
         assert_eq!(find("co").unwrap().name, "co");
         assert_eq!(find("-bash").unwrap().id, "shell");
+        assert_eq!(
+            find("/nix/store/package/bin/.opencode2-wrapped_")
+                .unwrap()
+                .id,
+            "opencode"
+        );
+        assert_eq!(find(".claude-wrapped").unwrap().id, "claude-code");
+        assert!(find("my-opencode-wrapper").is_none());
         assert!(find("my-docker-backup").is_none());
         assert!(find("echo gojo").is_none());
         assert!(find("deploy-to-vercel.sh").is_none());

@@ -129,12 +129,25 @@ impl Program {
             .and_then(|s| s.process.name.as_deref())
             .unwrap_or_default()
             .to_ascii_lowercase();
-        let known = super::program_icons::find(&name);
+        let is_wrapper = |program: &super::program_icons::ProgramIcon| {
+            matches!(program.id, "shell" | "node" | "python" | "bun" | "ruby")
+        };
+        let identities = state
+            .map(|state| state.process.identities.as_slice())
+            .unwrap_or_default();
+        let known = identities
+            .iter()
+            .filter_map(|identity| super::program_icons::find(identity))
+            .find(|program| !is_wrapper(program))
+            .or_else(|| super::program_icons::find(&name))
+            .or_else(|| {
+                identities
+                    .iter()
+                    .find_map(|identity| super::program_icons::find(identity))
+            });
         // Scripts report their own effective_app while the foreground process can
         // still be a shell or runtime. Specific foreground tools beat stale reports.
-        let wrapper = known.is_none_or(|program| {
-            matches!(program.id, "shell" | "node" | "python" | "bun" | "ruby")
-        });
+        let wrapper = known.is_none_or(is_wrapper);
         if wrapper
             && let Some(program) = state
                 .into_iter()
@@ -228,6 +241,7 @@ mod tests {
                 name: Some("nvim".into()),
                 cwd: Some("/home/me/rexia".into()),
                 pids: vec![9],
+                ..Default::default()
             },
             ..Default::default()
         };
@@ -320,6 +334,47 @@ mod tests {
         state.records.clear();
         state.process.name = Some("unknown-tool".into());
         state.title = Some(("Claude Code - my project".into(), None));
+        assert_eq!(Program::of(Some(&state)), Program::Shell);
+    }
+
+    #[test]
+    fn wrapper_icons_use_executable_identity_without_rewriting_the_label() {
+        for (label, executable, expected) in [
+            ("oc", "/nix/store/package/bin/.opencode-wrapped", "opencode"),
+            (
+                "opencode2",
+                "/nix/store/package/bin/.opencode2-wrapped_",
+                "opencode",
+            ),
+            ("launcher", "/usr/bin/claude", "claude-code"),
+            ("python", "/usr/bin/codex", "codex"),
+            ("git", "/usr/bin/claude", "claude-code"),
+            ("launcher", "/usr/bin/python", "python"),
+        ] {
+            let state = BlockState {
+                process: crate::rex::activity::Process::parse(&serde_json::json!({
+                    "foreground": {"pid": 10, "argv0": label, "path": executable},
+                    "ancestors": [{"pid": 1, "name": "nu"}]
+                })),
+                ..Default::default()
+            };
+            assert_eq!(state.process.name.as_deref(), Some(label));
+            assert_eq!(
+                Program::of(Some(&state)).icon(),
+                format!("programs/{expected}")
+            );
+        }
+    }
+
+    #[test]
+    fn wrapper_detection_does_not_guess_from_ancestors_or_directory_names() {
+        let state = BlockState {
+            process: crate::rex::activity::Process::parse(&serde_json::json!({
+                "foreground": {"pid": 10, "argv0": "launcher", "path": "/tmp/opencode/unknown-tool"},
+                "ancestors": [{"pid": 1, "name": "opencode"}]
+            })),
+            ..Default::default()
+        };
         assert_eq!(Program::of(Some(&state)), Program::Shell);
     }
 }
