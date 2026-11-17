@@ -1970,8 +1970,22 @@ impl Workspace {
                     .into_any_element()
             });
             let choose_id = id.clone();
+            let forward_host = id.clone();
             let mut line = row(format!("host-{index}"), &host.config.label, &detail, theme)
                 .child(preview)
+                .child(
+                    button(format!("host-forwards-{index}"), "Forwards…", false, theme).on_click(
+                        cx.listener(move |ws, _, window, cx| {
+                            ws.commit_settings_fields(cx);
+                            ws.open_host_list(
+                                super::ListKind::Forwards,
+                                Some(forward_host.clone()),
+                                window,
+                                cx,
+                            );
+                        }),
+                    ),
+                )
                 .child(
                     button(
                         format!("host-icon-{index}"),

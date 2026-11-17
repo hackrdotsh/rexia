@@ -11,6 +11,7 @@ pub enum InputEvent {
     /// Enter, with whether shift was held.
     Submit {
         shift: bool,
+        alt: bool,
     },
     Cancel,
     /// Up (-1) or Down (1), for moving through a list under the field.
@@ -154,7 +155,10 @@ impl TextInput {
         let before = self.text.clone();
         let handled = match keystroke.key.as_str() {
             "enter" => {
-                cx.emit(InputEvent::Submit { shift: m.shift });
+                cx.emit(InputEvent::Submit {
+                    shift: m.shift,
+                    alt: m.alt,
+                });
                 true
             }
             "escape" => {

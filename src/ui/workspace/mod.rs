@@ -11,6 +11,7 @@ mod developer;
 pub mod dragging;
 mod extras;
 mod filter;
+mod forwards;
 pub mod gestures;
 mod highlight;
 mod host_icons;
@@ -245,6 +246,7 @@ pub struct Workspace {
     /// Sidebar disclosure by host ID and session ID; an explicit collapse survives selection.
     session_disclosure: HashMap<(String, String), bool>,
     pub notice: Option<String>,
+    forwards: forwards::Forwards,
     /// The active host's keymap, and the reply it came from.
     keymap: Keymap,
     keymap_source: Option<Value>,
@@ -455,6 +457,7 @@ impl Workspace {
             collapsed_hosts: HashSet::new(),
             session_disclosure: HashMap::new(),
             notice: None,
+            forwards: forwards::Forwards::default(),
             keymap: fallback,
             keymap_source: None,
             modes: Vec::new(),
@@ -566,6 +569,7 @@ impl Workspace {
     /// Bring panes in line with the active host's model after it changed.
     pub fn sync(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         self.reconcile_hosts(window, cx);
+        self.prune_forwards();
         self.refresh_keymap();
         self.handle_performs(window, cx);
         self.fetch_unknown_tabs(cx);
@@ -2729,6 +2733,7 @@ impl Render for Workspace {
         let position = self.settings.notifications.notice_position;
         let entity = cx.entity();
         let notice = self.notice.clone().map(|message| {
+            let copy_link = self.notice_forward_link(&message);
             let tracker = canvas(
                 move |bounds, _, cx| entity.update(cx, |ws, _| ws.notice_area = Some(bounds)),
                 |_, _, _, _| {},
@@ -2759,8 +2764,19 @@ impl Render for Workspace {
                     d.border(theme.border_width).border_color(theme.border)
                 })
                 .when(theme.popup_shadows, |d| d.shadow_lg())
-                .child(icon("alert-triangle").size(px(16.)).text_color(theme.error))
+                .child(if copy_link.is_some() {
+                    icon("world").size(px(16.)).text_color(theme.primary)
+                } else {
+                    icon("alert-triangle").size(px(16.)).text_color(theme.error)
+                })
                 .child(div().flex_1().text_size(px(13.)).child(message))
+                .children(copy_link.map(|link| {
+                    preferences::button("copy-forward-link", "Copy Link", false, &theme).on_click(
+                        move |_, _, cx| {
+                            cx.write_to_clipboard(gpui::ClipboardItem::new_string(link.clone()));
+                        },
+                    )
+                }))
                 .child(
                     small_icon_button(
                         "dismiss-notice",

@@ -86,6 +86,13 @@ still need an account-owned test. The automated checks use an isolated Rex serve
 
 Working:
 
+- **Forward Port…** in the command palette and **Forwards…** in host settings
+  accept a port, `host:port`, or an HTTP(S) URL. Ctrl-clicking a loopback web
+  link in a remote terminal forwards it before opening it locally. The listener
+  binds to loopback, is reused for the same target, and can be closed with
+  Alt+Enter from the palette. This uses the selected Rex CLI's `rex forward`
+  transport; use a CLI and server with forwarding support.
+
 - **Settings → Interface → Show Activity below Sessions** starts Activity halfway down
   the sidebar, or below Sessions if that list extends farther. Both sections scroll
   together. The Activity-only view and its grouping controls are still available.

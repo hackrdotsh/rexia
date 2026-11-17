@@ -318,6 +318,13 @@ pub const ACTIONS: &[ActionDef] = &[
         "remove forget delete host remote server",
         []
     ),
+    action!(
+        "client.host.forward_port",
+        "Forward Port…",
+        "Host",
+        "port forward forwarding tunnel localhost remote browser",
+        []
+    ),
     // Tabs
     action!(
         "client.tab.new",

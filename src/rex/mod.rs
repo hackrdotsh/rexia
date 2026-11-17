@@ -5,6 +5,7 @@ pub mod client;
 pub mod data;
 pub mod download;
 pub mod endpoint;
+pub mod forward;
 pub mod host;
 pub mod images;
 pub mod install;

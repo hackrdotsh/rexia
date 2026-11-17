@@ -62,6 +62,14 @@ pub fn decide(link: &str, policy: AppLinks, trusted: &[String]) -> LinkDecision 
 impl Workspace {
     /// A ctrl+clicked link: open it, ask first, or say why it won't open.
     pub fn open_link(&mut self, link: String, cx: &mut Context<Self>) {
+        if !self.host().handle.endpoint.is_local()
+            && let Ok(url) = url::Url::parse(&link)
+            && matches!(url.scheme(), "http" | "https")
+            && crate::rex::forward::loopback(&url)
+        {
+            self.forward_port(&link, cx);
+            return;
+        }
         if url::Url::parse(&link)
             .is_ok_and(|url| url.scheme() == "rex" && url.host_str() == Some("settings"))
         {

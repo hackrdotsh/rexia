@@ -33,6 +33,7 @@ pub enum ListKind {
     MoveToTab,
     Hosts,
     RemoveHost,
+    Forwards,
     /// Choose an action to give a new key.
     Shortcuts,
     /// Choose the effect cursor shaders draw.
@@ -53,6 +54,7 @@ impl ListKind {
             Self::MoveToTab => "Move the pane to a tab",
             Self::Hosts => "Switch to a host",
             Self::RemoveHost => "Remove a host",
+            Self::Forwards => "Port, host:port, or URL",
             Self::Shortcuts => "Choose an action to give a new key",
             Self::CursorShaders => "Choose a cursor shader",
             Self::Directory { .. } => "Path",
@@ -69,6 +71,7 @@ impl ListKind {
             Self::MoveToTab => "pane.move_to_tab",
             Self::Hosts => "client.host.switch",
             Self::RemoveHost => "client.host.remove",
+            Self::Forwards => "client.host.forward_port",
             Self::Shortcuts => "client.shortcuts.edit",
             Self::CursorShaders => "client.cursor_shader.change",
             Self::Directory { insert: false } => "pane.go_to_directory",
@@ -124,6 +127,7 @@ pub enum Choice {
         address: String,
     },
     Setting(String),
+    OpenForward(u64),
 }
 
 #[derive(Clone, Debug)]
@@ -146,6 +150,7 @@ pub struct ListOverlay {
     scroll: ScrollHandle,
     /// Bumped with each directory listing request, so a slow reply can't replace a newer one.
     generation: u64,
+    forward_host: Option<String>,
     _subscription: Subscription,
 }
 
@@ -687,6 +692,17 @@ impl Workspace {
     }
 
     pub fn open_list(&mut self, kind: ListKind, window: &mut Window, cx: &mut Context<Self>) {
+        let host = (kind == ListKind::Forwards).then(|| self.host().config.id.clone());
+        self.open_host_list(kind, host, window, cx);
+    }
+
+    pub(super) fn open_host_list(
+        &mut self,
+        kind: ListKind,
+        host: Option<String>,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
         let items = match kind {
             ListKind::Commands => command_items(self),
             ListKind::Sessions => session_items(self),
@@ -696,6 +712,10 @@ impl Workspace {
             ListKind::MoveToTab => move_items(self),
             ListKind::Hosts => host_items(self),
             ListKind::RemoveHost => removable_hosts(self),
+            ListKind::Forwards => host
+                .as_deref()
+                .map(|host| self.forward_items(host))
+                .unwrap_or_default(),
             ListKind::Shortcuts => shortcut_items(self),
             ListKind::CursorShaders => shader_items(self),
             ListKind::Directory { .. } => Vec::new(),
@@ -723,6 +743,7 @@ impl Workspace {
             selected,
             scroll,
             generation: 0,
+            forward_host: host,
             _subscription: subscription,
         }));
         if let ListKind::Directory { .. } = kind {
@@ -842,7 +863,7 @@ impl Workspace {
                 }
             }
             InputEvent::Cancel => self.close_overlay(window, cx),
-            InputEvent::Submit { .. } => {
+            InputEvent::Submit { alt, .. } => {
                 let typed = list.input.read(cx).text().to_owned();
                 let choice = list
                     .shown
@@ -850,6 +871,24 @@ impl Workspace {
                     .and_then(|i| list.items.get(*i))
                     .map(|i| i.choice.clone());
                 let kind = list.kind;
+                if kind == ListKind::Forwards {
+                    let host = list.forward_host.clone();
+                    if *alt {
+                        if let Some(Choice::OpenForward(id)) = choice {
+                            self.close_forward(id, cx);
+                            self.open_host_list(kind, host, window, cx);
+                        }
+                    } else if !typed.trim().is_empty() {
+                        self.close_overlay(window, cx);
+                        if let Some(host) = host {
+                            self.forward_on_host(&host, &typed, cx);
+                        }
+                    } else if let Some(Choice::OpenForward(id)) = choice {
+                        self.close_overlay(window, cx);
+                        self.open_forward(id, cx);
+                    }
+                    return;
+                }
                 let choice = match (choice, kind) {
                     (Some(choice), _) => Some(choice),
                     // A path typed in full needs no matching entry.
@@ -1010,6 +1049,7 @@ impl Workspace {
         cx: &mut Context<Self>,
     ) {
         match choice {
+            Choice::OpenForward(id) => self.open_forward(id, cx),
             Choice::Setting(path) => {
                 if let Err(error) = self.open_indexed_setting(&path, window, cx) { self.notice = Some(error); }
             }
@@ -1382,7 +1422,7 @@ impl Workspace {
                         }
                     }
                     // Enter finds the next older match, Shift+Enter the newer one; Up and Down too.
-                    InputEvent::Submit { shift } => {
+                    InputEvent::Submit { shift, .. } => {
                         let older = !shift;
                         if let Some(pane) = pane {
                             pane.update(cx, |pane, _| pane.search_step(older));

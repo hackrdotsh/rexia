@@ -409,6 +409,7 @@ impl Workspace {
             }
             "client.host.add" => self.open_add_host(window, cx),
             "client.host.remove" => self.open_list(overlay::ListKind::RemoveHost, window, cx),
+            "client.host.forward_port" => self.open_list(overlay::ListKind::Forwards, window, cx),
             "client.find.open" => self.open_find(window, cx),
             "client.find.next" => self.find_step(true, window, cx),
             "client.find.previous" => self.find_step(false, window, cx),
