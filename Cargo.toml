@@ -50,3 +50,4 @@ debug = false
 # vendor/ghostty-vt/README.md.
 [patch.crates-io]
 ghostty-vt = { path = "vendor/ghostty-vt" }
+gpui-pre-linux = { path = "vendor/gpui-linux" }
