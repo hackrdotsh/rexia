@@ -19,6 +19,7 @@ pub mod motion;
 mod mute;
 pub mod onboarding;
 mod overlay;
+pub mod palette_host;
 mod preferences;
 pub mod quick_look;
 pub mod remote;

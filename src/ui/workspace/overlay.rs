@@ -119,6 +119,11 @@ pub enum Choice {
         path: String,
         directory: bool,
     },
+    /// A host address typed in the command palette: open Add Host with it.
+    AddTypedHost {
+        label: String,
+        address: String,
+    },
 }
 
 #[derive(Clone, Debug)]
@@ -135,8 +140,8 @@ pub struct Item {
 pub struct ListOverlay {
     pub kind: ListKind,
     pub input: Entity<TextInput>,
-    items: Vec<Item>,
-    shown: Vec<usize>,
+    pub(super) items: Vec<Item>,
+    pub(super) shown: Vec<usize>,
     selected: usize,
     /// Bumped with each directory listing request, so a slow reply can't replace a newer one.
     generation: u64,
@@ -715,6 +720,11 @@ impl Workspace {
     }
 
     fn on_list_input(&mut self, event: &InputEvent, window: &mut Window, cx: &mut Context<Self>) {
+        let known: Vec<String> = self
+            .hosts
+            .iter()
+            .map(|h| h.config.endpoint.clone())
+            .collect();
         let Some(Overlay::List(list)) = &mut self.overlay else {
             return;
         };
@@ -736,6 +746,9 @@ impl Workspace {
                 extra.retain(|i| !list.shown.contains(i));
                 list.shown.extend(extra);
                 list.selected = 0;
+                if list.kind == ListKind::Commands {
+                    Self::offer_typed_host(list, query, &known);
+                }
                 if list.kind == ListKind::Sessions && !query.trim().is_empty() {
                     let name = query.trim().to_owned();
                     if !list
@@ -960,6 +973,18 @@ impl Workspace {
                 }
             }
             Choice::Session { host, id } => self.select_session(host, id, cx),
+            Choice::AddTypedHost { label, address } => {
+                self.open_add_host(window, cx);
+                if let Some(Overlay::Dialog(Dialog::AddHost {
+                    label: name,
+                    address: target,
+                    ..
+                })) = &self.overlay
+                {
+                    name.update(cx, |input, cx| input.set_text(label, cx));
+                    target.update(cx, |input, cx| input.set_text(address, cx));
+                }
+            }
             Choice::CreateSession { label } => {
                 self.hosts[self.active].handle.send(HostCommand::CreateSession {
                     label: Some(label),
