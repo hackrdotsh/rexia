@@ -570,6 +570,11 @@ impl TerminalPane {
         }
     }
 
+    /// Whether the keyboard is on this terminal, for tests.
+    pub fn has_focus(&self, window: &Window) -> bool {
+        self.focus.is_focused(window)
+    }
+
     /// The cell the pointer was last over, for Quick Look.
     pub fn pointer_cell(&self) -> Option<(u16, u16)> {
         self.pointer

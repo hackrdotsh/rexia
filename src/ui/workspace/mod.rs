@@ -2264,6 +2264,7 @@ impl Render for Workspace {
             .inset_0();
             div()
                 .id("notice")
+                .occlude()
                 .absolute()
                 // Clear of the toolbar at the top, and of the window's edge.
                 .when(position.top(), |d| d.top(px(60.)))
@@ -2318,9 +2319,16 @@ impl Render for Workspace {
             .on_mouse_up(MouseButton::Left, cx.listener(Self::on_mouse_up))
             .children(toolbar)
             .child(body)
-            .children(
-                floating_bar.map(|bar| div().absolute().top_0().left_0().right_0().child(bar)),
-            )
+            .children(floating_bar.map(|bar| {
+                div()
+                    .id("floating-toolbar")
+                    .occlude()
+                    .absolute()
+                    .top_0()
+                    .left_0()
+                    .right_0()
+                    .child(bar)
+            }))
             .children(notice)
             .children(self.key_hint(&theme))
             .children(self.render_find(&theme, cx))

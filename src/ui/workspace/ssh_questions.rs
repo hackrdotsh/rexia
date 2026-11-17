@@ -245,6 +245,7 @@ impl Workspace {
         Some(
             div()
                 .id("ssh-question-scrim")
+                .occlude()
                 .absolute()
                 .inset_0()
                 .flex()

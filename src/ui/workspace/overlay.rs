@@ -1449,6 +1449,8 @@ impl Workspace {
         Some(
             div()
                 .id("overlay-scrim")
+                // Clicks on Settings, dialogs and lists stay off the panes behind.
+                .occlude()
                 .absolute()
                 .inset_0()
                 .flex()

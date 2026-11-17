@@ -237,6 +237,7 @@ impl Render for HoverCard {
 
         let mut card = div()
             .id("hover-card")
+            .occlude()
             .w(px(320.))
             .flex()
             .flex_col()

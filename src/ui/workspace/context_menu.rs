@@ -419,6 +419,7 @@ impl Workspace {
         let menu = self.context_menu.as_ref()?;
         let mut list = div()
             .id("context-menu")
+            .occlude()
             .min_w(px(220.))
             .flex()
             .flex_col()

@@ -174,6 +174,7 @@ impl Workspace {
             let progress = u.progress.clone();
             div()
                 .id(SharedString::from(format!("upload-{}", u.id)))
+                .occlude()
                 .flex()
                 .items_center()
                 .gap(px(10.))
