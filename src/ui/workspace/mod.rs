@@ -238,8 +238,8 @@ pub struct Workspace {
     drag: Option<Drag>,
     /// The block this client last focused for the server's focused block.
     focused: Option<String>,
-    /// Sessions whose tabs are listed in the sidebar.
-    expanded: HashSet<String>,
+    /// Sidebar disclosure by host ID and session ID; an explicit collapse survives selection.
+    session_disclosure: HashMap<(String, String), bool>,
     pub notice: Option<String>,
     /// The active host's keymap, and the reply it came from.
     keymap: Keymap,
@@ -446,7 +446,7 @@ impl Workspace {
             window_active: true,
             drag: None,
             focused: None,
-            expanded: HashSet::new(),
+            session_disclosure: HashMap::new(),
             notice: None,
             keymap: fallback,
             keymap_source: None,
@@ -566,6 +566,11 @@ impl Workspace {
         self.check_tailscale();
         self.autobalance();
         let model = self.model();
+        if let Some(id) = &model.selected {
+            self.session_disclosure
+                .entry((self.host().config.id.clone(), id.clone()))
+                .or_insert(true);
+        }
         if let Some(message) = model.notices.last().cloned() {
             self.notice = Some(message);
             self.host()
@@ -734,11 +739,30 @@ impl Workspace {
 
     pub fn select_session(&mut self, host: usize, session: String, cx: &mut Context<Self>) {
         self.switch_host(host, cx);
-        self.hosts[host]
-            .handle
-            .send(HostCommand::Select(session.clone()));
-        self.expanded.insert(session);
+        self.hosts[host].handle.send(HostCommand::Select(session));
         cx.notify();
+    }
+
+    fn set_session_expanded(&mut self, host: usize, session: String, expanded: bool) {
+        let entry = &self.hosts[host];
+        self.session_disclosure
+            .insert((entry.config.id.clone(), session.clone()), expanded);
+        if expanded && !entry.handle.snapshot().views.contains_key(&session) {
+            entry.handle.send(HostCommand::LoadSession(session));
+        }
+    }
+
+    fn collapse_other_sessions(&mut self, session: Option<&str>) {
+        for host in &self.hosts {
+            for item in &host.handle.snapshot().sessions {
+                if host.config.id != self.host().config.id
+                    || Some(item.session_id.as_str()) != session
+                {
+                    self.session_disclosure
+                        .insert((host.config.id.clone(), item.session_id.clone()), false);
+                }
+            }
+        }
     }
 
     pub fn new_session(&mut self, host: usize, cx: &mut Context<Self>) {
@@ -1308,6 +1332,11 @@ impl Workspace {
                 let selected =
                     index == self.active && model.selected.as_ref() == Some(&session.session_id);
                 let id = session.session_id.clone();
+                let expanded = self
+                    .session_disclosure
+                    .get(&(host.config.id.clone(), id.clone()))
+                    .copied()
+                    .unwrap_or(selected);
                 let activity = self.session_mark(index, &session.session_id, &model);
                 let windows = model
                     .views
@@ -1329,6 +1358,37 @@ impl Workspace {
                         .cursor_pointer()
                         .text_color(theme.text_muted)
                         .hover(|d| d.bg(theme.overlay(0.06)))
+                        .child({
+                            let id = id.clone();
+                            let action = if expanded {
+                                "session.collapse"
+                            } else {
+                                "session.expand"
+                            };
+                            small_icon_button(
+                                SharedString::from(format!("session-disclosure-{index}-{id}")),
+                                if expanded {
+                                    "chevron-down"
+                                } else {
+                                    "chevron-right"
+                                },
+                                theme.text_muted,
+                                theme,
+                                cx.listener({
+                                    let id = id.clone();
+                                    move |ws, _, _, cx| {
+                                        ws.set_session_expanded(index, id.clone(), !expanded);
+                                        cx.notify();
+                                    }
+                                }),
+                            )
+                            .on_mouse_down(MouseButton::Left, |_, _, cx| cx.stop_propagation())
+                            .relative()
+                            .child(
+                                self.track_bounds(format!("session-disclosure:{index}:{id}"), cx),
+                            )
+                            .tooltip(self.tip(action, None))
+                        })
                         .child(
                             div()
                                 .flex_1()
@@ -1393,9 +1453,10 @@ impl Workspace {
                             ws.select_session(index, id.clone(), cx)
                         })),
                 );
-                if selected && let Some(view) = model.views.get(&session.session_id) {
+                if expanded && let Some(view) = model.views.get(&session.session_id) {
                     for (number, window) in view.windows.iter().enumerate() {
-                        let active = view.active_window_id.as_deref() == Some(window.id());
+                        let active =
+                            selected && view.active_window_id.as_deref() == Some(window.id());
                         let window_id = window.id().to_owned();
                         let (label, path) = titles::sidebar_tab_title(window, &model);
                         let active_fill = theme.overlay(0.16);
@@ -1455,7 +1516,9 @@ impl Workspace {
                                                 .child(path)
                                         })),
                                 )
-                                .children(self.tab_hint_chip(number + 1, false, theme))
+                                .when(selected, |d| {
+                                    d.children(self.tab_hint_chip(number + 1, false, theme))
+                                })
                                 .when(self.tab_muted(index, window.id()), |d| {
                                     d.child(muted_mark(theme.text_muted, theme))
                                 })
@@ -1463,34 +1526,40 @@ impl Workspace {
                                     |(state, badge)| activity_mark(state, badge, false, theme),
                                 ))
                                 // Close, shown while the pointer is on the row.
-                                .child(
-                                    div()
-                                        .invisible()
-                                        .group_hover("side-tab", |d| d.visible())
-                                        .child(
-                                            small_icon_button(
-                                                SharedString::from(format!(
-                                                    "side-tab-close-{window_id}"
-                                                )),
-                                                "x",
-                                                if active { theme.text } else { theme.text_muted },
-                                                theme,
-                                                {
-                                                    let id = window_id.clone();
-                                                    cx.listener(move |ws, _, _, cx| {
-                                                        cx.stop_propagation();
-                                                        ws.request_close(
-                                                            close_guard::CloseTarget::Tab(
-                                                                id.clone(),
-                                                            ),
-                                                            cx,
-                                                        )
-                                                    })
-                                                },
-                                            )
-                                            .tooltip(self.tip("client.tab.close", None)),
-                                        ),
-                                )
+                                .when(selected, |d| {
+                                    d.child(
+                                        div()
+                                            .invisible()
+                                            .group_hover("side-tab", |d| d.visible())
+                                            .child(
+                                                small_icon_button(
+                                                    SharedString::from(format!(
+                                                        "side-tab-close-{window_id}"
+                                                    )),
+                                                    "x",
+                                                    if active {
+                                                        theme.text
+                                                    } else {
+                                                        theme.text_muted
+                                                    },
+                                                    theme,
+                                                    {
+                                                        let id = window_id.clone();
+                                                        cx.listener(move |ws, _, _, cx| {
+                                                            cx.stop_propagation();
+                                                            ws.request_close(
+                                                                close_guard::CloseTarget::Tab(
+                                                                    id.clone(),
+                                                                ),
+                                                                cx,
+                                                            )
+                                                        })
+                                                    },
+                                                )
+                                                .tooltip(self.tip("client.tab.close", None)),
+                                            ),
+                                    )
+                                })
                                 .on_mouse_down(MouseButton::Left, {
                                     let id = window_id.clone();
                                     cx.listener(move |ws, event: &gpui::MouseDownEvent, _, _| {
@@ -1499,7 +1568,7 @@ impl Workspace {
                                             active && index == ws.active,
                                             event.click_count,
                                         );
-                                        if index == ws.active {
+                                        if selected {
                                             ws.press_for_drag(
                                                 dragging::Grab::Tab(id.clone()),
                                                 event.position,
@@ -1507,34 +1576,44 @@ impl Workspace {
                                         }
                                     })
                                 })
-                                .on_mouse_down(MouseButton::Right, {
-                                    let id = window_id.clone();
-                                    cx.listener(move |ws, event: &gpui::MouseDownEvent, _, cx| {
-                                        if index != ws.active {
-                                            ws.switch_host(index, cx);
-                                        }
-                                        ws.open_tab_menu(id.clone(), event.position, cx);
-                                        cx.stop_propagation();
+                                .when(selected, |d| {
+                                    d.on_mouse_down(MouseButton::Right, {
+                                        let id = window_id.clone();
+                                        cx.listener(
+                                            move |ws, event: &gpui::MouseDownEvent, _, cx| {
+                                                if index != ws.active {
+                                                    ws.switch_host(index, cx);
+                                                }
+                                                ws.open_tab_menu(id.clone(), event.position, cx);
+                                                cx.stop_propagation();
+                                            },
+                                        )
                                     })
                                 })
-                                .hoverable_tooltip(
-                                    self.hover_card(
+                                .when(selected, |d| {
+                                    d.hoverable_tooltip(self.hover_card(
                                         hover_card::CardTarget::Tab(window_id.clone()),
                                         cx,
-                                    ),
-                                )
+                                    ))
+                                })
                                 .relative()
                                 .child(self.track_bounds(format!("side-tab:{window_id}"), cx))
-                                .on_click(cx.listener(
+                                .on_click(cx.listener({
+                                    let session = session.session_id.clone();
                                     move |ws, event: &gpui::ClickEvent, window, cx| {
-                                        ws.tab_clicked(
-                                            window_id.clone(),
-                                            event.click_count(),
-                                            window,
-                                            cx,
-                                        )
-                                    },
-                                )),
+                                        if selected {
+                                            ws.tab_clicked(
+                                                window_id.clone(),
+                                                event.click_count(),
+                                                window,
+                                                cx,
+                                            );
+                                        } else {
+                                            ws.select_session(index, session.clone(), cx);
+                                            ws.focus_tab(index, session.clone(), window_id.clone());
+                                        }
+                                    }
+                                })),
                         );
                     }
                 }

@@ -50,6 +50,63 @@ fn card(h: &mut Harness) -> bool {
 }
 
 #[test]
+fn sidebar_spaces_expand_without_switching_and_stay_open_on_focus_changes() {
+    let Some(address) = common::server() else {
+        return;
+    };
+    let control = common::connect(&address);
+    let mut sessions = Sessions::create(&control, "rexia-space-first");
+    let first = sessions.ids[0].clone();
+    let second = sessions.add("rexia-space-second");
+    let mut h = Harness::open(&address, &first, 1200., 760.);
+    let first_tab = h.wait("first space tab", |m| m.view()?.active_window_id.clone());
+    let second_disclosure = format!("session-disclosure:0:{second}");
+    let toggle = |h: &mut Harness, key: &str| {
+        let bounds = h.wait_ui("space disclosure", |ws| ws.element_bounds(key));
+        click(h, bounds.center(), MouseButton::Left);
+    };
+    toggle(&mut h, &second_disclosure);
+    let second_tab = h.wait("background space tabs loaded", |m| {
+        m.views.get(&second)?.active_window_id.clone()
+    });
+    let row = |id: &str| format!("side-tab:{id}");
+    let second_bounds = h.wait_ui("background tab row", |ws| {
+        ws.element_bounds(&row(&second_tab))
+    });
+    assert_eq!(h.host.snapshot().selected.as_deref(), Some(first.as_str()));
+    click(&mut h, second_bounds.center(), MouseButton::Left);
+    h.wait("second space selected", |m| {
+        (m.selected.as_ref() == Some(&second)).then_some(())
+    });
+    assert!(h.workspace(|ws| ws.element_bounds(&row(&first_tab)).is_some()));
+
+    toggle(&mut h, &format!("session-disclosure:0:{first}"));
+    h.wait_ui("manually closed first space", |ws| {
+        ws.element_bounds(&row(&first_tab)).is_none().then_some(())
+    });
+    let first_header = h.wait_ui("first space heading", |ws| {
+        ws.element_bounds(&format!("session:0:{first}"))
+    });
+    click(&mut h, first_header.center(), MouseButton::Left);
+    h.wait("first space selected again", |m| {
+        (m.selected.as_ref() == Some(&first)).then_some(())
+    });
+    h.pump();
+    assert!(h.workspace(|ws| ws.element_bounds(&row(&first_tab)).is_none()));
+    assert!(h.workspace(|ws| ws.element_bounds(&row(&second_tab)).is_some()));
+
+    h.run("session.expand", Value::Null);
+    h.wait_ui("Expand Session restores its tabs", |ws| {
+        ws.element_bounds(&row(&first_tab))
+    });
+    h.run("session.collapse_others", Value::Null);
+    h.wait_ui("Collapse Other Sessions hides background tabs", |ws| {
+        ws.element_bounds(&row(&second_tab)).is_none().then_some(())
+    });
+    assert!(h.workspace(|ws| ws.element_bounds(&row(&first_tab)).is_some()));
+}
+
+#[test]
 fn sidebar_tabs_close_on_hover_and_menus_beat_cards() {
     let Some(address) = common::server() else {
         return;

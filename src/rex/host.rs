@@ -305,6 +305,8 @@ pub enum HostCommand {
     /// Show this host's selected session, or stop streaming while it's hidden.
     Visible(bool),
     Select(String),
+    /// Load a session's tabs without changing the selection or streaming its panes.
+    LoadSession(String),
     CreateSession {
         label: Option<String>,
         reply: Option<Reply>,
@@ -1146,6 +1148,14 @@ impl Host {
     ) -> Result<()> {
         match command {
             HostCommand::Visible(visible) => self.visible = visible,
+            HostCommand::LoadSession(id) => {
+                if !floors.views.contains_key(&id)
+                    && let Err(error) = self.attach(control, floors, &id).await
+                    && client::error_code(&error) != Some("session_not_found")
+                {
+                    return Err(error);
+                }
+            }
             HostCommand::Select(id) => {
                 if !floors.views.contains_key(&id) {
                     self.attach(control, floors, &id).await?;
