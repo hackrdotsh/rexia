@@ -90,11 +90,19 @@ pub fn icon_look(item: TabIcon, _shell: ShellIconTheme, text: Hsla, theme: &Them
     }
 }
 
-/// The icon stack itself: tiles overlap a little, front to back from the focused pane.
+fn icon_offset(index: usize, tile: f32) -> f32 {
+    match index {
+        0 => 0.,
+        _ => tile * (0.125 + (index - 1) as f32 * 0.075),
+    }
+}
+
+/// Full rounded tiles layered behind the focused icon, which paints last.
 pub fn render_icons(
     items: &[TabIcon],
     shell: ShellIconTheme,
     text: Hsla,
+    background: Hsla,
     size: f32,
     theme: &Theme,
 ) -> Option<AnyElement> {
@@ -102,19 +110,19 @@ pub fn render_icons(
         return None;
     }
     let tile = size + 4.;
-    let icons = items.iter().enumerate().map(|(index, item)| {
+    let width = tile + icon_offset(items.len() - 1, tile);
+    let icons = items.iter().enumerate().rev().map(|(index, item)| {
         let look = icon_look(*item, shell, text, theme);
         div()
+            .absolute()
+            .top_0()
+            .left(px(icon_offset(index, tile)))
             .flex()
-            .flex_none()
             .items_center()
             .justify_center()
             .size(px(tile))
             .rounded(px(tile * 0.24))
-            .when_some(look.tile, |d, bg| d.bg(bg))
-            .when(index > 0, |d| {
-                d.ml(px(if look.tile.is_some() { -3. } else { 1. }))
-            })
+            .bg(look.tile.unwrap_or(background))
             .child(
                 icon(item.program.icon())
                     .size(px(if item.colored { tile * 0.72 } else { size }))
@@ -123,9 +131,10 @@ pub fn render_icons(
     });
     Some(
         div()
-            .flex()
+            .relative()
             .flex_none()
-            .items_center()
+            .w(px(width))
+            .h(px(tile))
             .children(icons)
             .into_any_element(),
     )
@@ -165,8 +174,6 @@ pub fn icon_limit(interface: &InterfaceSettings, vertical: bool) -> u8 {
         HORIZONTAL_MAX
     })
 }
-
-use gpui::prelude::FluentBuilder;
 
 #[cfg(test)]
 mod tests {

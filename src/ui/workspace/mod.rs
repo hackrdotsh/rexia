@@ -1147,6 +1147,7 @@ impl Workspace {
                         &self.tab_icon_list(&tab_id, false, model),
                         self.settings.interface.shell_icon_theme,
                         fg,
+                        bg,
                         14.,
                         theme,
                     ))
@@ -1406,6 +1407,11 @@ impl Workspace {
                                     &self.tab_icon_list(&window_id, true, &model),
                                     self.settings.interface.shell_icon_theme,
                                     if active { theme.text } else { theme.text_muted },
+                                    if active {
+                                        theme.background.blend(theme.overlay(0.1))
+                                    } else {
+                                        theme.background
+                                    },
                                     13.,
                                     theme,
                                 ))
