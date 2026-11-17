@@ -761,14 +761,11 @@ impl TerminalPane {
             .unwrap_or(font_size * 0.6);
         // Fonts report descent as negative; the cell spans ascent plus its magnitude.
         let natural = text.ascent(font_id, font_size) + text.descent(font_id, font_size).abs();
-        // Whole device pixels, as Ghostty sizes cells: every glyph then starts on a pixel
-        // boundary, which keeps pixel fonts such as DepartureMono crisp.
-        let device =
-            |v: Pixels, round: fn(f32) -> f32| px(round(f32::from(v) * scale).max(1.) / scale);
-        let cell = CellSize {
-            width: device(width + px(self.font.spacing), f32::round),
-            height: device(natural * self.font.line_height, f32::ceil),
-        };
+        let cell = cell_in_device_pixels(
+            width + px(self.font.spacing),
+            natural * self.font.line_height,
+            scale,
+        );
         self.cell = Some(cell);
         self.cell_scale = scale;
         cell
@@ -1317,6 +1314,19 @@ impl Look {
 /// A run of cells sharing a background: first column, end column, color, and whether
 /// it's part of a selection.
 type Background = (u16, u16, Hsla, bool);
+
+/// A cell `width` × `height` rounded to whole device pixels at `scale`, as Ghostty sizes
+/// cells (`font/Metrics.zig` rounds both): every glyph then starts on a pixel boundary,
+/// which keeps pixel fonts such as DepartureMono crisp, and the cell is the size Ghostty's
+/// is. Rounding up instead would turn float noise (28.000002) into a whole extra pixel,
+/// spacing braille unevenly between rows.
+pub fn cell_in_device_pixels(width: Pixels, height: Pixels, scale: f32) -> CellSize {
+    let device = |v: Pixels| px((f32::from(v) * scale).round().max(1.) / scale);
+    CellSize {
+        width: device(width),
+        height: device(height),
+    }
+}
 
 /// A character rexia draws itself (see `sprites`): its column, the character and its color.
 type Sprite = (u16, char, Hsla);
@@ -1943,6 +1953,30 @@ fn keep_pasted(name: &str, bytes: &[u8]) -> std::io::Result<std::path::PathBuf> 
 
 #[cfg(test)]
 mod tests {
+
+    #[test]
+    fn cells_round_to_device_pixels_as_ghostty_does() {
+        let device = |cell: CellSize, scale: f32| {
+            (
+                f32::from(cell.width) * scale,
+                f32::from(cell.height) * scale,
+            )
+        };
+        // DepartureMono 11 pt: 9.33 × 18.67 px, which GPUI's metrics make 28.000002 at 1.5×.
+        let (width, height) = (px(9.333_333), px(14.666_667 + 4.));
+        assert_eq!(
+            device(cell_in_device_pixels(width, height, 1.5), 1.5),
+            (14., 28.)
+        );
+        assert_eq!(
+            device(cell_in_device_pixels(width, height, 2.), 2.),
+            (19., 37.)
+        );
+        assert_eq!(
+            device(cell_in_device_pixels(width, height, 1.), 1.),
+            (9., 19.)
+        );
+    }
     fn frame_with(bgs: &[&[Option<u32>]], alternate: bool) -> Frame {
         let lines: Vec<Vec<crate::rex::stream::Cell>> = bgs
             .iter()
