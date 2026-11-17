@@ -50,7 +50,6 @@ when checked, and are built in this order; each moves to its section once it's d
 | Quick Look every link on screen, stepping with the arrow keys; files on remote hosts downloaded first; Ctrl-click a remote file link saves a copy under ~/Downloads/Rex/HOST and opens it | preview.28, 29 |
 | Settings search, `rex://settings/...` links to a group or setting, reset buttons on changed settings, every simple setting as a palette row | preview.20, 25, 28 |
 | Typing a host's address in the palette offers to add it | preview.29 |
-| Hide the pointer while typing | preview.8 |
 | Stop retrying an ssh host after three refused logins or host keys, saying what to check | preview.29 |
 
 ## Settings
@@ -91,6 +90,9 @@ when checked, and are built in this order; each moves to its section once it's d
 ## Behavior
 
 Working:
+
+- The pointer hides while typing in a terminal, for every key the terminal takes (Return,
+  Backspace, arrows and Ctrl combinations too, not only characters), until the mouse moves.
 
 - Fade inactive panes dims a pane's content as one picture, under a sheet of the terminal's
   background, so half-block pictures (fastfetch logos) keep their colors apart when faded.
