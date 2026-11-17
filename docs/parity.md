@@ -47,7 +47,6 @@ when checked, and are built in this order; each moves to its section once it's d
 
 | Gap | Source |
 | --- | --- |
-| Tailscale notifications: sign-in needed, device approval needed, failures | Notifications › System Notifications |
 | Terminal font style (an installed face such as Light) and weight | Terminal › Typography |
 | Quick Look every link on screen, stepping with the arrow keys; files on remote hosts downloaded first; Ctrl-click a remote file link saves a copy under ~/Downloads/Rex/HOST and opens it | preview.28, 29 |
 | Settings search, `rex://settings/...` links to a group or setting, reset buttons on changed settings, every simple setting as a palette row | preview.20, 25, 28 |
@@ -60,7 +59,7 @@ when checked, and are built in this order; each moves to its section once it's d
 | Mac section | rexia |
 | --- | --- |
 | Notifications › Program Activity | All of it: activity in tabs, idle processes, each process, desktop notifications, launcher badge (Unity LauncherEntry), sounds with volume, and the per-state tabs/notify/sound switches. |
-| Notifications › System Notifications | Terminal notifications (OSC 9 and 777). Tailscale notices aren't built yet (see the audit). |
+| Notifications › System Notifications | Terminal notifications (OSC 9 and 777). Tailscale sign-in, device approval and failures, each with its switch: a desktop notification when built-in Tailscale comes to need a sign-in (clicking opens the sign-in link) or an admin's approval, taken back once it moves on, and a critical one when it stops or reports a new error. |
 | Notifications › In-App Notifications | Notification position: click a spot in a picture of the window to float notices at the top or bottom, left, center or right. |
 | Interface › Panes, Active Pane, Splits & Focus | Pane style, pane headers (always, hover, hidden), active pane highlight with its color (accent, terminal text, or one of the 16 terminal colors), opacity and animation (fade in, move from the previous pane, or instant), fade inactive panes, fade panes for inactive windows, focus follows mouse. Autobalance splits (on by default): when a pane opens or closes in the tab on screen, its splits even out; a divider you drag or move with the keyboard keeps its place on screen until Balance Splits, and one dropped near the middle of its split snaps there. |
 | Interface › Appearance, Themes | Replaced by Noctalia: palette, corner radius, borders, shadows and the interface font follow its live config. |
