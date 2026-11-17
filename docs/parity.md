@@ -92,6 +92,9 @@ when checked, and are built in this order; each moves to its section once it's d
 
 Working:
 
+- With focus follows mouse, the pane under the pointer takes keyboard focus as well as the
+  highlight: what you type goes to the pane the pointer moved onto.
+
 - Settings › Terminal › Font style lists the terminal font's upright faces from fontconfig
   (DM Mono: Light, Regular, Medium); choosing one sets Font weight, which steps 100 to 900
   for fonts with more weights. Bold text draws 300 heavier than the chosen weight, up to 900.
