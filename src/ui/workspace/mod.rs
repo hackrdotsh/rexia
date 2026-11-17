@@ -423,9 +423,12 @@ impl Workspace {
 
     /// The host whose server keeps the host list: this machine's, else the first.
     pub fn home(&self) -> usize {
+        // This computer's server; without one, the first host rexia was set up with, not
+        // one the home server listed (the user can move those above it).
         self.hosts
             .iter()
             .position(|h| h.config.is_local())
+            .or_else(|| self.hosts.iter().position(|h| h.server_id.is_none()))
             .unwrap_or(0)
     }
 
