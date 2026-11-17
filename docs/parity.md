@@ -105,7 +105,8 @@ Working:
 - Sidebar tab rows show a close button under the pointer (closing asks first when the tab
   is busy), and a tab's hover card steps aside while its right-click menu is open.
 
-- The sidebar's width: drag its edge beside the panes to resize it (180 to 480 pixels; on
+- The sidebar's width: drag its edge beside the panes (8 pixels across the border, with a
+  line in the accent color under the pointer and while dragging) to resize it (180 to 480 pixels; on
   the right side, dragging left widens it). The width is kept in settings when the drag
   ends, so it's remembered across launches, and a double-click on the edge goes back to
   260.
