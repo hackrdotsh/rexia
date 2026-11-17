@@ -47,7 +47,6 @@ when checked, and are built in this order; each moves to its section once it's d
 
 | Gap | Source |
 | --- | --- |
-| Terminal font style (an installed face such as Light) and weight | Terminal › Typography |
 | Quick Look every link on screen, stepping with the arrow keys; files on remote hosts downloaded first; Ctrl-click a remote file link saves a copy under ~/Downloads/Rex/HOST and opens it | preview.28, 29 |
 | Settings search, `rex://settings/...` links to a group or setting, reset buttons on changed settings, every simple setting as a palette row | preview.20, 25, 28 |
 | Typing a host's address in the palette offers to add it | preview.29 |
@@ -92,6 +91,10 @@ when checked, and are built in this order; each moves to its section once it's d
 ## Behavior
 
 Working:
+
+- Settings › Terminal › Font style lists the terminal font's upright faces from fontconfig
+  (DM Mono: Light, Regular, Medium); choosing one sets Font weight, which steps 100 to 900
+  for fonts with more weights. Bold text draws 300 heavier than the chosen weight, up to 900.
 
 - Hold the Go to Tab modifier (Alt by default, where Rex for Mac uses Command) to see
   each tab's key on it, in the tab bar and the sidebar. The keys come from the keymap, so a
