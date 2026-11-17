@@ -251,6 +251,7 @@ pub struct Workspace {
     session_disclosure: HashMap<(String, String), bool>,
     pub notice: Option<String>,
     forwards: forwards::Forwards,
+    new_window_session: Option<(String, Option<String>)>,
     /// The active host's keymap, and the reply it came from.
     keymap: Keymap,
     keymap_source: Option<Value>,
@@ -468,6 +469,7 @@ impl Workspace {
             session_disclosure: HashMap::new(),
             notice: None,
             forwards: forwards::Forwards::default(),
+            new_window_session: None,
             keymap: fallback,
             keymap_source: None,
             modes: Vec::new(),
@@ -588,6 +590,9 @@ impl Workspace {
         self.check_tailscale();
         self.autobalance();
         let model = self.model();
+        if self.restore_previous_session_after_last_tab(&model, window, cx) {
+            return;
+        }
         if let Some(id) = &model.selected {
             self.session_disclosure
                 .entry((self.host().config.id.clone(), id.clone()))
@@ -748,6 +753,7 @@ impl Workspace {
         self.hosts[self.active]
             .handle
             .send(HostCommand::Visible(false));
+        self.new_window_session = None;
         self.active = host;
         self.panes.clear();
         self.focused = None;

@@ -64,16 +64,69 @@ impl Workspace {
 
     /// `client.window.new`: another window, with a new session on this window's host.
     pub fn open_new_window(&mut self, cx: &mut Context<Self>) {
-        let settings = self.settings_for_window(None);
+        let previous = self.session_id();
+        let settings = self.settings_for_window(previous.clone());
         let path = self.settings_path.clone();
         cx.defer(move |cx| {
-            let opened = crate::app::open_workspace(settings, path, cx, |ws, _, cx| {
-                ws.new_session(ws.active, cx);
+            let opened = crate::app::open_workspace(settings, path, cx, move |ws, _, cx| {
+                let (reply, created) = tokio::sync::oneshot::channel();
+                ws.host().handle.send(HostCommand::CreateSession {
+                    label: None,
+                    reply: Some(reply),
+                });
+                cx.spawn(async move |this, cx| {
+                    if let Ok(Ok(created)) = created.await
+                        && let Some(id) = created["session_id"].as_str()
+                    {
+                        let _ = this.update(cx, |ws, cx| {
+                            ws.new_window_session = Some((id.to_owned(), previous));
+                            cx.notify();
+                        });
+                    }
+                })
+                .detach();
             });
             if let Err(error) = opened {
                 eprintln!("rexia: couldn't open a window: {error:#}");
             }
         });
+    }
+
+    pub(super) fn restore_previous_session_after_last_tab(
+        &mut self,
+        model: &crate::rex::host::HostModel,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) -> bool {
+        let Some((created, previous)) = self.new_window_session.as_ref() else {
+            return false;
+        };
+        if model.connection != crate::rex::host::Connection::Connected
+            || model
+                .views
+                .get(created)
+                .is_some_and(|view| !view.windows.is_empty())
+        {
+            return false;
+        }
+        let next = previous
+            .as_deref()
+            .and_then(|id| model.session(id))
+            .filter(|session| &session.session_id != created)
+            .or_else(|| {
+                model
+                    .sessions
+                    .iter()
+                    .find(|session| &session.session_id != created)
+            })
+            .map(|session| session.session_id.clone());
+        self.new_window_session = None;
+        if let Some(next) = next {
+            self.select_session(self.active, next, cx);
+        } else {
+            window.remove_window();
+        }
+        true
     }
 
     /// `client.window.close`: close this window. The last one closing quits rexia.

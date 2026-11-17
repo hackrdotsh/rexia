@@ -131,6 +131,28 @@ fn tabs_move_to_their_own_windows_and_windows_open_and_close() {
     sessions.track(fresh.clone());
     println!("new window shows its own session {fresh}");
 
+    h.cx.update(|cx| {
+        third
+            .update(cx, |ws, window, cx| {
+                ws.run_action(
+                    "client.close",
+                    Value::Null,
+                    "palette",
+                    Default::default(),
+                    window,
+                    cx,
+                )
+                .unwrap();
+            })
+            .unwrap();
+    });
+    wait_in(
+        &mut h,
+        third,
+        "the previous session after closing the only tab",
+        |ws| (ws.model().selected.as_ref() == Some(&session)).then_some(()),
+    );
+
     // Close Window closes it; the others stay.
     h.cx.update(|cx| {
         third

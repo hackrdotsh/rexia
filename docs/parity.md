@@ -93,6 +93,14 @@ Working:
   Alt+Enter from the palette. This uses the selected Rex CLI's `rex forward`
   transport; use a CLI and server with forwarding support.
 
+- Preview.31 follow-up: indexed settings have bindable actions, and shortcut
+  edits to Rexia's `settings.toml` reload while it runs. Activity messages have
+  their own rows, hover-card messages wrap, and minimized floating windows can
+  be dragged to a corner or moved through Settings. A new window returns to its
+  previous session when its only tab closes. The macOS traffic-light fix does
+  not apply to Linux. Exact macOS fallback-font and layout-specific paste parity
+  are not claimed.
+
 - **Settings → Interface → Show Activity below Sessions** starts Activity halfway down
   the sidebar, or below Sessions if that list extends farther. Both sections scroll
   together. The Activity-only view and its grouping controls are still available.
