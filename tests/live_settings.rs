@@ -51,6 +51,12 @@ fn settings_page_opens_switches_sections_and_applies_changes() {
     h.pump();
     assert_eq!(h.workspace(|ws| ws.terminal_font_size()), before + 2.);
     h.screenshot("settings-terminal");
+    // Terminal, Shortcuts, Notifications, then Client & Hosts.
+    h.press("tab");
+    assert_eq!(
+        h.workspace(|ws| ws.settings_section()),
+        Some(SettingsSection::Shortcuts)
+    );
     h.press("tab");
     h.screenshot("settings-notifications");
     h.press("tab");
