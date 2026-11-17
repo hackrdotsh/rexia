@@ -23,6 +23,7 @@ mod preferences;
 pub mod quick_look;
 pub mod remote;
 pub mod server_status;
+pub mod sidebar_width;
 mod ssh;
 pub mod ssh_questions;
 pub mod tab_icons;
@@ -161,6 +162,9 @@ pub struct Workspace {
     fetching_tabs: HashSet<(usize, String)>,
     /// A tab or pane pressed for dragging, and the drag once it moves.
     moving: Option<dragging::Moving>,
+    /// The sidebar's edge while it's dragged, and the width it's being dragged to.
+    sidebar_resizing: Option<sidebar_width::Resizing>,
+    sidebar_drag_width: Option<f32>,
     reveal: toolbar::Reveal,
     highlight: highlight::Track,
     swipe: gestures::SwipeTracker,
@@ -363,6 +367,8 @@ impl Workspace {
             known_tabs: HashMap::new(),
             fetching_tabs: HashSet::new(),
             moving: None,
+            sidebar_resizing: None,
+            sidebar_drag_width: None,
             reveal: Default::default(),
             highlight: Default::default(),
             swipe: Default::default(),
@@ -849,6 +855,10 @@ impl Workspace {
 
     fn on_mouse_move(&mut self, event: &MouseMoveEvent, _: &mut Window, cx: &mut Context<Self>) {
         self.track_pointer(event.position, cx);
+        let pressed = event.pressed_button == Some(MouseButton::Left);
+        if self.sidebar_resize_moved(event.position.x, pressed, cx) {
+            return;
+        }
         if self.moving.is_some() {
             if event.pressed_button != Some(MouseButton::Left) {
                 // The press ended somewhere we didn't hear about.
@@ -899,6 +909,9 @@ impl Workspace {
     }
 
     fn on_mouse_up(&mut self, _: &MouseUpEvent, _: &mut Window, cx: &mut Context<Self>) {
+        if self.sidebar_resize_released(cx) {
+            return;
+        }
         if self.drag_released(cx) {
             return;
         }
@@ -2078,6 +2091,7 @@ impl Render for Workspace {
             (top_bar, None)
         };
         let slide = self.sidebar_slide(self.settings.interface.sidebar, cx);
+        let sidebar_width = self.sidebar_width();
         // A hiding sidebar is still drawn while it slides away.
         let sidebar =
             if self.settings.interface.sidebar || slide.is_some_and(|(showing, _)| !showing) {
@@ -2096,7 +2110,7 @@ impl Render for Workspace {
                     .flex()
                     .flex_col()
                     .flex_none()
-                    .w(px(260.))
+                    .w(px(sidebar_width))
                     .h_full()
                     .when(layout == ToolbarLayout::Right, |d| {
                         d.border_l(theme.border_width)
@@ -2113,6 +2127,7 @@ impl Render for Workspace {
                     Some(bar) => column.child(bar).child(content),
                     None => column.child(content),
                 };
+                let column = column.child(self.render_sidebar_edge(layout, cx));
                 // Sliding in or out, the sidebar's width grows or shrinks; its contents stay
                 // their width and are cut off.
                 Some(match slide {
@@ -2129,7 +2144,7 @@ impl Render for Workspace {
                                     .with_easing(motion::easing(style)),
                                 move |el, t| {
                                     let shown = if showing { t } else { 1. - t };
-                                    el.w(px(260. * shown))
+                                    el.w(px(sidebar_width * shown))
                                 },
                             )
                             .into_any_element()

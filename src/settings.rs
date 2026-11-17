@@ -420,6 +420,8 @@ impl Default for TerminalSettings {
 #[serde(default)]
 pub struct InterfaceSettings {
     pub sidebar: bool,
+    /// The sidebar's width in pixels, as dragged.
+    pub sidebar_width: f32,
     pub toolbar_layout: ToolbarLayout,
     pub toolbar_behavior: ToolbarBehavior,
     /// The side Toggle Toolbar Layout goes back to from Above.
@@ -460,6 +462,7 @@ impl Default for InterfaceSettings {
     fn default() -> Self {
         Self {
             sidebar: true,
+            sidebar_width: 260.,
             toolbar_layout: ToolbarLayout::Above,
             toolbar_behavior: ToolbarBehavior::Always,
             vertical_side: ToolbarLayout::Left,
