@@ -131,6 +131,8 @@ impl TextInput {
 
     fn insert(&mut self, text: &str) {
         self.delete_selection();
+        // A collapsed selection (including Ctrl+A in an empty field) ends on input.
+        self.anchor = None;
         let clean: String = text.chars().filter(|c| !c.is_control()).collect();
         self.text.insert_str(self.cursor, &clean);
         self.cursor += clean.len();
