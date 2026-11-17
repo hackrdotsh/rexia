@@ -90,7 +90,8 @@ fn keys_modes_lua_bindings_and_remote_control() {
     });
     println!("ctrl+shift+u (Lua function): wrote rexia-lua-key");
 
-    // Remote control: another client asks rexia to zoom, then asks for something it lacks.
+    // Remote control: Quick Look no longer requires a pointer position; an unknown
+    // action still fails rather than being acknowledged as performed.
     let client_id = h.host.snapshot().client_id.unwrap();
     let zoom = h.call_from(
         &control,
@@ -101,12 +102,18 @@ fn keys_modes_lua_bindings_and_remote_control() {
     h.wait("the zoom", |m| {
         m.view()?.active_window()?.zoomed_block_id.clone()
     });
-    let missing = h.call_from(
+    let preview = h.call_from(
         &control,
         "client.perform",
         json!({"client_id": client_id, "action": "client.quick_look"}),
     );
-    println!("client.perform pane.zoom -> ok; client.quick_look -> {missing:?}");
+    println!("client.perform pane.zoom -> ok; client.quick_look -> {preview:?}");
+    assert!(preview.is_ok());
+    let missing = h.call_from(
+        &control,
+        "client.perform",
+        json!({"client_id": client_id, "action": "client.nonexistent"}),
+    );
     assert!(missing.is_err());
 
     // rex do: the CLI drives rexia by its client label.

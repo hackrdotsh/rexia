@@ -6,7 +6,6 @@ mod common;
 use common::{Harness, Sessions, desktop::Desktop, focused_text};
 use gpui::{MouseMoveEvent, PlatformInput};
 use rexia::ui::workspace::quick_look::Shown;
-use serde_json::Value;
 use std::{
     cell::RefCell,
     rc::Rc,
@@ -33,7 +32,11 @@ fn quick_look(h: &mut Harness) -> Result<Shown, String> {
     let before = h.workspace(|ws| ws.quick_looks().len());
     let window = h.window;
     h.cx.update(|cx| window.update(cx, |ws, _, _| ws.notice = None).unwrap());
-    h.run("client.quick_look", Value::Null);
+    h.cx.update(|cx| {
+        window
+            .update(cx, |ws, _, cx| ws.quick_look_one(cx).unwrap())
+            .unwrap()
+    });
     let deadline = Instant::now() + Duration::from_secs(10);
     loop {
         h.pump();
