@@ -57,6 +57,15 @@ impl Workspace {
         self.notifier = Some(notifier);
         self._tasks.push(cx.spawn_in(window, async move |this, cx| {
             while let Ok(key) = clicks.recv_async().await {
+                if let Some(host) = super::tailscale_notes::parse_key(&key) {
+                    let shown = this.update_in(cx, |ws, window, cx| {
+                        ws.tailscale_note_clicked(host, window, cx)
+                    });
+                    if shown.is_err() {
+                        break;
+                    }
+                    continue;
+                }
                 let Some((host, session, block)) = parse_key(&key) else {
                     continue;
                 };

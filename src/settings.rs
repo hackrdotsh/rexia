@@ -577,6 +577,11 @@ pub struct NotificationSettings {
     pub sound_volume: f32,
     /// Let programs send desktop notifications with OSC 9 and OSC 777.
     pub terminal_notifications: bool,
+    /// Desktop notifications about a server's built-in Tailscale: needing a sign-in,
+    /// needing an admin's approval, and stopping or reporting a problem.
+    pub tailscale_sign_in: bool,
+    pub tailscale_approval: bool,
+    pub tailscale_failures: bool,
     pub working: StateActivity,
     pub blocked: StateActivity,
     pub error: StateActivity,
@@ -594,6 +599,9 @@ impl Default for NotificationSettings {
             sounds: false,
             sound_volume: 1.0,
             terminal_notifications: true,
+            tailscale_sign_in: true,
+            tailscale_approval: true,
+            tailscale_failures: true,
             notice_position: NoticePosition::BottomCenter,
             working: StateActivity {
                 tabs: true,

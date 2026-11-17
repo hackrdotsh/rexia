@@ -30,6 +30,7 @@ mod ssh;
 pub mod ssh_questions;
 pub mod tab_hints;
 pub mod tab_icons;
+pub mod tailscale_notes;
 mod toolbar;
 pub mod uploads;
 mod windows;
@@ -175,6 +176,8 @@ pub struct Workspace {
     tab_hint_wait: Option<Task<()>>,
     tab_hints_shown: bool,
     tab_hint_generation: u64,
+    /// Each host's Tailscale as rexia last saw it, for its notifications.
+    tailscale_seen: HashMap<usize, tailscale_notes::Seen>,
     sidebar_drag_width: Option<f32>,
     reveal: toolbar::Reveal,
     highlight: highlight::Track,
@@ -384,6 +387,7 @@ impl Workspace {
             tab_hint_wait: None,
             tab_hints_shown: false,
             tab_hint_generation: 0,
+            tailscale_seen: HashMap::new(),
             sidebar_drag_width: None,
             reveal: Default::default(),
             highlight: Default::default(),
@@ -532,6 +536,7 @@ impl Workspace {
         self.handle_performs(window, cx);
         self.fetch_unknown_tabs(cx);
         self.process_activity(window);
+        self.check_tailscale();
         self.autobalance();
         let model = self.model();
         if let Some(message) = model.notices.last().cloned() {
