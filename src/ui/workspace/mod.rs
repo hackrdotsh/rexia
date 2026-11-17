@@ -2564,7 +2564,7 @@ impl Render for Workspace {
             .children(notice)
             .children(self.key_hint(&theme))
             .children(self.render_find(&theme, cx))
-            .children(self.render_overlay(&theme, cx))
+            .children(self.render_overlay(window, &theme, cx))
             .children(self.render_uploads(&theme, cx))
             .children(self.render_quick_look(&theme, cx))
             .children(self.render_context_menu(&theme, cx))

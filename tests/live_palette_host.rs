@@ -27,8 +27,20 @@ fn a_typed_address_offers_to_add_its_host() {
     h.press("ctrl-shift-p");
     assert_eq!(h.workspace(|ws| ws.list_kind()), Some(ListKind::Commands));
 
+    // Wrapping reaches a row beyond the old render limit, then returns to the top.
+    assert!(h.workspace(|ws| ws.list_titles().len()) > 60);
+    h.press("up");
+    assert!(h.workspace(|ws| ws.list_selection_visible()));
+    h.press("down");
+    assert!(h.workspace(|ws| ws.list_selection_visible()));
+    for _ in 0..18 {
+        h.press("down");
+        assert!(h.workspace(|ws| ws.list_selection_visible()));
+    }
+
     // A search: no offer.
     h.type_text("split");
+    assert!(h.workspace(|ws| ws.list_selection_visible()));
     let titles = h.workspace(|ws| ws.list_titles());
     println!("'split': {} rows, last {:?}", titles.len(), titles.last());
     assert!(titles.iter().all(|t| !t.starts_with("Add Host")));

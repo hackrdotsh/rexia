@@ -19,8 +19,8 @@ use crate::{
     },
 };
 use gpui::{
-    AnyElement, Context, Entity, FontWeight, SharedString, Subscription, Window, div, prelude::*,
-    px,
+    AnyElement, Context, Entity, FontWeight, ScrollHandle, SharedString, Subscription, Window, div,
+    prelude::*, px,
 };
 use serde_json::{Value, json};
 
@@ -143,6 +143,7 @@ pub struct ListOverlay {
     pub(super) items: Vec<Item>,
     pub(super) shown: Vec<usize>,
     selected: usize,
+    scroll: ScrollHandle,
     /// Bumped with each directory listing request, so a slow reply can't replace a newer one.
     generation: u64,
     _subscription: Subscription,
@@ -647,6 +648,20 @@ impl Workspace {
         }
     }
 
+    /// Whether the selected result fits inside the list's last drawn viewport.
+    pub fn list_selection_visible(&self) -> bool {
+        let Some(Overlay::List(list)) = &self.overlay else {
+            return false;
+        };
+        let viewport = list.scroll.bounds();
+        list.scroll
+            .bounds_for_item(list.selected)
+            .is_some_and(|row| {
+                let offset = list.scroll.offset().y;
+                row.top() + offset >= viewport.top() && row.bottom() + offset <= viewport.bottom()
+            })
+    }
+
     /// The problem an open dialog reports, such as an address it can't use.
     pub fn dialog_error(&self) -> Option<String> {
         match &self.overlay {
@@ -697,6 +712,8 @@ impl Workspace {
             });
         let shown = (0..items.len()).collect();
         let selected = items.iter().position(|i| i.current).unwrap_or(0);
+        let scroll = ScrollHandle::new();
+        scroll.scroll_to_item(selected);
         focus_input(&input, window, cx);
         self.overlay = Some(Overlay::List(ListOverlay {
             kind,
@@ -704,6 +721,7 @@ impl Workspace {
             items,
             shown,
             selected,
+            scroll,
             generation: 0,
             _subscription: subscription,
         }));
@@ -766,6 +784,8 @@ impl Workspace {
                 extra.retain(|i| !list.shown.contains(i));
                 list.shown.extend(extra);
                 list.selected = 0;
+                list.scroll.set_offset(gpui::Point::default());
+                list.scroll.scroll_to_item(0);
                 if list.kind == ListKind::Commands {
                     Self::offer_typed_host(list, query, &known);
                 }
@@ -796,6 +816,7 @@ impl Workspace {
             InputEvent::Navigate(step) => {
                 let count = list.shown.len().max(1) as i32;
                 list.selected = (list.selected as i32 + step).rem_euclid(count) as usize;
+                list.scroll.scroll_to_item(list.selected);
             }
             InputEvent::Tab => {
                 // In the path browser, Tab completes the selected entry.
@@ -973,6 +994,8 @@ impl Workspace {
                     }));
                 list.shown = (0..list.items.len()).collect();
                 list.selected = 0;
+                list.scroll.set_offset(gpui::Point::default());
+                list.scroll.scroll_to_item(0);
                 cx.notify();
             });
         })
@@ -1460,6 +1483,7 @@ impl Workspace {
 
     pub(super) fn render_overlay(
         &self,
+        window: &Window,
         theme: &Theme,
         cx: &mut Context<Self>,
     ) -> Option<AnyElement> {
@@ -1480,7 +1504,7 @@ impl Workspace {
             Overlay::List(list) => panel
                 .w(px(640.))
                 .max_h(px(520.))
-                .child(self.render_list(list, theme, cx))
+                .child(self.render_list(list, window, theme, cx))
                 .into_any_element(),
             Overlay::Dialog(dialog) => panel
                 .w(px(460.))
@@ -1518,11 +1542,16 @@ impl Workspace {
         )
     }
 
-    fn render_list(&self, list: &ListOverlay, theme: &Theme, cx: &mut Context<Self>) -> AnyElement {
+    fn render_list(
+        &self,
+        list: &ListOverlay,
+        window: &Window,
+        theme: &Theme,
+        cx: &mut Context<Self>,
+    ) -> AnyElement {
         let rows: Vec<AnyElement> = list
             .shown
             .iter()
-            .take(60)
             .enumerate()
             .filter_map(|(position, index)| {
                 let item = list.items.get(*index)?.clone();
@@ -1548,6 +1577,7 @@ impl Workspace {
                         .gap(px(10.))
                         .px(px(12.))
                         .h(px(40.))
+                        .flex_none()
                         .rounded(theme.radius_small())
                         .cursor_pointer()
                         .when(selected, |d| d.bg(theme.primary))
@@ -1649,8 +1679,9 @@ impl Workspace {
                     .gap(px(2.))
                     .px(px(8.))
                     .pb(px(8.))
-                    .max_h(px(440.))
+                    .max_h((window.viewport_size().height - px(144.)).clamp(px(40.), px(440.)))
                     .overflow_y_scroll()
+                    .track_scroll(&list.scroll)
                     .children(rows)
                     .children(empty),
             )
