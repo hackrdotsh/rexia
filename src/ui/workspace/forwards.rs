@@ -1,12 +1,12 @@
 use super::{
     Workspace,
-    overlay::{Choice, Item},
+    overlay::{Choice, Dialog, Item, Overlay},
 };
 use crate::rex::{
     endpoint::Endpoint,
-    forward::{self, Forward},
+    forward::{self, Forward, LocalPort, StartError},
 };
-use gpui::Context;
+use gpui::{Context, Window};
 use std::collections::BTreeMap;
 use url::Url;
 
@@ -17,12 +17,25 @@ pub(super) struct Forwards {
 }
 
 struct Entry {
+    request: ForwardRequest,
+    address: Option<Url>,
+    _forward: Forward,
+}
+
+#[derive(Clone)]
+pub struct ForwardRequest {
     host: String,
     endpoint: Endpoint,
     session: String,
     target: Url,
-    address: Option<Url>,
-    _forward: Forward,
+}
+
+impl ForwardRequest {
+    pub(super) fn port(&self) -> u16 {
+        self.target
+            .port_or_known_default()
+            .expect("validated target")
+    }
 }
 
 impl Workspace {
@@ -30,11 +43,11 @@ impl Workspace {
         self.forwards
             .entries
             .iter()
-            .filter(|(_, entry)| entry.host == host)
+            .filter(|(_, entry)| entry.request.host == host)
             .filter_map(|(&id, entry)| {
                 let address = entry.address.as_ref()?;
                 Some(Item {
-                    title: entry.target.to_string(),
+                    title: entry.request.target.to_string(),
                     detail: Some(address.to_string()),
                     keys: Some("Alt+Enter to close".into()),
                     icon: "world",
@@ -69,41 +82,63 @@ impl Workspace {
             cx.notify();
             return;
         };
-        let host = host.to_owned();
-        let endpoint = entry.handle.endpoint.clone();
+        self.start_forward(
+            ForwardRequest {
+                host: host.to_owned(),
+                endpoint: entry.handle.endpoint.clone(),
+                session,
+                target,
+            },
+            LocalPort::Match,
+            cx,
+        );
+    }
+
+    fn start_forward(&mut self, request: ForwardRequest, mode: LocalPort, cx: &mut Context<Self>) {
+        if !self
+            .hosts
+            .iter()
+            .any(|host| host.config.id == request.host && host.handle.endpoint == request.endpoint)
+        {
+            self.notice = Some("That host is no longer available".into());
+            cx.notify();
+            return;
+        }
         if let Some(entry) = self.forwards.entries.values().find(|entry| {
-            entry.host == host
-                && entry.endpoint == endpoint
-                && entry.session == session
-                && entry.target.host() == target.host()
-                && entry.target.port_or_known_default() == target.port_or_known_default()
+            let existing = &entry.request;
+            existing.host == request.host
+                && existing.endpoint == request.endpoint
+                && existing.session == request.session
+                && existing.target.host() == request.target.host()
+                && existing.port() == request.port()
         }) {
             if let Some(address) = &entry.address {
-                let mut link = target;
+                let mut link = request.target;
                 let _ = link.set_host(address.host_str());
                 let _ = link.set_port(address.port_or_known_default());
                 (self.link_opener)(link.as_str(), cx);
             }
             return;
         }
-        let (forward, ready, exited) =
-            match Forward::start(endpoint.clone(), session.clone(), target.clone()) {
-                Ok(worker) => worker,
-                Err(error) => {
-                    self.notice = Some(format!("Couldn't forward port: {error}"));
-                    cx.notify();
-                    return;
-                }
-            };
+        let (forward, ready, exited) = match Forward::start(
+            request.endpoint.clone(),
+            request.session.clone(),
+            request.target.clone(),
+            mode,
+        ) {
+            Ok(worker) => worker,
+            Err(error) => {
+                self.notice = Some(format!("Couldn't forward port: {error}"));
+                cx.notify();
+                return;
+            }
+        };
         self.forwards.next += 1;
         let id = self.forwards.next;
         self.forwards.entries.insert(
             id,
             Entry {
-                host,
-                endpoint,
-                session,
-                target,
+                request,
                 address: None,
                 _forward: forward,
             },
@@ -111,7 +146,7 @@ impl Workspace {
         cx.spawn(async move |this, cx| {
             let result = ready
                 .await
-                .unwrap_or_else(|_| Err("Rex did not start the forward".into()));
+                .unwrap_or_else(|_| Err(StartError::Other("Rex did not start the forward".into())));
             let _ = this.update(cx, |ws, cx| {
                 let Some(entry) = ws.forwards.entries.get_mut(&id) else {
                     return;
@@ -122,7 +157,17 @@ impl Workspace {
                         entry.address = Some(address);
                         ws.open_forward(id, cx);
                     }
-                    Err(error) => {
+                    Err(StartError::PortChoice(error)) => {
+                        let request = entry.request.clone();
+                        ws.forwards.entries.remove(&id);
+                        ws.overlay = Some(Overlay::Dialog(Dialog::ForwardPort {
+                            request,
+                            error,
+                            authorize: forward::authorization_available(),
+                            focused: 1,
+                        }));
+                    }
+                    Err(StartError::Other(error)) => {
                         ws.forwards.entries.remove(&id);
                         ws.notice = Some(format!("Couldn't forward port: {error}"));
                     }
@@ -135,6 +180,31 @@ impl Workspace {
             });
         })
         .detach();
+    }
+
+    pub(super) fn answer_forward_port(
+        &mut self,
+        choice: usize,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        let Some(Overlay::Dialog(Dialog::ForwardPort {
+            request, authorize, ..
+        })) = &self.overlay
+        else {
+            return;
+        };
+        let mode = match choice {
+            0 => None,
+            1 => Some(LocalPort::Free),
+            2 if *authorize => Some(LocalPort::Authorize),
+            _ => return,
+        };
+        let request = request.clone();
+        self.close_overlay(window, cx);
+        if let Some(mode) = mode {
+            self.start_forward(request, mode, cx);
+        }
     }
 
     pub(super) fn open_forward(&self, id: u64, cx: &mut Context<Self>) {
@@ -169,9 +239,10 @@ impl Workspace {
 
     pub(super) fn prune_forwards(&mut self) {
         self.forwards.entries.retain(|_, entry| {
-            self.hosts
-                .iter()
-                .any(|host| host.config.id == entry.host && host.handle.endpoint == entry.endpoint)
+            self.hosts.iter().any(|host| {
+                host.config.id == entry.request.host
+                    && host.handle.endpoint == entry.request.endpoint
+            })
         });
     }
 }

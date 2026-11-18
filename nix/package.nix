@@ -82,9 +82,15 @@ rustPlatform.buildRustPackage {
 
   preConfigure = ''
     export ZIG_GLOBAL_CACHE_DIR="$TMPDIR/zig-cache"
+    export REXIA_BIND_HELPER="$out/libexec/rexia-bind-port"
   '';
 
   postInstall = ''
+    install -d $out/libexec $out/share/polkit-1/actions
+    mv $out/bin/rexia-bind-port $out/libexec/rexia-bind-port
+    substitute resources/dev.hackr.rexia.bind-port.policy \
+      $out/share/polkit-1/actions/dev.hackr.rexia.bind-port.policy \
+      --replace-fail /usr/libexec/rexia-bind-port "$out/libexec/rexia-bind-port"
     desktop-file-install --dir=$out/share/applications \
       --set-key=Exec --set-value=$out/bin/rexia \
       --set-key=TryExec --set-value=$out/bin/rexia \

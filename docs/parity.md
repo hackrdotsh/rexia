@@ -93,6 +93,9 @@ Working:
   free port if that port is in use. It is reused for the same target and can be
   closed with Alt+Enter from the palette. This uses the selected Rex CLI's
   `rex forward` transport; use a CLI and server with forwarding support.
+  If Linux denies the local bind, Rexia offers a free port or, when installed,
+  administrator approval through polkit. The helper binds only IPv4 loopback
+  and passes the listening socket back to Rexia; Rex still runs as the user.
 
 - Preview.31 follow-up: indexed settings have bindable actions, and shortcut
   edits to Rexia's `settings.toml` reload while it runs. Activity messages have

@@ -19,6 +19,49 @@ fn manual_and_clicked_forwards_prefer_the_target_port_and_fall_back_if_busy() {
     };
     check_forward(&server, false);
     check_forward(&server, true);
+    check_privileged_port_choice(&server);
+}
+
+fn check_privileged_port_choice(server: &str) {
+    if !matches!(TcpListener::bind("127.0.0.1:80"), Err(error) if error.kind() == std::io::ErrorKind::PermissionDenied)
+    {
+        eprintln!("skipped: binding port 80 did not return permission denied");
+        return;
+    }
+    let sessions = Sessions::create(&common::connect(server), "rexia-privileged-forwards");
+    let mut h = Harness::open(server, &sessions.ids[0], 1000., 680.);
+    h.wait("selected session", |m| m.view().map(|_| ()));
+    let opened = Rc::new(RefCell::new(Vec::<String>::new()));
+    let output = opened.clone();
+    let window = h.window;
+    h.cx.update(|cx| {
+        window
+            .update(cx, |ws, _, _| {
+                ws.set_link_opener(move |url, _| output.borrow_mut().push(url.into()))
+            })
+            .unwrap()
+    });
+    for answer in ["escape", "enter"] {
+        h.cx.update(|cx| {
+            window
+                .update(cx, |ws, _, cx| {
+                    ws.open_link("http://127.0.0.2/app?q=1#section".into(), cx)
+                })
+                .unwrap();
+        });
+        let title = h.wait_ui("privileged port choice", |ws| ws.confirm_title());
+        assert!(title.contains("80"));
+        assert!(opened.borrow().is_empty(), "no URL opens before choosing");
+        h.press(answer);
+        assert_eq!(h.workspace(|ws| ws.confirm_title()), None);
+    }
+    let address = h.wait_ui("free port opens", |_| opened.borrow().first().cloned());
+    let address = url::Url::parse(&address).unwrap();
+    assert_eq!(address.host_str(), Some("127.0.0.1"));
+    assert_ne!(address.port_or_known_default(), Some(80));
+    assert_eq!(address.path(), "/app");
+    assert_eq!(address.query(), Some("q=1"));
+    assert_eq!(address.fragment(), Some("section"));
 }
 
 fn check_forward(server: &str, occupied: bool) {

@@ -8,6 +8,22 @@ use tokio::{
 };
 use url::{Host, Url};
 
+mod privileged;
+
+pub use privileged::available as authorization_available;
+
+#[derive(Clone, Copy)]
+pub enum LocalPort {
+    Match,
+    Free,
+    Authorize,
+}
+
+pub enum StartError {
+    PortChoice(Option<String>),
+    Other(String),
+}
+
 pub fn target(input: &str) -> Result<Url, String> {
     let input = input.trim();
     let url = if input.starts_with("http://") || input.starts_with("https://") {
@@ -46,13 +62,14 @@ pub struct Forward {
     _stop: oneshot::Sender<()>,
 }
 
-pub type Ready = oneshot::Receiver<Result<Url, String>>;
+pub type Ready = oneshot::Receiver<Result<Url, StartError>>;
 
 impl Forward {
     pub fn start(
         endpoint: Endpoint,
         session: String,
         url: Url,
+        mode: LocalPort,
     ) -> std::io::Result<(Self, Ready, oneshot::Receiver<()>)> {
         let (stop, cancel) = oneshot::channel();
         let (ready, answer) = oneshot::channel();
@@ -64,9 +81,11 @@ impl Forward {
                     .enable_all()
                     .build()
                 {
-                    Ok(runtime) => runtime.block_on(run(endpoint, session, url, ready, cancel)),
+                    Ok(runtime) => {
+                        runtime.block_on(run(endpoint, session, url, mode, ready, cancel))
+                    }
                     Err(error) => {
-                        let _ = ready.send(Err(error.to_string()));
+                        let _ = ready.send(Err(StartError::Other(error.to_string())));
                     }
                 }
                 let _ = done.send(());
@@ -135,18 +154,39 @@ async fn run(
     endpoint: Endpoint,
     session: String,
     mut url: Url,
-    ready: oneshot::Sender<Result<Url, String>>,
+    mode: LocalPort,
+    ready: oneshot::Sender<Result<Url, StartError>>,
     mut cancel: oneshot::Receiver<()>,
 ) {
     let port = url.port_or_known_default().unwrap();
+    let listener = if matches!(mode, LocalPort::Authorize) {
+        match tokio::select! {
+            result = privileged::bind(port) => result,
+            _ = &mut cancel => return,
+        } {
+            Ok(listener) => Some(listener),
+            Err(error) => {
+                let _ = ready.send(Err(StartError::PortChoice(Some(error))));
+                return;
+            }
+        }
+    } else {
+        None
+    };
     // Keep the original path, query, and fragment out of the child arguments.
     let destination = format!("{}:{port}", url.host_str().unwrap());
-    let mut local_port = port;
+    let mut local_port = if matches!(mode, LocalPort::Match) {
+        port
+    } else {
+        0
+    };
     loop {
         let mut child = match spawn_forward(&endpoint, &session, &destination, local_port) {
             Ok(child) => child,
             Err(error) => {
-                let _ = ready.send(Err(format!("Couldn't start Rex: {error}")));
+                let _ = ready.send(Err(StartError::Other(format!(
+                    "Couldn't start Rex: {error}"
+                ))));
                 return;
             }
         };
@@ -162,18 +202,13 @@ async fn run(
             result = tokio::time::timeout(Duration::from_secs(20), stdout.next_line()) => result,
             _ = &mut cancel => { stop(&mut child).await; return; }
         };
-        let result = match line {
+        let upstream_port = match line {
             Ok(Ok(Some(line))) => Url::parse(&line)
                 .ok()
                 .filter(loopback)
                 .and_then(|address| address.port_or_known_default())
                 .filter(|port| *port != 0)
-                .and_then(|port| {
-                    url.set_host(Some(LOCAL_HOST)).ok()?;
-                    url.set_port(Some(port)).ok()?;
-                    Some(url)
-                })
-                .ok_or_else(|| "Rex did not report a loopback address for the forward".into()),
+                .ok_or_else(invalid_address),
             Ok(Ok(None)) => {
                 let diagnostic = tokio::time::timeout(Duration::from_secs(1), errors)
                     .await
@@ -181,29 +216,56 @@ async fn run(
                     .and_then(Result::ok)
                     .unwrap_or_default();
                 // Retry only a collision on the local listener, not a transport or target error.
-                let bind_error =
-                    format!("listen tcp {LOCAL_HOST}:{local_port}: bind: address already in use");
-                if local_port != 0 && diagnostic.contains(&bind_error) {
+                let bind_error = format!("listen tcp {LOCAL_HOST}:{local_port}: bind: ");
+                if local_port != 0
+                    && diagnostic.contains(&format!("{bind_error}address already in use"))
+                {
                     stop(&mut child).await;
                     local_port = 0;
                     continue;
                 }
-                Err(if diagnostic.is_empty() {
+                if local_port != 0 && diagnostic.contains(&format!("{bind_error}permission denied"))
+                {
+                    stop(&mut child).await;
+                    let _ = ready.send(Err(StartError::PortChoice(None)));
+                    return;
+                }
+                Err(StartError::Other(if diagnostic.is_empty() {
                     "Rex exited before opening the forward".into()
                 } else {
                     diagnostic
-                })
+                }))
             }
-            _ => Err("Rex did not report a loopback address for the forward".into()),
+            _ => Err(invalid_address()),
         };
-        let listening = result.is_ok();
-        let _ = ready.send(result);
-        if listening {
-            tokio::select! { _ = child.wait() => return, _ = cancel => {} }
+        match upstream_port {
+            Ok(upstream) => {
+                url.set_host(Some(LOCAL_HOST)).expect("fixed IPv4 host");
+                url.set_port(Some(if listener.is_some() { port } else { upstream }))
+                    .expect("HTTP(S) URL");
+                let _ = ready.send(Ok(url));
+                if let Some(listener) = listener {
+                    let upstream = (std::net::Ipv4Addr::LOCALHOST, upstream).into();
+                    tokio::select! {
+                        _ = child.wait() => return,
+                        _ = privileged::relay(listener, upstream) => {},
+                        _ = cancel => {},
+                    }
+                } else {
+                    tokio::select! { _ = child.wait() => return, _ = cancel => {} }
+                }
+            }
+            Err(error) => {
+                let _ = ready.send(Err(error));
+            }
         }
         stop(&mut child).await;
         return;
     }
+}
+
+fn invalid_address() -> StartError {
+    StartError::Other("Rex did not report a loopback address for the forward".into())
 }
 
 async fn stop(child: &mut Child) {

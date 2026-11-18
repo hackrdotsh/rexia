@@ -38,3 +38,17 @@ nix run .#dev         # run from source
 
 Development commands run from the checkout root inside the dev shell. The shell
 pins Zig 0.17 and the libghostty-vt source, so builds don't download anything.
+
+### Privileged local ports
+
+If Linux denies a forward's local bind, Rexia offers a free port. To also
+authorize the requested port, use a system installation of the bind helper and
+polkit policy, with a polkit authentication agent running in your desktop session.
+The Nix package includes both; install it in the NixOS system configuration
+(`environment.systemPackages`, with `security.polkit.enable = true`) so polkit
+can see its policy. A per-user package or `nix run` alone doesn't register it.
+
+For other Linux packages, install `rexia-bind-port` to
+`/usr/libexec/rexia-bind-port` and `resources/dev.hackr.rexia.bind-port.policy`
+to `/usr/share/polkit-1/actions/`. Both must be system-owned and not writable
+by ordinary users. The helper must not be setuid; polkit authorizes each bind.

@@ -2,6 +2,7 @@
 name = "rexia"
 version = "0.1.0"
 edition = "2024"
+default-run = "rexia"
 rust-version = "1.96"
 description = "Native Linux client for Rex, built on GPUI and themed by Noctalia"
 publish = false
@@ -18,10 +19,11 @@ gpui = { package = "gpui-pre", version = "=0.3.12" }
 gpui_platform = { package = "gpui-pre-platform", version = "=0.3.12", features = ["font-kit", "wayland", "x11"] }
 notify = "8"
 rustls = { version = "0.23", default-features = false, features = ["ring", "std", "tls12"] }
+rustix = { version = "1", features = ["net"] }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 sha2 = "0.10"
-tokio = { version = "1", features = ["rt", "net", "time", "macros", "sync", "process"] }
+tokio = { version = "1", features = ["rt", "net", "time", "macros", "sync", "process", "io-util"] }
 tokio-tungstenite = { version = "0.30", features = ["rustls-tls-native-roots"] }
 toml = "0.9"
 unicode-segmentation = "1"

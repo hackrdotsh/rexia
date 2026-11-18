@@ -5121,6 +5121,7 @@ dependencies = [
  "gpui-pre-wgpu",
  "image",
  "notify",
+ "rustix",
  "rustls",
  "serde",
  "serde_json",

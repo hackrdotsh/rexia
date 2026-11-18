@@ -206,6 +206,12 @@ pub enum Dialog {
         link: String,
         focused: usize,
     },
+    ForwardPort {
+        request: super::forwards::ForwardRequest,
+        error: Option<String>,
+        authorize: bool,
+        focused: usize,
+    },
     Confirm {
         title: String,
         body: String,
@@ -236,6 +242,10 @@ pub enum Overlay {
     List(ListOverlay),
     Dialog(Dialog),
     Settings(Box<super::preferences::SettingsPage>),
+}
+
+fn forward_port_title(port: u16) -> String {
+    format!("Local port {port} requires administrator approval")
 }
 
 pub struct FindBar {
@@ -1199,6 +1209,9 @@ impl Workspace {
     pub fn confirm_title(&self) -> Option<String> {
         match &self.overlay {
             Some(Overlay::Dialog(Dialog::Confirm { title, .. })) => Some(title.clone()),
+            Some(Overlay::Dialog(Dialog::ForwardPort { request, .. })) => {
+                Some(forward_port_title(request.port()))
+            }
             _ => None,
         }
     }
@@ -1479,6 +1492,21 @@ impl Workspace {
             return false;
         };
         match dialog {
+            Dialog::ForwardPort {
+                authorize, focused, ..
+            } => match key {
+                "escape" => self.close_overlay(window, cx),
+                "enter" => {
+                    let choice = *focused;
+                    self.answer_forward_port(choice, window, cx);
+                }
+                "tab" | "right" | "left" => {
+                    let count = if *authorize { 3 } else { 2 };
+                    *focused = (*focused + if key == "left" { count - 1 } else { 1 }) % count;
+                    cx.notify();
+                }
+                _ => {}
+            },
             Dialog::OpenLink { focused, .. } => match key {
                 "escape" => self.close_overlay(window, cx),
                 "enter" => match *focused {
@@ -1794,6 +1822,65 @@ impl Workspace {
                             }))
                             .into_any_element(),
                     ]))
+                    .into_any_element()
+            }
+            Dialog::ForwardPort {
+                request,
+                error,
+                authorize,
+                focused,
+            } => {
+                let port = request.port();
+                let mut buttons = vec![
+                    button("forward-cancel", "Cancel".into(), None, *focused == 0)
+                        .on_click(
+                            cx.listener(|ws, _, window, cx| ws.answer_forward_port(0, window, cx)),
+                        )
+                        .into_any_element(),
+                    button(
+                        "forward-free",
+                        "Use a Free Port".into(),
+                        Some(theme.primary),
+                        *focused == 1,
+                    )
+                    .on_click(
+                        cx.listener(|ws, _, window, cx| ws.answer_forward_port(1, window, cx)),
+                    )
+                    .into_any_element(),
+                ];
+                if *authorize {
+                    buttons.push(
+                        button(
+                            "forward-authorize",
+                            format!("Authorize Port {port}…"),
+                            None,
+                            *focused == 2,
+                        )
+                        .on_click(
+                            cx.listener(|ws, _, window, cx| ws.answer_forward_port(2, window, cx)),
+                        )
+                        .into_any_element(),
+                    );
+                }
+                div()
+                    .flex()
+                    .flex_col()
+                    .gap(px(10.))
+                    .child(heading(forward_port_title(port)))
+                    .when_some(
+                        error.as_ref().cloned().or_else(|| {
+                            (!authorize).then(|| "System port authorization is unavailable.".into())
+                        }),
+                        |d, message| {
+                            d.child(
+                                div()
+                                    .text_size(px(13.))
+                                    .text_color(theme.text_muted)
+                                    .child(message),
+                            )
+                        },
+                    )
+                    .child(actions_row(buttons))
                     .into_any_element()
             }
             Dialog::OpenLink { link, focused } => div()
