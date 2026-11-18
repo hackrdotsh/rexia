@@ -51,7 +51,10 @@ pub(super) async fn bind(port: u16) -> Result<TcpListener, String> {
         return Err("The system port authorization helper is not installed".into());
     }
     let mut command = Command::new(pkexec().ok_or("Polkit is unavailable")?);
-    command.args(["--disable-internal-agent", HELPER, &port.to_string()]);
+    command
+        // The helper is executed directly; pkexec rejects unlisted inherited shells.
+        .env_remove("SHELL")
+        .args(["--disable-internal-agent", HELPER, &port.to_string()]);
     tokio::time::timeout(Duration::from_secs(120), receive(command, port))
         .await
         .map_err(|_| "Port authorization timed out".to_owned())?
