@@ -245,5 +245,12 @@ fn sidebar_tabs_close_on_hover_and_menus_beat_cards() {
     println!("closed {first}; left {left:?}, selected {selected}");
     assert_eq!(left, std::slice::from_ref(&second));
     assert_eq!(selected, second);
+    let bounds = row(&mut h, &second);
+    let close = point(bounds.right() - px(20.), bounds.center().y);
+    move_to(&mut h, close);
+    click(&mut h, close, MouseButton::Left);
+    h.wait("the space closes with its last tab", |m| {
+        m.session(&sessions.ids[0]).is_none().then_some(())
+    });
     drop(sessions);
 }

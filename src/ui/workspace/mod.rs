@@ -873,10 +873,7 @@ impl Workspace {
         let Some(session) = self.session_id() else {
             return;
         };
-        self.call(
-            "session.close_window",
-            json!({"session_id": session, "window_id": window_id}),
-        );
+        self.close_tab_in_session(&session, &window_id);
     }
 
     /// Split the focused pane (or `anchor`): `horizontal` puts the new pane beside it.

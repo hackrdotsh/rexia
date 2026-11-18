@@ -150,7 +150,11 @@ fn tabs_move_to_their_own_windows_and_windows_open_and_close() {
         &mut h,
         third,
         "the previous session after closing the only tab",
-        |ws| (ws.model().selected.as_ref() == Some(&session)).then_some(()),
+        |ws| {
+            let model = ws.model();
+            (model.selected.as_ref() == Some(&session) && model.session(&fresh).is_none())
+                .then_some(())
+        },
     );
 
     // Close Window closes it; the others stay.

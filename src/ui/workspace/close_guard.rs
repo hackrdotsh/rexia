@@ -132,11 +132,20 @@ impl Workspace {
             return;
         };
         match &target {
-            CloseTarget::Pane(block) => self.close_pane(block.clone()),
-            CloseTarget::Tab(window) => self.call(
-                "session.close_window",
-                json!({"session_id": session, "window_id": window}),
-            ),
+            CloseTarget::Pane(block) => {
+                let model = self.model();
+                let tab = model.views.get(&session).and_then(|view| {
+                    view.windows
+                        .iter()
+                        .find(|w| w.block(block).is_some() && w.blocks().count() == 1)
+                });
+                if let Some(tab) = tab {
+                    self.close_tab_in_session(&session, tab.id());
+                } else {
+                    self.close_pane(block.clone());
+                }
+            }
+            CloseTarget::Tab(window) => self.close_tab_in_session(&session, window),
             CloseTarget::OtherPanes(_) => {
                 for block in self.blocks_closing(&target) {
                     self.close_pane(block);
@@ -161,6 +170,22 @@ impl Workspace {
                     );
                 }
             }
+        }
+    }
+
+    pub(super) fn close_tab_in_session(&self, session: &str, window: &str) {
+        let model = self.model();
+        if model
+            .views
+            .get(session)
+            .is_some_and(|view| matches!(view.windows.as_slice(), [tab] if tab.id() == window))
+        {
+            self.call("session.destroy", json!({"session_id": session}));
+        } else {
+            self.call(
+                "session.close_window",
+                json!({"session_id": session, "window_id": window}),
+            );
         }
     }
 }

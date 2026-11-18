@@ -364,12 +364,8 @@ impl Workspace {
                         json!({"session_id": session, "block_id": block}),
                     );
                 } else {
-                    let window_id = window_view.as_ref().map(|w| w.id().to_owned());
-                    call(
-                        self,
-                        "session.close_window",
-                        json!({"session_id": session, "window_id": window_id}),
-                    );
+                    let tab = window_view.as_ref().ok_or_else(|| refused("No tab is open"))?;
+                    self.close_tab_in_session(&session, tab.id());
                 }
             }
             "client.window.fullscreen.toggle" => window.toggle_fullscreen(),
