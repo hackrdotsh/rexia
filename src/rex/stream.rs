@@ -88,6 +88,8 @@ pub struct Frame {
     pub cols: u16,
     pub rows: u16,
     pub lines: Vec<Vec<Cell>>,
+    /// OSC 8 targets in viewport order, grouped by matching adjacent cells.
+    pub hyperlinks: Vec<Hyperlink>,
     pub fg: u32,
     pub bg: u32,
     pub cursor: Option<Cursor>,
@@ -107,6 +109,13 @@ pub struct Frame {
     pub cell_px: (u32, u32),
     /// Which ways of sending images the terminal takes, besides directly.
     pub mediums: images::Mediums,
+}
+
+#[derive(Clone, Debug)]
+pub struct Hyperlink {
+    pub row: u16,
+    pub columns: std::ops::Range<u16>,
+    pub uri: String,
 }
 
 impl Frame {
@@ -649,13 +658,7 @@ impl TerminalState {
 
     /// The OSC 8 link at a viewport cell.
     pub fn link_at(&self, x: u16, y: u16) -> Option<String> {
-        let terminal = self.terminal.as_ref()?;
-        let grid = terminal
-            .grid_ref(Point::Viewport(PointCoordinate { x, y: y as u32 }))
-            .ok()?;
-        let mut buffer = vec![0; 4096];
-        let len = grid.hyperlink_uri(&mut buffer).ok()?;
-        (len > 0).then(|| String::from_utf8_lossy(&buffer[..len.min(buffer.len())]).into_owned())
+        viewport_link(self.terminal.as_ref()?, x, y)
     }
 
     /// Search the screen and scrollback; `None` closes the search.
@@ -751,6 +754,7 @@ impl TerminalState {
             cols: snapshot.cols()?,
             rows: snapshot.rows()?,
             lines: Vec::new(),
+            hyperlinks: Vec::new(),
             fg,
             bg,
             cursor,
@@ -826,6 +830,25 @@ impl TerminalState {
                     | ghostty_vt::screen::CellWide::SpacerHead => bits |= flags::SPACER,
                     _ => {}
                 }
+                if bits & flags::LINK != 0
+                    && bits & flags::SPACER == 0
+                    && let Some(uri) = viewport_link(terminal, x, y as u16)
+                {
+                    let end = x + if bits & flags::WIDE != 0 { 2 } else { 1 };
+                    if let Some(previous) = frame.hyperlinks.last_mut()
+                        && previous.row == y as u16
+                        && previous.columns.end == x
+                        && previous.uri == uri
+                    {
+                        previous.columns.end = end;
+                    } else {
+                        frame.hyperlinks.push(Hyperlink {
+                            row: y as u16,
+                            columns: x..end,
+                            uri,
+                        });
+                    }
+                }
                 if let Some(range) = selected
                     && x >= range.start_x
                     && x <= range.end_x
@@ -861,6 +884,15 @@ impl TerminalState {
         snapshot.clean()?;
         Ok(Some(frame))
     }
+}
+
+fn viewport_link(terminal: &Terminal, x: u16, y: u16) -> Option<String> {
+    let grid = terminal
+        .grid_ref(Point::Viewport(PointCoordinate { x, y: u32::from(y) }))
+        .ok()?;
+    let mut buffer = [0; 4096];
+    let len = grid.hyperlink_uri(&mut buffer).ok()?;
+    (len > 0).then(|| String::from_utf8_lossy(&buffer[..len.min(buffer.len())]).into_owned())
 }
 
 #[cfg(test)]

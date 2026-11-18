@@ -458,6 +458,7 @@ pub struct TerminalPane {
     shine: Option<std::time::Instant>,
     /// The cell the pointer was last over.
     pointer: Option<(u16, u16)>,
+    pointer_over_grid: bool,
     /// Files from another app being dragged over the pane.
     dropping: Option<Vec<std::path::PathBuf>>,
     /// Where the text sits when the pane is taller than its whole lines.
@@ -541,6 +542,7 @@ impl TerminalPane {
             smooth_resizing: true,
             anchor: Default::default(),
             pointer: None,
+            pointer_over_grid: false,
             dropping: None,
             reflowed: None,
             scroll_carry: 0.,
@@ -863,6 +865,12 @@ impl TerminalPane {
         let changed = revision != self.revision;
         self.revision = revision;
         changed
+    }
+
+    pub(super) fn link_modifiers_changed(&self, cx: &mut Context<Self>) {
+        if self.pointer_over_grid {
+            cx.notify();
+        }
     }
 
     fn terminal_font(&self) -> Font {
@@ -1261,6 +1269,9 @@ impl TerminalPane {
 
     fn on_mouse_move(&mut self, event: &MouseMoveEvent, _: &mut Window, cx: &mut Context<Self>) {
         let at = self.cell_at(event.position);
+        if event.modifiers.control {
+            cx.notify();
+        }
         self.pointer = Some(at);
         if let Some(button) = self.reporting {
             self.mouse_report("motion", Some(button), at, &event.modifiers);
@@ -1493,6 +1504,44 @@ pub fn cell_in_device_pixels(width: Pixels, height: Pixels, scale: f32) -> CellS
 /// A character rexia draws itself (see `sprites`): its column, the character and its color.
 type Sprite = (u16, char, Hsla);
 
+fn hovered_link(frame: &Frame, x: u16, y: u16) -> Option<std::ops::Range<u16>> {
+    let cells = frame.lines.get(usize::from(y))?;
+    if let Some(link) = frame
+        .hyperlinks
+        .iter()
+        .find(|link| link.row == y && link.columns.contains(&x))
+    {
+        return Some(link.columns.clone());
+    }
+    let mut text = String::new();
+    let mut columns = Vec::new();
+    for (col, cell) in cells
+        .iter()
+        .enumerate()
+        .filter(|(_, c)| !c.has(flags::SPACER))
+    {
+        let content = if cell.text.is_empty() {
+            " "
+        } else {
+            &cell.text
+        };
+        text.push_str(content);
+        let end = col + if cell.has(flags::WIDE) { 2 } else { 1 };
+        columns.extend(content.chars().map(|_| (col as u16, end as u16)));
+    }
+    crate::quick_look::targets(&text)
+        .into_iter()
+        .find_map(|(range, _)| {
+            let start = columns[range.start].0;
+            let end = columns[range.end - 1].1;
+            ((start..end).contains(&x)
+                && !cells[usize::from(start)..usize::from(end).min(cells.len())]
+                    .iter()
+                    .any(|cell| cell.has(flags::LINK)))
+            .then_some(start..end)
+        })
+}
+
 fn segments(
     cells: &[crate::rex::stream::Cell],
     look: &Look,
@@ -1538,8 +1587,7 @@ fn segments(
             italic: look.italic && cell.has(flags::ITALIC),
             underline: (cell.has(flags::UNDERLINE)
                 || cell.has(flags::DOUBLE_UNDERLINE)
-                || cell.has(flags::CURLY_UNDERLINE)
-                || cell.has(flags::LINK))
+                || cell.has(flags::CURLY_UNDERLINE))
             .then_some(cell.has(flags::CURLY_UNDERLINE)),
             strike: cell.has(flags::STRIKE),
         };
@@ -1661,6 +1709,7 @@ impl Render for TerminalPane {
         let preedit = self.preedit.clone().filter(|p| !p.is_empty() && focused);
         let focus_handle = self.focus.clone();
         let images = self.image_textures(frame.as_deref(), window);
+        let pointer_over_grid = self.pointer_over_grid;
 
         let grid = canvas(
             {
@@ -1674,7 +1723,7 @@ impl Render for TerminalPane {
                             + point(px(0.), anchor_shift(anchor, bounds, padding, cell, rows));
                         // Where paint puts the grid: on a device pixel.
                         let snap = |v: Pixels| px((f32::from(v) * scale).round() / scale);
-                        pane.origin = point(snap(at.x), snap(at.y));
+                        pane.origin = point(snap(at.x), snap(at.y + scroll_shift));
                         pane.fit(bounds, cell);
                     });
                 }
@@ -1719,6 +1768,19 @@ impl Render for TerminalPane {
                         size(cell.width * cols as f32, cell.height),
                     )
                 };
+                let modifiers = window.modifiers();
+                let mouse = window.mouse_position();
+                let hover = (pointer_over_grid
+                    && modifiers.control
+                    && !modifiers.shift
+                    && bounds.contains(&mouse))
+                .then(|| mouse - origin)
+                .filter(|at| at.x >= px(0.) && at.y >= px(0.))
+                .and_then(|at| {
+                    let x = (at.x / cell.width).floor() as u16;
+                    let y = (at.y / cell.height).floor() as u16;
+                    hovered_link(&frame, x, y).map(|range| (y, range))
+                });
                 if let Some(cursor) = frame.cursor {
                     let bounds =
                         cell_bounds(cursor.x, cursor.y as usize, if cursor.wide { 2 } else { 1 });
@@ -1877,6 +1939,18 @@ impl Render for TerminalPane {
                         }
                     }
                     paint_images(Layer::AboveText, window);
+                    if let Some((row, range)) = hover {
+                        let area =
+                            cell_bounds(range.start, usize::from(row), range.end - range.start);
+                        let stroke = px(1. / scale);
+                        window.paint_quad(fill(
+                            Bounds::new(
+                                point(area.left(), area.bottom() - 2. * stroke),
+                                size(area.size.width, stroke),
+                            ),
+                            dim(color(frame.fg)),
+                        ));
+                    }
                     // A cursor shader's trail, under the cursor it leads to.
                     if let Some((trail, t)) = &trail {
                         let color = frame
@@ -2043,6 +2117,10 @@ impl Render for TerminalPane {
             ))
             .on_mouse_down(MouseButton::Middle, cx.listener(Self::on_mouse_down))
             .on_mouse_move(cx.listener(Self::on_mouse_move))
+            .on_hover(cx.listener(|pane, hovered: &bool, _, cx| {
+                pane.pointer_over_grid = *hovered;
+                cx.notify();
+            }))
             .on_mouse_up(MouseButton::Left, cx.listener(Self::on_mouse_up))
             .on_mouse_up(MouseButton::Right, cx.listener(Self::on_mouse_up))
             .on_mouse_up(MouseButton::Middle, cx.listener(Self::on_mouse_up))
@@ -2229,6 +2307,7 @@ mod tests {
             })
             .collect();
         Frame {
+            hyperlinks: Vec::new(),
             cols: bgs[0].len() as u16,
             rows: bgs.len() as u16,
             lines,
@@ -2343,6 +2422,29 @@ mod tests {
         let mixed = frame_with(&[&[red, blue], &[blue, blue]], true);
         assert_eq!(colors(&mixed, PaddingFill::Automatic), vec![0x2040c0]);
         assert_eq!(top_fill(&mixed, PaddingFill::Automatic), None);
+    }
+
+    #[test]
+    fn hover_uses_visible_link_label_and_plain_url_columns() {
+        use crate::rex::stream::Hyperlink;
+        let line = "docs site https://example.com tail";
+        let frame = Frame {
+            lines: vec![
+                line.chars()
+                    .enumerate()
+                    .map(|(i, c)| cell(&c.to_string(), if i < 9 { flags::LINK } else { 0 }))
+                    .collect(),
+            ],
+            hyperlinks: vec![Hyperlink {
+                row: 0,
+                columns: 0..9,
+                uri: "https://example.org".into(),
+            }],
+            ..Frame::default()
+        };
+        assert_eq!(hovered_link(&frame, 4, 0), Some(0..9));
+        assert_eq!(hovered_link(&frame, 15, 0), Some(10..29));
+        assert_eq!(hovered_link(&frame, 30, 0), None);
     }
 
     #[test]

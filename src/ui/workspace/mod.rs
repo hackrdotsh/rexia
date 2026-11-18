@@ -2864,7 +2864,10 @@ impl Render for Workspace {
             .capture_key_down(cx.listener(Self::on_key_down))
             .on_modifiers_changed(
                 cx.listener(|ws, event: &gpui::ModifiersChangedEvent, _, cx| {
-                    ws.tab_hint_modifiers_changed(event.modifiers, cx)
+                    ws.tab_hint_modifiers_changed(event.modifiers, cx);
+                    for pane in ws.panes.values() {
+                        pane.update(cx, |pane, cx| pane.link_modifiers_changed(cx));
+                    }
                 }),
             )
             .on_mouse_move(cx.listener(Self::on_mouse_move))
