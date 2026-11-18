@@ -708,6 +708,7 @@ impl Workspace {
             }
             let pane = &self.panes[&shown];
             pane.update(cx, |pane, cx| {
+                pane.sync_clipboard(window, cx);
                 if pane.changed() {
                     cx.notify();
                 }

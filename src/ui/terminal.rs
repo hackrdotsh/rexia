@@ -867,6 +867,18 @@ impl TerminalPane {
         changed
     }
 
+    /// Consume a program's clipboard write once; never replay background writes.
+    pub(super) fn sync_clipboard(&self, window: &Window, cx: &mut Context<Self>) {
+        let Some(pane) = self.pane() else { return };
+        let text = pane.model.lock().expect("pane model").clipboard.take();
+        if let Some(text) = text
+            && window.is_window_active()
+            && self.focus.is_focused(window)
+        {
+            cx.write_to_clipboard(gpui::ClipboardItem::new_string(text));
+        }
+    }
+
     pub(super) fn link_modifiers_changed(&self, cx: &mut Context<Self>) {
         if self.pointer_over_grid {
             cx.notify();
