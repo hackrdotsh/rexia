@@ -89,9 +89,10 @@ Working:
 - **Forward Port…** in the command palette and **Forwards…** in host settings
   accept a port, `host:port`, or an HTTP(S) URL. Ctrl-clicking a loopback web
   link in a remote terminal forwards it before opening it locally. The listener
-  binds to loopback, is reused for the same target, and can be closed with
-  Alt+Enter from the palette. This uses the selected Rex CLI's `rex forward`
-  transport; use a CLI and server with forwarding support.
+  binds to loopback and uses the target's port if available, falling back to a
+  free port if that port is in use. It is reused for the same target and can be
+  closed with Alt+Enter from the palette. This uses the selected Rex CLI's
+  `rex forward` transport; use a CLI and server with forwarding support.
 
 - Preview.31 follow-up: indexed settings have bindable actions, and shortcut
   edits to Rexia's `settings.toml` reload while it runs. Activity messages have

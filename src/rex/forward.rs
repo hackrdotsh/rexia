@@ -3,7 +3,7 @@ use super::{endpoint::Endpoint, install};
 use std::{process::Stdio, time::Duration};
 use tokio::{
     io::{AsyncBufReadExt, AsyncReadExt, BufReader},
-    process::Command,
+    process::{Child, Command},
     sync::oneshot,
 };
 use url::{Host, Url};
@@ -75,20 +75,15 @@ impl Forward {
     }
 }
 
-async fn run(
-    endpoint: Endpoint,
-    session: String,
-    url: Url,
-    ready: oneshot::Sender<Result<Url, String>>,
-    mut cancel: oneshot::Receiver<()>,
-) {
+const LOCAL_HOST: &str = "127.0.0.1";
+
+fn spawn_forward(
+    endpoint: &Endpoint,
+    session: &str,
+    destination: &str,
+    local_port: u16,
+) -> std::io::Result<Child> {
     let mut command = Command::new(install::program());
-    // Only the destination socket belongs in the child arguments, not the URL's query or path.
-    let destination = format!(
-        "{}:{}",
-        url.host_str().unwrap(),
-        url.port_or_known_default().unwrap()
-    );
     command
         .args([
             "-S",
@@ -97,12 +92,14 @@ async fn run(
             "forward",
             "open",
             "--session",
-            &session,
+            session,
             "--bind",
-            "127.0.0.1",
+            LOCAL_HOST,
+            "--port",
+            &local_port.to_string(),
             "--no-open",
             "--",
-            &destination,
+            destination,
         ])
         .stdin(Stdio::null())
         .stdout(Stdio::piped())
@@ -131,64 +128,85 @@ async fn run(
             });
         }
     }
-    let mut child = match command.spawn() {
-        Ok(child) => child,
-        Err(error) => {
-            let _ = ready.send(Err(format!("Couldn't start Rex: {error}")));
-            return;
-        }
-    };
-    let mut stdout = BufReader::new(child.stdout.take().unwrap()).lines();
-    let mut stderr = child.stderr.take().unwrap();
-    let errors = tokio::spawn(async move {
-        let mut text = Vec::new();
-        let _ = (&mut stderr).take(8192).read_to_end(&mut text).await;
-        let _ = tokio::io::copy(&mut stderr, &mut tokio::io::sink()).await;
-        String::from_utf8_lossy(&text).trim().to_owned()
-    });
-    let line = tokio::select! {
-        result = tokio::time::timeout(Duration::from_secs(20), stdout.next_line()) => result,
-        _ = &mut cancel => { stop(&mut child).await; return; }
-    };
-    let address = match line {
-        Ok(Ok(Some(line))) => Url::parse(&line)
-            .ok()
-            .filter(|url| loopback(url) && url.port().is_some())
-            .and_then(|address| {
-                let mut local = url;
-                local.set_host(Some("127.0.0.1")).ok()?;
-                local.set_port(address.port()).ok()?;
-                Some(local)
-            }),
-        Ok(Ok(None)) => {
-            let diagnostic = tokio::time::timeout(Duration::from_secs(1), errors)
-                .await
-                .ok()
-                .and_then(Result::ok)
-                .unwrap_or_default();
-            let message = if diagnostic.is_empty() {
-                "Rex exited before opening the forward".into()
-            } else {
-                diagnostic
-            };
-            let _ = ready.send(Err(message));
-            stop(&mut child).await;
-            return;
-        }
-        _ => None,
-    };
-    if let Some(address) = address {
-        let _ = ready.send(Ok(address));
-        tokio::select! { _ = child.wait() => return, _ = cancel => {} }
-    } else {
-        let _ = ready.send(Err(
-            "Rex did not report a loopback address for the forward".into()
-        ));
-    }
-    stop(&mut child).await;
+    command.spawn()
 }
 
-async fn stop(child: &mut tokio::process::Child) {
+async fn run(
+    endpoint: Endpoint,
+    session: String,
+    mut url: Url,
+    ready: oneshot::Sender<Result<Url, String>>,
+    mut cancel: oneshot::Receiver<()>,
+) {
+    let port = url.port_or_known_default().unwrap();
+    // Keep the original path, query, and fragment out of the child arguments.
+    let destination = format!("{}:{port}", url.host_str().unwrap());
+    let mut local_port = port;
+    loop {
+        let mut child = match spawn_forward(&endpoint, &session, &destination, local_port) {
+            Ok(child) => child,
+            Err(error) => {
+                let _ = ready.send(Err(format!("Couldn't start Rex: {error}")));
+                return;
+            }
+        };
+        let mut stdout = BufReader::new(child.stdout.take().unwrap()).lines();
+        let mut stderr = child.stderr.take().unwrap();
+        let errors = tokio::spawn(async move {
+            let mut text = Vec::new();
+            let _ = (&mut stderr).take(8192).read_to_end(&mut text).await;
+            let _ = tokio::io::copy(&mut stderr, &mut tokio::io::sink()).await;
+            String::from_utf8_lossy(&text).trim().to_owned()
+        });
+        let line = tokio::select! {
+            result = tokio::time::timeout(Duration::from_secs(20), stdout.next_line()) => result,
+            _ = &mut cancel => { stop(&mut child).await; return; }
+        };
+        let result = match line {
+            Ok(Ok(Some(line))) => Url::parse(&line)
+                .ok()
+                .filter(loopback)
+                .and_then(|address| address.port_or_known_default())
+                .filter(|port| *port != 0)
+                .and_then(|port| {
+                    url.set_host(Some(LOCAL_HOST)).ok()?;
+                    url.set_port(Some(port)).ok()?;
+                    Some(url)
+                })
+                .ok_or_else(|| "Rex did not report a loopback address for the forward".into()),
+            Ok(Ok(None)) => {
+                let diagnostic = tokio::time::timeout(Duration::from_secs(1), errors)
+                    .await
+                    .ok()
+                    .and_then(Result::ok)
+                    .unwrap_or_default();
+                // Retry only a collision on the local listener, not a transport or target error.
+                let bind_error =
+                    format!("listen tcp {LOCAL_HOST}:{local_port}: bind: address already in use");
+                if local_port != 0 && diagnostic.contains(&bind_error) {
+                    stop(&mut child).await;
+                    local_port = 0;
+                    continue;
+                }
+                Err(if diagnostic.is_empty() {
+                    "Rex exited before opening the forward".into()
+                } else {
+                    diagnostic
+                })
+            }
+            _ => Err("Rex did not report a loopback address for the forward".into()),
+        };
+        let listening = result.is_ok();
+        let _ = ready.send(result);
+        if listening {
+            tokio::select! { _ = child.wait() => return, _ = cancel => {} }
+        }
+        stop(&mut child).await;
+        return;
+    }
+}
+
+async fn stop(child: &mut Child) {
     if let Some(pid) = child.id() {
         // Give Rex a chance to remove its forward block before forcing it to stop.
         let _ = Command::new("kill")

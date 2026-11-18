@@ -12,15 +12,23 @@ use std::{
 };
 
 #[test]
-fn manual_and_clicked_forwards_share_a_loopback_listener() {
+fn manual_and_clicked_forwards_prefer_the_target_port_and_fall_back_if_busy() {
     let Ok(server) = std::env::var("REXIA_TEST_REMOTE_FORWARD_SERVER") else {
         eprintln!("skipped: set REXIA_TEST_REMOTE_FORWARD_SERVER to a disposable HTTP Rex server");
         return;
     };
-    let service = TcpListener::bind("127.0.0.1:0").unwrap();
+    check_forward(&server, false);
+    check_forward(&server, true);
+}
+
+fn check_forward(server: &str, occupied: bool) {
+    // The disposable Rex server runs on this machine. Use a separate loopback
+    // address so the destination itself doesn't occupy the client's bind address.
+    let service = TcpListener::bind("127.0.0.2:0").unwrap();
     let port = service.local_addr().unwrap().port();
-    let sessions = Sessions::create(&common::connect(&server), "rexia-forwards");
-    let mut h = Harness::open(&server, &sessions.ids[0], 1000., 680.);
+    let _blocker = occupied.then(|| TcpListener::bind(("127.0.0.1", port)).unwrap());
+    let sessions = Sessions::create(&common::connect(server), "rexia-forwards");
+    let mut h = Harness::open(server, &sessions.ids[0], 1000., 680.);
     h.wait("selected session", |m| m.view().map(|_| ()));
     let opened = Rc::new(RefCell::new(Vec::<String>::new()));
     let output = opened.clone();
@@ -36,11 +44,19 @@ fn manual_and_clicked_forwards_share_a_loopback_listener() {
     h.type_text("Forward Port");
     h.press("enter");
     assert_eq!(h.workspace(|ws| ws.list_kind()), Some(ListKind::Forwards));
-    h.type_text(&port.to_string());
+    h.type_text(&format!("127.0.0.2:{port}"));
     h.press("enter");
     let local = h.wait_ui("manual forward opens", |_| opened.borrow().first().cloned());
     let local = url::Url::parse(&local).unwrap();
     let local_port = local.port().unwrap();
+    if occupied {
+        assert_ne!(
+            local_port, port,
+            "choose a free port when the target port is busy"
+        );
+    } else {
+        assert_eq!(local_port, port, "prefer the target port when it is free");
+    }
     let mut client = TcpStream::connect(("127.0.0.1", local_port)).unwrap();
     client
         .set_read_timeout(Some(Duration::from_secs(3)))
@@ -60,7 +76,7 @@ fn manual_and_clicked_forwards_share_a_loopback_listener() {
     assert_eq!(&echoed, b"test");
     echo.join().unwrap();
 
-    let link = format!("http://localhost:{port}/app?q=1#section");
+    let link = format!("http://127.0.0.2:{port}/app?q=1#section");
     h.cx.update(|cx| {
         window
             .update(cx, |ws, _, cx| ws.open_link(link, cx))
