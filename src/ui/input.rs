@@ -289,15 +289,26 @@ impl Render for TextInput {
         let focused = self.focus.is_focused(window);
         let primary = theme.primary;
         // Anchor the caret between text runs without adding to their width.
-        let cursor = move || {
+        let focus = self.focus.clone();
+        let cursor = |visible: bool| {
+            let focus = focus.clone();
             div().relative().flex_none().w(px(0.)).h(px(18.)).child(
-                div()
-                    .absolute()
-                    .left_0()
-                    .top_0()
-                    .w(px(1.5))
-                    .h_full()
-                    .bg(primary),
+                gpui::canvas(
+                    |_, _, _| {},
+                    move |bounds, (), window, cx| {
+                        super::workspace::Workspace::record_focus_caret(
+                            window, cx, &focus, bounds, primary,
+                        );
+                        if visible {
+                            window.paint_quad(gpui::fill(bounds, primary));
+                        }
+                    },
+                )
+                .absolute()
+                .left_0()
+                .top_0()
+                .w(px(1.5))
+                .h_full(),
             )
         };
         let mut line = div()
@@ -307,23 +318,28 @@ impl Render for TextInput {
             .overflow_hidden()
             .whitespace_nowrap();
         if self.text.is_empty() {
-            line = line.when(focused, |d| d.child(cursor())).child(
+            line = line.when(focused, |d| d.child(cursor(true))).child(
                 div()
                     .text_color(theme.text_muted)
                     .child(self.placeholder.clone()),
             );
         } else if let Some((start, end)) = self.selection() {
-            line = line.child(self.shown(0, start)).child(
-                div()
-                    .bg(theme.primary)
-                    .text_color(theme.on_primary)
-                    .child(self.shown(start, end)),
-            );
-            line = line.child(self.shown(end, self.text.len()));
+            line = line
+                .child(self.shown(0, start))
+                .when(focused && self.cursor == start, |d| d.child(cursor(false)))
+                .child(
+                    div()
+                        .bg(theme.primary)
+                        .text_color(theme.on_primary)
+                        .child(self.shown(start, end)),
+                );
+            line = line
+                .when(focused && self.cursor == end, |d| d.child(cursor(false)))
+                .child(self.shown(end, self.text.len()));
         } else {
             line = line
                 .child(self.shown(0, self.cursor))
-                .when(focused, |d| d.child(cursor()))
+                .when(focused, |d| d.child(cursor(true)))
                 .child(self.shown(self.cursor, self.text.len()));
         }
         div()

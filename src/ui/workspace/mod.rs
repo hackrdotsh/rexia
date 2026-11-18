@@ -230,6 +230,7 @@ pub struct Workspace {
     motion: motion::Motion,
     agents: agents::AgentsState,
     shader_preview: cursor_shaders::ShaderPreview,
+    focus_trails: std::rc::Rc<std::cell::RefCell<crate::ui::cursor_trail::FocusTrails>>,
     /// The chosen SSH agent's status in words, and the socket it describes.
     ssh_agent_status: ssh::AgentStatus,
     server_report: server_status::ServerReportState,
@@ -455,6 +456,7 @@ impl Workspace {
             motion: Default::default(),
             agents: Default::default(),
             shader_preview: Default::default(),
+            focus_trails: Default::default(),
             ssh_agent_status: Default::default(),
             server_report: Default::default(),
             tailscale_error: None,
@@ -2889,5 +2891,6 @@ impl Render for Workspace {
             .children(self.render_context_menu(&theme, cx))
             .children(self.render_drag(&theme))
             .children(self.render_ssh_question(&theme, cx))
+            .children(self.render_focus_trail(window, &theme, cx))
     }
 }

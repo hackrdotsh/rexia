@@ -12,8 +12,8 @@ use crate::{
     },
 };
 use gpui::{
-    AnyElement, Bounds, Context, IntoElement, MouseButton, MouseDownEvent, ParentElement, Pixels,
-    Styled, canvas, div, fill, point, prelude::*, px, size,
+    AnyElement, App, Bounds, Context, FocusHandle, Hsla, IntoElement, MouseButton, MouseDownEvent,
+    ParentElement, Pixels, Styled, Window, canvas, div, fill, point, prelude::*, px, size,
 };
 use std::{cell::Cell, rc::Rc, time::Instant};
 
@@ -44,6 +44,61 @@ impl Default for ShaderPreview {
 }
 
 impl Workspace {
+    /// Report a real caret in window coordinates during paint.
+    pub(crate) fn record_focus_caret(
+        window: &Window,
+        cx: &App,
+        focus: &FocusHandle,
+        bounds: Bounds<Pixels>,
+        color: Hsla,
+    ) {
+        if !window.is_window_active() || cx.reduce_motion() || !focus.is_focused(window) {
+            return;
+        }
+        if let Some(workspace) = window.root::<Self>().flatten() {
+            let workspace = workspace.read(cx);
+            if workspace.settings.terminal.cursor_shaders
+                && window.content_mask().bounds.intersects(&bounds)
+            {
+                workspace.focus_trails.borrow_mut().record(
+                    focus,
+                    bounds,
+                    color,
+                    workspace.settings.terminal.cursor_shader,
+                );
+            }
+        }
+    }
+
+    pub fn cursor_focus_trail(&self) -> Option<crate::ui::cursor_trail::FocusTrail> {
+        self.focus_trails.borrow().active()
+    }
+
+    pub(super) fn render_focus_trail(
+        &self,
+        window: &Window,
+        theme: &Theme,
+        cx: &App,
+    ) -> Option<AnyElement> {
+        if !self.settings.terminal.cursor_shaders
+            || !window.is_window_active()
+            || cx.reduce_motion()
+        {
+            *self.focus_trails.borrow_mut() = Default::default();
+            return None;
+        }
+        let trails = self.focus_trails.clone();
+        let accent = theme.primary;
+        Some(
+            canvas(
+                |_, _, _| {},
+                move |_, (), window, _| trails.borrow().paint(window, accent),
+            )
+            .absolute()
+            .inset_0()
+            .into_any_element(),
+        )
+    }
     /// `client.cursor_shader.toggle`: turn cursor shaders on or off.
     pub fn toggle_cursor_shaders(&mut self, cx: &mut Context<Self>) {
         self.update_settings(

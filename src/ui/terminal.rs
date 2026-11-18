@@ -1719,6 +1719,21 @@ impl Render for TerminalPane {
                         size(cell.width * cols as f32, cell.height),
                     )
                 };
+                if let Some(cursor) = frame.cursor {
+                    let bounds =
+                        cell_bounds(cursor.x, cursor.y as usize, if cursor.wide { 2 } else { 1 });
+                    let color = cursor
+                        .color
+                        .map(super::theme::color)
+                        .unwrap_or(cursor_color);
+                    super::workspace::Workspace::record_focus_caret(
+                        window,
+                        cx,
+                        &focus_handle,
+                        bounds,
+                        color,
+                    );
+                }
                 let look = Look {
                     palette,
                     bold,

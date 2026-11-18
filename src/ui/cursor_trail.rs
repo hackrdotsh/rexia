@@ -3,7 +3,7 @@
 //! the cursor was and where it is, with its own color, taper and fade.
 use crate::settings::CursorShader;
 use gpui::{
-    Background, Bounds, Hsla, PathBuilder, Pixels, Point, Window, linear_color_stop,
+    Background, Bounds, FocusHandle, Hsla, PathBuilder, Pixels, Point, Window, linear_color_stop,
     linear_gradient, point, px,
 };
 use std::{
@@ -117,13 +117,79 @@ impl CursorShader {
 impl Trail {
     /// How far along the trail is, from 0 to 1; `None` once it's over.
     pub fn progress(&self, now: Instant) -> Option<f32> {
-        let held = HELD.load(Ordering::Relaxed);
-        if held > 0 {
-            return Some(held as f32 / 1000.);
+        progress(self.shader, self.started, now)
+    }
+}
+
+fn progress(shader: CursorShader, started: Instant, now: Instant) -> Option<f32> {
+    let held = HELD.load(Ordering::Relaxed);
+    if held > 0 {
+        return Some(held as f32 / 1000.);
+    }
+    let t = now.duration_since(started).as_secs_f32() / shader.duration().as_secs_f32();
+    (t < 1.).then_some(t)
+}
+
+#[derive(Default)]
+pub(crate) struct FocusTrails {
+    last: Option<(FocusHandle, Bounds<Pixels>)>,
+    active: Option<FocusTrail>,
+}
+
+#[derive(Clone, Copy, Debug)]
+pub struct FocusTrail {
+    pub from: Bounds<Pixels>,
+    pub to: Bounds<Pixels>,
+    pub shader: CursorShader,
+    started: Instant,
+    color: Hsla,
+}
+
+impl FocusTrails {
+    pub(crate) fn record(
+        &mut self,
+        focus: &FocusHandle,
+        bounds: Bounds<Pixels>,
+        color: Hsla,
+        shader: CursorShader,
+    ) {
+        if let Some((previous, from)) = &self.last
+            && previous != focus
+        {
+            self.active = (*from != bounds).then(|| FocusTrail {
+                from: *from,
+                to: bounds,
+                color,
+                shader,
+                started: Instant::now(),
+            });
+        } else if let Some(trail) = &mut self.active {
+            // The destination can move as a new pane lays out or draws its prompt.
+            trail.to = bounds;
         }
-        let t =
-            now.duration_since(self.started).as_secs_f32() / self.shader.duration().as_secs_f32();
-        (t < 1.).then_some(t)
+        self.last = Some((focus.clone(), bounds));
+    }
+
+    pub(crate) fn active(&self) -> Option<FocusTrail> {
+        self.active
+            .filter(|trail| progress(trail.shader, trail.started, Instant::now()).is_some())
+    }
+
+    pub(crate) fn paint(&self, window: &mut Window, accent: Hsla) {
+        if let Some(trail) = self.active()
+            && let Some(t) = progress(trail.shader, trail.started, Instant::now())
+        {
+            paint_between(
+                window,
+                trail.shader,
+                t,
+                trail.from,
+                trail.to,
+                trail.color,
+                accent,
+            );
+            window.request_animation_frame();
+        }
     }
 }
 
@@ -278,7 +344,19 @@ pub fn paint_trail(
     accent: Hsla,
 ) {
     let (from, to) = (cell_bounds(trail.from), cell_bounds(trail.to));
-    let shape = trail_shape(trail.shader, from, to, t);
+    paint_between(window, trail.shader, t, from, to, cursor, accent);
+}
+
+fn paint_between(
+    window: &mut Window,
+    shader: CursorShader,
+    t: f32,
+    from: Bounds<Pixels>,
+    to: Bounds<Pixels>,
+    cursor: Hsla,
+    accent: Hsla,
+) {
+    let shape = trail_shape(shader, from, to, t);
     if shape.len() >= 3 {
         let mut path = PathBuilder::fill();
         path.move_to(shape[0]);
@@ -287,10 +365,10 @@ pub fn paint_trail(
         }
         path.close();
         if let Ok(path) = path.build() {
-            window.paint_path(path, trail_fill(trail.shader, from, to, t, cursor, accent));
+            window.paint_path(path, trail_fill(shader, from, to, t, cursor, accent));
         }
     }
-    if let Some((area, color)) = glow(trail.shader, to, t, cursor) {
+    if let Some((area, color)) = glow(shader, to, t, cursor) {
         window.paint_quad(gpui::fill(area, color).corner_radii(px(4.)));
     }
 }

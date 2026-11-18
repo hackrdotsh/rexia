@@ -26,6 +26,7 @@ fn cursor_shaders_trail_jumps_and_preview() {
     let control = common::connect(&address);
     let sessions = Sessions::create(&control, "rexia-cursor-shaders");
     let mut h = Harness::open(&address, &sessions.ids[0], 1100., 760.);
+    h.activate();
     h.wait("a prompt", |m| {
         (!focused_text(m).trim().is_empty()).then_some(())
     });
@@ -73,6 +74,29 @@ fn cursor_shaders_trail_jumps_and_preview() {
 
     // The Settings preview: a click moves its cursor and draws the trail there.
     cursor_trail::hold_progress(Some(0.3));
+    h.run("pane.split.right", Value::Null);
+    let split = h.wait_ui("a trail across the split", |ws| {
+        let trail = ws.cursor_focus_trail()?;
+        (trail.shader == CursorShader::Blaze
+            && trail.from.size.width > gpui::px(2.)
+            && trail.to.size.width > gpui::px(2.)
+            && (trail.to.origin.x - trail.from.origin.x).abs() > gpui::px(100.))
+        .then_some(trail)
+    });
+    assert_eq!(split.shader, CursorShader::Blaze);
+    h.screenshot("cursor-shader-between-panes");
+    h.press("ctrl-shift-p");
+    h.wait_ui("a trail into the command palette", |ws| {
+        ws.cursor_focus_trail().filter(|trail| {
+            trail.from.size.width > gpui::px(2.) && trail.to.size.width == gpui::px(1.5)
+        })
+    });
+    h.press("escape");
+    h.wait_ui("a trail from the palette back to the pane", |ws| {
+        ws.cursor_focus_trail().filter(|trail| {
+            trail.from.size.width == gpui::px(1.5) && trail.to.size.width > gpui::px(2.)
+        })
+    });
     h.run("client.settings", json!({}));
     let window = h.window;
     h.cx.update(|cx| {
@@ -91,6 +115,18 @@ fn cursor_shaders_trail_jumps_and_preview() {
             .unwrap()
     });
     h.pump();
+    let settings_trail = h.wait_ui("a trail into a Settings text field", |ws| {
+        ws.cursor_focus_trail()
+            .filter(|trail| trail.to.size.width == gpui::px(1.5))
+    });
+    assert_ne!(settings_trail.from, settings_trail.to);
+    h.press("ctrl-f");
+    let search_trail = h.wait_ui("a trail between Settings text fields", |ws| {
+        ws.cursor_focus_trail()
+            .filter(|trail| trail.from == settings_trail.to && trail.to != settings_trail.to)
+    });
+    assert_eq!(search_trail.to.size.width, gpui::px(1.5));
+    h.screenshot("cursor-shader-between-settings-fields");
     let (spot, preview) = h.workspace(|ws| ws.shader_preview());
     println!("preview cursor {spot:?}, trail {preview:?}");
     assert_eq!((spot.col, spot.row), (30, 4));
