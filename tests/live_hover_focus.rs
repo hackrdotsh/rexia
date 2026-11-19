@@ -4,7 +4,7 @@
 mod common;
 
 use common::{Harness, Sessions, focused_text};
-use gpui::{Modifiers, MouseMoveEvent, PlatformInput, point};
+use gpui::{Modifiers, MouseMoveEvent, Pixels, PlatformInput, Point, point, px};
 use rexia::rex::host::HostModel;
 use serde_json::{Value, json};
 
@@ -58,6 +58,78 @@ fn type_into(h: &mut Harness, marker: &str, expected: &str, other: &str) {
     println!("{marker}: landed in the hovered pane: {landed}");
     assert!(landed, "{marker} went to the pane focused before the hover");
     h.press("ctrl-c");
+}
+
+fn move_to(h: &mut Harness, position: Point<Pixels>) {
+    h.input(PlatformInput::MouseMove(MouseMoveEvent {
+        position,
+        pressed_button: None,
+        modifiers: Modifiers::default(),
+    }));
+}
+
+#[test]
+fn floating_pane_keeps_hover_focus_over_a_tiled_pane() {
+    let Some(address) = common::server() else {
+        return;
+    };
+    let control = common::connect(&address);
+    let sessions = Sessions::create(&control, "rexia-floating-hover-focus");
+    let session = &sessions.ids[0];
+    let mut settings = common::test_settings(&address, session);
+    settings.interface.focus_follows_mouse = true;
+    settings.interface.animation = rexia::settings::AnimationStyle::Off;
+    let mut h = Harness::open_with(settings, 1100., 800.);
+    let tiled = h.wait("the tiled pane", |m| {
+        m.view()?.active_window()?.focused_block_id.clone()
+    });
+    h.run("pane.new_floating", Value::Null);
+    let floating = h.wait("the floating pane and both terminal frames", |m| {
+        let tab = m.view()?.active_window()?;
+        let pane = tab
+            .panes()
+            .into_iter()
+            .find(|pane| pane.floating.is_some())?;
+        (!text(m, &tiled).trim().is_empty() && !text(m, &pane.block_id).trim().is_empty())
+            .then_some(pane.block_id)
+    });
+    let tiled_bounds = h.workspace(|ws| ws.pane_bounds(&tiled)).unwrap();
+    let over_tiled = tiled_bounds.origin + point(px(40.), px(100.));
+    move_to(&mut h, over_tiled);
+    h.wait("the exposed tiled pane focused", |m| {
+        (m.view()?.active_window()?.focused_block_id.as_ref()? == &tiled).then_some(())
+    });
+    hover(&mut h, &floating);
+    let center = h
+        .workspace(|ws| ws.pane_bounds(&floating))
+        .unwrap()
+        .center();
+    for dx in [5., 10., 15., 20.] {
+        move_to(&mut h, center + point(px(dx), px(0.)));
+        let until = std::time::Instant::now() + std::time::Duration::from_millis(100);
+        while std::time::Instant::now() < until {
+            h.pump();
+            assert_eq!(
+                h.host
+                    .snapshot()
+                    .view()
+                    .unwrap()
+                    .active_window()
+                    .unwrap()
+                    .focused_block_id
+                    .as_ref(),
+                Some(&floating),
+                "the covered tiled pane stole hover focus"
+            );
+            std::thread::sleep(std::time::Duration::from_millis(10));
+        }
+    }
+    type_into(&mut h, "FLOATING-OVER-TILED", &floating, &tiled);
+    move_to(&mut h, over_tiled);
+    h.wait("the tiled pane focused after leaving the float", |m| {
+        (m.view()?.active_window()?.focused_block_id.as_ref()? == &tiled).then_some(())
+    });
+    type_into(&mut h, "TILED-OUTSIDE-FLOAT", &tiled, &floating);
 }
 
 #[test]

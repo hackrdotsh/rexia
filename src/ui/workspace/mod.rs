@@ -84,8 +84,10 @@ fn apply_global_settings(settings: &Settings) {
 }
 use serde_json::{Value, json};
 use std::{
+    cell::RefCell,
     collections::{HashMap, HashSet},
     path::PathBuf,
+    rc::Rc,
     time::{Duration, Instant},
 };
 
@@ -1908,6 +1910,13 @@ impl Workspace {
         self.keep_pane_motion(&shown);
         let style = self.settings.interface.animation;
         let mut shared_actions = false;
+        // Use the drawn bounds, not the server rectangles: floating layers can be
+        // moved, expanded, or animated locally. Cards are drawn back to front.
+        let hover_bounds = self
+            .settings
+            .interface
+            .focus_follows_mouse
+            .then(|| Rc::new(RefCell::new(Vec::<(String, Bounds<Pixels>)>::new())));
         for pane in panes {
             let walkthrough = window
                 .block(&pane.block_id)
@@ -2023,13 +2032,12 @@ impl Workspace {
             } else {
                 card.into_any_element()
             };
-            let hover_block = pane.block_id.clone();
-            let hover_session = session.clone();
             let pinch_block = pane.block_id.clone();
             let grab_block = pane.block_id.clone();
             let card = div()
                 .id(SharedString::from(format!("card-{}", pane.block_id)))
                 .size_full()
+                .relative()
                 // Ctrl-drag picks the pane up from anywhere over it.
                 .on_mouse_down(
                     MouseButton::Left,
@@ -2043,9 +2051,36 @@ impl Workspace {
                         }
                     }),
                 )
-                .on_mouse_move(cx.listener(move |ws, _: &MouseMoveEvent, _, _| {
-                    ws.focus_on_hover(&hover_session, &hover_block)
-                }))
+                .when_some(hover_bounds.clone(), |card, hover_bounds| {
+                    let record = hover_bounds.clone();
+                    let block = pane.block_id.clone();
+                    let hover_block = block.clone();
+                    let hover_session = session.clone();
+                    card.child(
+                        canvas(
+                            |_, _, _| (),
+                            move |bounds, _, window, _| {
+                                record
+                                    .borrow_mut()
+                                    .push((block, bounds.intersect(&window.content_mask().bounds)));
+                            },
+                        )
+                        .absolute()
+                        .size_full(),
+                    )
+                    .on_mouse_move(cx.listener(
+                        move |ws, event: &MouseMoveEvent, _, _| {
+                            let bounds = hover_bounds.borrow();
+                            let front = bounds
+                                .iter()
+                                .rev()
+                                .find(|(_, bounds)| bounds.contains(&event.position));
+                            if front.is_some_and(|(block, _)| block == &hover_block) {
+                                ws.focus_on_hover(&hover_session, &hover_block);
+                            }
+                        },
+                    ))
+                })
                 .on_pinch(
                     cx.listener(move |ws, event, _, cx| ws.on_pane_pinch(&pinch_block, event, cx)),
                 )
