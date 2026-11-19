@@ -1,15 +1,39 @@
 # Parity with Rex for Mac
 
-How rexia compares with Rex for Mac v0.1.0-preview.30 (embedded server preview.19), from
-Superlogical's published action and settings references. rexia is checked against a
-preview.19 server.
+The original action audit below compares Rexia with Rex for Mac preview.30.
+The latest parity work covers the release that embeds server preview.21. Rexia
+uses an external Rex server and has been tested on API revisions 14 and 18.
+
+## Recent parity
+
+- **Enter Copy Mode** in the palette, or press **Ctrl+Alt+C**, to navigate scrollback
+  with Vim keys. The badge shows the cursor's line and column. Settings › Shortcuts
+  and `copy/` bindings in `init.lua` can change the keys. Ctrl+Shift+C still copies
+  a mouse selection.
+- Lua `rex.ui.input` and `rex.ui.pick` open the palette on revision 17 or later.
+  Enter picks or ticks an item; Ctrl+Enter confirms multiple choices. Escape cancels.
+  A palette that was already open keeps its place.
+- **Insert File…** and **Insert Photo…** use the Linux desktop picker. Insert Photo
+  filters to images. Local paths are pasted as quoted paths; remote files are uploaded first.
+- The Sessions filter can show only online hosts or a saved set of hosts. Clicking
+  a host in the filter selects only that host. Activity shows each report and defaults
+  to priority grouping. Explicit host and session collapses survive switching views
+  and relaunching.
+- File links support quoted names, soft wrapping, relative paths without shell
+  integration, and `:line[:column]`. The suffix identifies the file, not an editor
+  position. Opening a detected runnable file asks first.
+- Use `rex do client.tab.mute window_id=<id> muted=true` to set a tab's mute,
+  or bind **Mute Tab** without arguments to toggle it.
+- Rexia retains terminal views when switching back and prepares nearby tabs in
+  the background. Terminal data streams retry temporary connection failures.
+- The Mac app's name, icon badge and embedded server don't apply to Rexia.
 
 ## Actions
 
 Rex for Mac lists 116 actions. rexia implements 104 of them under the same names, so
 init.lua bindings, `rex do` and `client.perform` reach rexia the same way. It also adds
-four of its own: `client.sidebar.activity.toggle`, `.by_session` and `.by_priority`, and
-`client.tab.mute.toggle` (Rex for Mac has Mute Tab only in the tab's menu).
+four of its own at the time: `client.sidebar.activity.toggle`, `.by_session` and
+`.by_priority`, and the legacy `client.tab.mute.toggle`.
 Preview.30's Enable Cursor Shaders and Change Cursor Shader aren't in the published action
 list yet, so rexia names them `client.cursor_shader.toggle` and `client.cursor_shader.change`
 (with an optional `shader`, such as `{"shader": "blaze"}`).
@@ -51,7 +75,7 @@ still need an account-owned test. The automated checks use an isolated Rex serve
 
 | Mac section | rexia |
 | --- | --- |
-| Notifications › Program Activity | All of it: activity in tabs, idle processes, each process, desktop notifications, launcher badge (Unity LauncherEntry), sounds with volume, and the per-state tabs/notify/sound switches. |
+| Notifications › Program Activity | Activity in tabs, idle processes, desktop notifications, launcher badge (Unity LauncherEntry), sounds with volume, and per-state tabs/notify/sound switches. Activity always lists each report separately. |
 | Notifications › System Notifications | Terminal notifications (OSC 9 and 777). Tailscale sign-in, device approval and failures, each with its switch: a desktop notification when built-in Tailscale comes to need a sign-in (clicking opens the sign-in link) or an admin's approval, taken back once it moves on, and a critical one when it stops or reports a new error. |
 | Notifications › In-App Notifications | Notification position: click a spot in a picture of the window to float notices at the top or bottom, left, center or right. |
 | Interface › Panes, Active Pane, Splits & Focus | Pane style, pane headers (always, hover, hidden), active pane highlight with its color (accent, terminal text, or one of the 16 terminal colors), opacity and animation (fade in, move from the previous pane, or instant), fade inactive panes, fade panes for inactive windows, focus follows mouse. Autobalance splits (on by default): when a pane opens or closes in the tab on screen, its splits even out; a divider you drag or move with the keyboard keeps its place on screen until Balance Splits, and one dropped near the middle of its split snaps there. |
