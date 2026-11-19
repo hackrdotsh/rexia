@@ -88,6 +88,10 @@ pub struct Frame {
     pub cols: u16,
     pub rows: u16,
     pub lines: Vec<Vec<Cell>>,
+    /// Whether each viewport row continues a soft-wrapped row above it.
+    pub wrap_continuations: Vec<bool>,
+    /// The last viewport row wraps onto a row below the viewport.
+    pub last_row_wrapped: bool,
     /// OSC 8 targets in viewport order, grouped by matching adjacent cells.
     pub hyperlinks: Vec<Hyperlink>,
     pub fg: u32,
@@ -656,11 +660,6 @@ impl TerminalState {
         Ok(String::from_utf8_lossy(&formatter.format_alloc()?).into_owned())
     }
 
-    /// The OSC 8 link at a viewport cell.
-    pub fn link_at(&self, x: u16, y: u16) -> Option<String> {
-        viewport_link(self.terminal.as_ref()?, x, y)
-    }
-
     /// Search the screen and scrollback; `None` closes the search.
     pub fn search(&mut self, needle: Option<&str>) -> Result<()> {
         let Some(terminal) = self.terminal.as_ref() else {
@@ -754,6 +753,8 @@ impl TerminalState {
             cols: snapshot.cols()?,
             rows: snapshot.rows()?,
             lines: Vec::new(),
+            wrap_continuations: Vec::new(),
+            last_row_wrapped: false,
             hyperlinks: Vec::new(),
             fg,
             bg,
@@ -783,6 +784,12 @@ impl TerminalState {
         let mut rows = self.rows.update(&snapshot)?;
         let mut y: u32 = 0;
         while let Some(row) = rows.next() {
+            let grid = terminal.grid_ref(Point::Viewport(PointCoordinate { x: 0, y }))?;
+            let grid_row = grid.row()?;
+            frame
+                .wrap_continuations
+                .push(grid_row.is_wrap_continuation()?);
+            frame.last_row_wrapped = grid_row.is_wrapped()?;
             let selected = row.selection()?;
             let mut cells = self.cells.update(row)?;
             let mut line = Vec::with_capacity(frame.cols as usize);
@@ -995,6 +1002,47 @@ mod tests {
         println!("remote {remote:?}, local {local:?}");
         assert!(!remote.file && !remote.shared_memory);
         assert!(local.file && local.shared_memory);
+    }
+
+    #[test]
+    fn file_link_hit_testing_uses_the_terminal_soft_wrap_flags() {
+        use crate::quick_look::{LinkSpan, Target, link_at, visible_links};
+        let bytes = "  'src/界 notes.rs':12:4,\r\nsee\r\n";
+        let mut state = stream_from(bytes.as_bytes(), 8, 6);
+        let frame = state.frame().unwrap().unwrap();
+        let link = link_at(&frame, 1, 1).unwrap();
+        assert_eq!(link.target, Target::Path("src/界 notes.rs".into()));
+        assert_eq!(link_at(&frame, 2, 0), Some(link.clone()));
+        assert_eq!(link_at(&frame, 0, 3), Some(link.clone()));
+        assert_eq!(link_at(&frame, 1, 3), None, "trailing comma");
+        assert_eq!(
+            link.spans,
+            vec![
+                LinkSpan {
+                    row: 0,
+                    columns: 2..7
+                },
+                LinkSpan {
+                    row: 1,
+                    columns: 0..8
+                },
+                LinkSpan {
+                    row: 2,
+                    columns: 0..8
+                },
+                LinkSpan {
+                    row: 3,
+                    columns: 0..1
+                },
+            ]
+        );
+        assert_eq!(visible_links(&frame), vec![link]);
+        let mut hard = stream_from(b"src/foo.\r\nrs:2\r\n", 8, 4);
+        let frame = hard.frame().unwrap().unwrap();
+        assert_ne!(
+            link_at(&frame, 0, 1).unwrap().target,
+            Target::Path("src/foo.rs".into())
+        );
     }
 
     #[test]

@@ -3,7 +3,7 @@
 use super::Workspace;
 use crate::{
     quick_look::{self, Target},
-    rex::{download, host::PaneCommand},
+    rex::download,
 };
 use gpui::{AnyElement, Context, IntoElement, ParentElement, Styled, div, prelude::*, px};
 use std::sync::{
@@ -56,6 +56,7 @@ impl Workspace {
         &mut self,
         target: Target,
         preview: bool,
+        block: &str,
         cx: &mut Context<Self>,
     ) {
         self.cancel_preview_work();
@@ -70,12 +71,7 @@ impl Workspace {
         };
         let host = self.host().handle.clone();
         let session = self.model().selected.unwrap_or_default();
-        let block = self.focused.clone().unwrap_or_default();
-        let cwd = self
-            .model()
-            .blocks
-            .get(&block)
-            .and_then(|b| b.pwd.clone().or(b.process.cwd.clone()));
+        let block = block.to_owned();
         let directory = self.download_directory.clone();
         let label = self.host().config.label.clone();
         let bus = self.preview_bus.clone();
@@ -84,17 +80,20 @@ impl Workspace {
         let (send, receive) = flume::bounded(1);
         std::thread::spawn(move || {
             let result: Result<Shown, String> = (|| {
+                let runtime = tokio::runtime::Builder::new_current_thread()
+                    .enable_all()
+                    .build()
+                    .map_err(|e| e.to_string())?;
                 let full = if host.endpoint.is_local() {
+                    let cwd = quick_look::needs_cwd(&path)
+                        .then(|| runtime.block_on(host.process_directory(&session, &block)))
+                        .flatten();
                     quick_look::resolve(&path, cwd.as_deref())
                         .ok_or_else(|| format!("There's no {path} here"))?
                 } else {
                     let directory = directory
                         .map(Ok)
                         .unwrap_or_else(|| download::directory(&label))
-                        .map_err(|e| e.to_string())?;
-                    let runtime = tokio::runtime::Builder::new_current_thread()
-                        .enable_all()
-                        .build()
                         .map_err(|e| e.to_string())?;
                     runtime
                         .block_on(download::download(
@@ -156,51 +155,39 @@ impl Workspace {
             .snapshot()
             .frame
             .ok_or("The pane isn't streaming yet")?;
-        let cells: Vec<_> = frame
-            .lines
-            .iter()
-            .enumerate()
-            .flat_map(|(y, line)| {
-                line.iter()
-                    .enumerate()
-                    .filter(|(_, cell)| cell.has(crate::rex::stream::flags::LINK))
-                    .map(move |(x, _)| (x as u16, y as u16))
-            })
-            .collect();
-        let host = self.active;
-        let local = self.host().handle.endpoint.is_local();
-        let cwd = self
-            .model()
-            .blocks
-            .get(&block)
-            .and_then(|b| b.pwd.clone().or(b.process.cwd.clone()));
+        let mut links = if single {
+            pointer
+                .and_then(|(x, y)| quick_look::link_at(&frame, x, y))
+                .into_iter()
+                .collect()
+        } else {
+            quick_look::visible_links(&frame)
+        };
+        let host_index = self.active;
+        let host = self.host().handle.clone();
+        let session = self.model().selected.unwrap_or_default();
         self.cancel_preview_work();
         let generation = self.preview_generation;
         cx.spawn(async move |this, cx| {
-            let positions = cells.clone();
-            let uris = handle
-                .ask(|reply| PaneCommand::LinksAt { cells, reply })
-                .await
-                .unwrap_or_default();
-            let program: Vec<_> = positions
-                .into_iter()
-                .zip(uris)
-                .filter_map(|((x, y), uri)| uri.map(|uri| (x, y, uri)))
-                .collect();
-            let mut links = quick_look::visible_links(&frame, &program, cwd.as_deref(), local);
+            if host.endpoint.is_local() {
+                let needs_cwd = links.iter().any(|link| matches!(&link.target, Target::Path(path) if quick_look::needs_cwd(path)));
+                let cwd = if needs_cwd { host.process_directory(&session, &block).await } else { None };
+                links = cx.background_executor().spawn(async move {
+                    links.retain(|link| match &link.target {
+                        Target::Path(path) => quick_look::resolve(path, cwd.as_deref()).is_some(),
+                        Target::Web(_) => true,
+                    });
+                    links
+                }).await;
+            }
             let selected = pointer.and_then(|(x, y)| {
                 links
                     .iter()
-                    .position(|link| link.row == y && link.columns.contains(&x))
+                    .position(|link| link.contains(x, y))
             });
-            if single {
-                links = selected
-                    .map(|index| vec![links.remove(index)])
-                    .unwrap_or_default();
-            }
             let _ = this.update(cx, |ws, cx| {
                 if ws.preview_generation != generation
-                    || ws.active != host
+                    || ws.active != host_index
                     || ws.focused.as_ref() != Some(&block)
                 {
                     return;
@@ -220,10 +207,10 @@ impl Workspace {
                     ws.quick_preview = Some(Preview {
                         links,
                         selected,
-                        block,
-                        host,
+                        block: block.clone(),
+                        host: host_index,
                     });
-                    ws.show_quick_target(target, true, cx);
+                    ws.show_quick_target(target, true, &block, cx);
                 }
                 cx.notify();
             });
@@ -258,7 +245,8 @@ impl Workspace {
         preview.selected =
             (preview.selected as i32 + direction).rem_euclid(preview.links.len() as i32) as usize;
         let target = preview.links[preview.selected].target.clone();
-        self.show_quick_target(target, true, cx);
+        let block = preview.block.clone();
+        self.show_quick_target(target, true, &block, cx);
         cx.notify();
     }
 

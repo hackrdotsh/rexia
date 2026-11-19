@@ -1229,7 +1229,7 @@ impl TerminalPane {
             cx.emit(PaneEvent::QuickLook);
             return;
         }
-        // Ctrl-click opens a program's OSC 8 link, as in Ghostty, once released on the same
+        // Ctrl-click opens a link once released on the same
         // cell: Ctrl-drag picks the pane up instead.
         if event.button == MouseButton::Left && event.modifiers.control && !event.modifiers.shift {
             self.link_press = Some(at);
@@ -1316,42 +1316,15 @@ impl TerminalPane {
         if let Some(pressed) = self.link_press.take()
             && pressed == at
             && event.button == MouseButton::Left
-            && let Some(pane) = self.pane()
+            && let Some(frame) = self.frame()
         {
             let (x, y) = at;
-            let frame = self.frame();
-            let line = frame
-                .as_ref()
-                .map(|f| f.line_text(usize::from(y)))
-                .unwrap_or_default();
-            let text_column = frame
-                .as_ref()
-                .and_then(|f| f.lines.get(usize::from(y)))
-                .map(|cells| {
-                    cells
-                        .iter()
-                        .take(usize::from(x))
-                        .filter(|c| !c.has(flags::SPACER))
-                        .map(|c| c.text.chars().count().max(1))
-                        .sum()
-                })
-                .unwrap_or(usize::from(x));
-            cx.spawn(async move |this, cx| {
-                let link = pane
-                    .ask(|reply| PaneCommand::LinkAt { x, y, reply })
-                    .await
-                    .flatten();
-                if let Some(link) = link {
-                    let _ = this.update(cx, |_, cx| cx.emit(PaneEvent::OpenLink(link)));
-                } else if let Some(target) = crate::quick_look::target_at(&line, text_column) {
-                    let event = match target {
-                        crate::quick_look::Target::Web(link) => PaneEvent::OpenLink(link),
-                        crate::quick_look::Target::Path(path) => PaneEvent::OpenPath(path),
-                    };
-                    let _ = this.update(cx, |_, cx| cx.emit(event));
-                }
-            })
-            .detach();
+            if let Some(link) = crate::quick_look::link_at(&frame, x, y) {
+                cx.emit(match link.target {
+                    crate::quick_look::Target::Web(link) => PaneEvent::OpenLink(link),
+                    crate::quick_look::Target::Path(path) => PaneEvent::OpenPath(path),
+                });
+            }
             return;
         }
         if let Some(button) = self.reporting.take() {
@@ -1515,44 +1488,6 @@ pub fn cell_in_device_pixels(width: Pixels, height: Pixels, scale: f32) -> CellS
 
 /// The column, drawing, and foreground of a cell painted without shaping text.
 type SpriteCell = (u16, super::sprites::Sprite, Hsla);
-
-fn hovered_link(frame: &Frame, x: u16, y: u16) -> Option<std::ops::Range<u16>> {
-    let cells = frame.lines.get(usize::from(y))?;
-    if let Some(link) = frame
-        .hyperlinks
-        .iter()
-        .find(|link| link.row == y && link.columns.contains(&x))
-    {
-        return Some(link.columns.clone());
-    }
-    let mut text = String::new();
-    let mut columns = Vec::new();
-    for (col, cell) in cells
-        .iter()
-        .enumerate()
-        .filter(|(_, c)| !c.has(flags::SPACER))
-    {
-        let content = if cell.text.is_empty() {
-            " "
-        } else {
-            &cell.text
-        };
-        text.push_str(content);
-        let end = col + if cell.has(flags::WIDE) { 2 } else { 1 };
-        columns.extend(content.chars().map(|_| (col as u16, end as u16)));
-    }
-    crate::quick_look::targets(&text)
-        .into_iter()
-        .find_map(|(range, _)| {
-            let start = columns[range.start].0;
-            let end = columns[range.end - 1].1;
-            ((start..end).contains(&x)
-                && !cells[usize::from(start)..usize::from(end).min(cells.len())]
-                    .iter()
-                    .any(|cell| cell.has(flags::LINK)))
-            .then_some(start..end)
-        })
-}
 
 fn segments(
     cells: &[crate::rex::stream::Cell],
@@ -1789,7 +1724,7 @@ impl Render for TerminalPane {
                 .and_then(|at| {
                     let x = (at.x / cell.width).floor() as u16;
                     let y = (at.y / cell.height).floor() as u16;
-                    hovered_link(&frame, x, y).map(|range| (y, range))
+                    crate::quick_look::link_at(&frame, x, y)
                 });
                 if let Some(cursor) = frame.cursor {
                     let bounds =
@@ -1948,9 +1883,13 @@ impl Render for TerminalPane {
                         sprite.paint(cell_bounds(col, row, 1), box_stroke, fg, window);
                     }
                     paint_images(Layer::AboveText, window);
-                    if let Some((row, range)) = hover {
-                        let area =
-                            cell_bounds(range.start, usize::from(row), range.end - range.start);
+                    for span in hover.into_iter().flat_map(|link| link.spans) {
+                        let range = span.columns;
+                        let area = cell_bounds(
+                            range.start,
+                            usize::from(span.row),
+                            range.end - range.start,
+                        );
                         let stroke = px(1. / scale);
                         window.paint_quad(fill(
                             Bounds::new(
@@ -2320,6 +2259,8 @@ mod tests {
             })
             .collect();
         Frame {
+            wrap_continuations: Vec::new(),
+            last_row_wrapped: false,
             hyperlinks: Vec::new(),
             cols: bgs[0].len() as u16,
             rows: bgs.len() as u16,
@@ -2455,9 +2396,11 @@ mod tests {
             }],
             ..Frame::default()
         };
-        assert_eq!(hovered_link(&frame, 4, 0), Some(0..9));
-        assert_eq!(hovered_link(&frame, 15, 0), Some(10..29));
-        assert_eq!(hovered_link(&frame, 30, 0), None);
+        let columns =
+            |x| crate::quick_look::link_at(&frame, x, 0).map(|link| link.spans[0].columns.clone());
+        assert_eq!(columns(4), Some(0..9));
+        assert_eq!(columns(15), Some(10..29));
+        assert_eq!(columns(30), None);
     }
 
     #[test]

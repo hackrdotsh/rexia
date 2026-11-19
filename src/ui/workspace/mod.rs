@@ -689,6 +689,7 @@ impl Workspace {
                     PaneEvent::OpenPath(path) => ws.show_quick_target(
                         crate::quick_look::Target::Path(path.clone()),
                         false,
+                        &block,
                         cx,
                     ),
                     PaneEvent::QuickLook => {

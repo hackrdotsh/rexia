@@ -245,15 +245,6 @@ pub enum PaneCommand {
     ClearSelection,
     Copy(oneshot::Sender<Option<String>>),
     Text(oneshot::Sender<Option<String>>),
-    LinkAt {
-        x: u16,
-        y: u16,
-        reply: oneshot::Sender<Option<String>>,
-    },
-    LinksAt {
-        cells: Vec<(u16, u16)>,
-        reply: oneshot::Sender<Vec<Option<String>>>,
-    },
     Search(Option<String>),
     SearchStep {
         older: bool,
@@ -428,33 +419,38 @@ impl HostHandle {
 
     /// Inherit the source process's current directory, even when its shell emits no OSC 7.
     pub async fn shell_layout_from(&self, session: &str, source: Option<&str>) -> Value {
-        let cwd = if let Some(source) = source {
-            let cached = self
-                .model
-                .lock()
-                .expect("host model")
-                .blocks
-                .get(source)
-                .and_then(|b| {
-                    b.pwd
-                        .as_ref()
-                        .filter(|p| !p.is_empty())
-                        .or(b.process.cwd.as_ref().filter(|p| !p.is_empty()))
-                        .cloned()
-                });
-            self.request(
-                &format!("{TERMINAL_CREATOR}.process"),
-                json!({"session_id": session, "block_id": source, "args": {}}),
-            )
-            .await
-            .ok()
-            .and_then(|reply| Process::parse(&reply).cwd)
-            .filter(|path| !path.is_empty())
-            .or(cached)
+        let cwd = if let Some(block) = source {
+            self.process_directory(session, block).await
         } else {
             None
         };
         shell_layout_for(self.endpoint.is_local(), cwd.as_deref())
+    }
+
+    /// The process's live directory, falling back to the most recent reported directory.
+    pub async fn process_directory(&self, session: &str, block: &str) -> Option<String> {
+        let cached = self
+            .model
+            .lock()
+            .expect("host model")
+            .blocks
+            .get(block)
+            .and_then(|b| {
+                b.pwd
+                    .as_ref()
+                    .filter(|p| !p.is_empty())
+                    .or(b.process.cwd.as_ref().filter(|p| !p.is_empty()))
+                    .cloned()
+            });
+        self.request(
+            &format!("{TERMINAL_CREATOR}.process"),
+            json!({"session_id": session, "block_id": block, "args": {}}),
+        )
+        .await
+        .ok()
+        .and_then(|reply| Process::parse(&reply).cwd)
+        .filter(|path| !path.is_empty())
+        .or(cached)
     }
 
     pub fn snapshot(&self) -> HostModel {
@@ -1791,10 +1787,6 @@ async fn stream(
                             PaneCommand::ClearSelection => terminal.clear_selection()?,
                             PaneCommand::Copy(reply) => { let _ = reply.send(terminal.selection_text()?); }
                             PaneCommand::Text(reply) => { let _ = reply.send(terminal.text().ok()); }
-                            PaneCommand::LinkAt { x, y, reply } => { let _ = reply.send(terminal.link_at(x, y)); }
-                            PaneCommand::LinksAt { cells, reply } => {
-                                let _ = reply.send(cells.into_iter().map(|(x, y)| terminal.link_at(x, y)).collect());
-                            }
                             PaneCommand::Search(needle) => terminal.search(needle.as_deref())?,
                             PaneCommand::SearchStep { older } => terminal.search_step(older)?,
                             PaneCommand::Prompt(direction) => { terminal.jump_to_prompt(direction)?; }

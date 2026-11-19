@@ -1,7 +1,11 @@
 //! Quick Look targets and desktop previews. Files go to GNOME's
 //! previewer (Sushi, `org.gnome.NautilusPreviewer`) over D-Bus; without it, and for web
 //! links, the desktop's opener (`xdg-open`) takes them.
-use std::path::{Path, PathBuf};
+use crate::rex::stream::{Frame, flags};
+use std::{
+    ops::Range,
+    path::{Path, PathBuf},
+};
 use zbus::proxy;
 
 #[proxy(
@@ -86,93 +90,200 @@ pub fn from_uri(link: &str) -> Option<Target> {
     }
 }
 
-/// The word around column `col` of `line`, as a link or path, if it looks like one:
-/// `https://…`, `file://…`, or something with a `/` or a file extension. Quotes,
-/// brackets and trailing punctuation are left off, and so is a `:line:col` suffix.
+/// The link at a character offset in a logical line, outside the terminal grid.
 pub fn target_at(line: &str, col: usize) -> Option<Target> {
-    let chars: Vec<char> = line.chars().collect();
-    if col >= chars.len() || chars[col].is_whitespace() {
-        return None;
-    }
-    let stop = |c: char| c.is_whitespace() || "\"'`<>()[]{}|".contains(c);
-    let mut start = col;
-    while start > 0 && !stop(chars[start - 1]) {
-        start -= 1;
-    }
-    let mut end = col;
-    while end < chars.len() && !stop(chars[end]) {
-        end += 1;
-    }
-    let mut word: String = chars[start..end].iter().collect();
-    while word.ends_with(['.', ',', ';', '!', '?']) {
-        word.pop();
-    }
-    if word.starts_with("http://") || word.starts_with("https://") {
-        return Some(Target::Web(word));
-    }
-    if word.starts_with("file://") {
-        return from_uri(&word);
-    }
-    // file.rs:12:4 points at a place in the file; the file is what's previewed.
-    while let Some((head, tail)) = word.rsplit_once(':') {
-        if !tail.is_empty() && tail.chars().all(|c| c.is_ascii_digit()) {
-            word = head.to_owned();
-        } else {
+    targets(line)
+        .into_iter()
+        .find_map(|(range, target)| range.contains(&col).then_some(target))
+}
+
+fn delimiter(c: char) -> bool {
+    c.is_whitespace() || "\"'`<>()[]{}|".contains(c)
+}
+
+fn location_suffix_len(chars: &[char]) -> usize {
+    let mut end = 0;
+    for _ in 0..2 {
+        if chars.get(end) != Some(&':') {
             break;
         }
+        let digits = chars[end + 1..]
+            .iter()
+            .take_while(|c| c.is_ascii_digit())
+            .count();
+        if digits == 0 {
+            break;
+        }
+        end += digits + 1;
     }
-    let looks_like_path = word.contains('/')
-        || Path::new(&word)
-            .extension()
-            .is_some_and(|e| !e.is_empty() && e.len() <= 8);
-    (looks_like_path && !word.is_empty()).then_some(Target::Path(word))
+    if chars
+        .get(end)
+        .is_none_or(|&c| delimiter(c) || ".,;!?".contains(c))
+    {
+        end
+    } else {
+        0
+    }
+}
+
+fn path_without_location(mut path: &str) -> &str {
+    for _ in 0..2 {
+        match path.rsplit_once(':') {
+            Some((name, suffix))
+                if !suffix.is_empty() && suffix.bytes().all(|b| b.is_ascii_digit()) =>
+            {
+                path = name;
+            }
+            _ => break,
+        }
+    }
+    path
+}
+
+fn text_target(word: &str, has_location: bool) -> Option<Target> {
+    if ["http://", "https://", "file://"]
+        .iter()
+        .any(|prefix| word.starts_with(prefix))
+    {
+        return from_uri(word);
+    }
+    let path = path_without_location(word);
+    let looks_like_path = path.contains('/')
+        || has_location
+        || path != word
+        || Path::new(path).extension().is_some_and(|e| {
+            let e = e.to_string_lossy();
+            !e.is_empty() && !e.chars().any(char::is_whitespace)
+        });
+    (looks_like_path && !path.is_empty()).then(|| Target::Path(path.to_owned()))
+}
+
+fn quoted_word(chars: &[char], start: usize) -> Option<(String, usize)> {
+    let quote = chars[start];
+    let mut end = start + 1;
+    let mut word = String::new();
+    while end < chars.len() {
+        let c = chars[end];
+        if c == quote {
+            return Some((word, end + 1));
+        }
+        if c == '\\' && quote == '"' && matches!(chars.get(end + 1), Some('"' | '\\')) {
+            end += 1;
+        }
+        word.push(chars[end]);
+        end += 1;
+    }
+    None
 }
 
 /// Candidate links in reading order, with character ranges in the displayed line.
-pub fn targets(line: &str) -> Vec<(std::ops::Range<usize>, Target)> {
-    let chars: Vec<char> = line.chars().collect();
+pub fn targets(line: &str) -> Vec<(Range<usize>, Target)> {
+    let chars: Vec<_> = line.chars().collect();
     let mut found = Vec::new();
     let mut start = 0;
     while start < chars.len() {
-        if chars[start].is_whitespace() || "\"'`<>()[]{}|".contains(chars[start]) {
+        if matches!(chars[start], '"' | '\'' | '`')
+            && (start == 0 || delimiter(chars[start - 1]))
+            && let Some((word, end)) = quoted_word(&chars, start)
+        {
+            let suffix = location_suffix_len(&chars[end..]);
+            if let Some(target) = text_target(&word, suffix != 0) {
+                found.push((start..end + suffix, target));
+                start = end + suffix;
+                continue;
+            }
+        }
+        if delimiter(chars[start]) {
             start += 1;
             continue;
         }
-        let mut end = start + 1;
-        while end < chars.len()
-            && !chars[end].is_whitespace()
-            && !"\"'`<>()[]{}|".contains(chars[end])
-        {
+        let mut end = start;
+        let mut word = String::new();
+        while end < chars.len() && !delimiter(chars[end]) {
+            if chars[end] == '\\'
+                && chars
+                    .get(end + 1)
+                    .is_some_and(|&c| delimiter(c) || c == '\\')
+            {
+                end += 1;
+            }
+            word.push(chars[end]);
             end += 1;
         }
-        if let Some(target) = target_at(line, start) {
-            found.push((start..end, target));
+        let mut link_end = end;
+        while word.ends_with(['.', ',', ';', '!', '?']) {
+            word.pop();
+            link_end -= 1;
+        }
+        if let Some(target) = text_target(&word, false) {
+            found.push((start..link_end, target));
         }
         start = end;
     }
     found
 }
 
-#[derive(Clone, Debug)]
-pub struct VisibleLink {
-    pub target: Target,
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct LinkSpan {
     pub row: u16,
-    pub columns: std::ops::Range<u16>,
+    pub columns: Range<u16>,
 }
 
-/// Combine text links with OSC 8 targets. The latter win when a label also looks
-/// like a path. Ranges use terminal columns, including wide-character spacing.
-pub fn visible_links(
-    frame: &crate::rex::stream::Frame,
-    program_links: &[(u16, u16, String)],
-    cwd: Option<&str>,
-    local: bool,
-) -> Vec<VisibleLink> {
-    use crate::rex::stream::flags;
-    let mut result = Vec::new();
-    for (row, cells) in frame.lines.iter().enumerate() {
-        let mut text = String::new();
-        let mut columns = Vec::new();
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct VisibleLink {
+    pub target: Target,
+    pub spans: Vec<LinkSpan>,
+}
+
+impl VisibleLink {
+    pub fn contains(&self, x: u16, y: u16) -> bool {
+        self.spans
+            .iter()
+            .any(|span| span.row == y && span.columns.contains(&x))
+    }
+}
+
+fn continues(frame: &Frame, row: usize) -> bool {
+    frame.wrap_continuations.get(row).copied().unwrap_or(false)
+}
+
+fn logical_end(frame: &Frame, start: usize) -> usize {
+    (start + 1..frame.lines.len())
+        .find(|&row| !continues(frame, row))
+        .unwrap_or(frame.lines.len())
+}
+
+/// Hit-test only the logical line under the pointer, using the frame being drawn.
+pub fn link_at(frame: &Frame, x: u16, y: u16) -> Option<VisibleLink> {
+    let row = usize::from(y);
+    frame.lines.get(row)?;
+    let first = (1..=row)
+        .rev()
+        .find(|&row| !continues(frame, row))
+        .unwrap_or(0);
+    links_in_rows(frame, first..logical_end(frame, row))
+        .into_iter()
+        .find(|link| link.contains(x, y))
+}
+
+pub fn visible_links(frame: &Frame) -> Vec<VisibleLink> {
+    let mut links = Vec::new();
+    let mut first = 0;
+    while first < frame.lines.len() {
+        let end = logical_end(frame, first);
+        links.extend(links_in_rows(frame, first..end));
+        first = end;
+    }
+    links
+}
+
+/// Join only soft-wrapped rows, preserving the cell span of each character.
+/// Program links win over text that happens to look like a path.
+fn links_in_rows(frame: &Frame, rows: Range<usize>) -> Vec<VisibleLink> {
+    let mut text = String::new();
+    let mut characters = Vec::new();
+    for row in rows.clone() {
+        let cells = &frame.lines[row];
         for (column, cell) in cells.iter().enumerate() {
             if cell.has(flags::SPACER) {
                 continue;
@@ -183,56 +294,67 @@ pub fn visible_links(
                 &cell.text
             };
             text.push_str(content);
-            columns.extend(content.chars().map(|_| column as u16));
+            let end = (column + if cell.has(flags::WIDE) { 2 } else { 1 }).min(cells.len());
+            characters.extend(
+                content
+                    .chars()
+                    .map(|_| (row as u16, column as u16, end as u16, cell.has(flags::LINK))),
+            );
         }
-        for (range, target) in targets(&text) {
-            let start = columns[range.start];
-            let end = columns[range.end - 1] + 1;
-            if cells[usize::from(start)..usize::from(end)]
+    }
+    let mut result = Vec::new();
+    for (range, target) in targets(&text) {
+        if (range.start == 0 && continues(frame, rows.start))
+            || (range.end == characters.len()
+                && rows.end == frame.lines.len()
+                && frame.last_row_wrapped)
+        {
+            continue;
+        }
+        let characters = &characters[range];
+        if characters.iter().any(|&(_, _, _, program)| program) {
+            continue;
+        }
+        let spans = characters
+            .chunk_by(|a, b| a.0 == b.0)
+            .map(|cells| LinkSpan {
+                row: cells[0].0,
+                columns: cells[0].1..cells[cells.len() - 1].2,
+            })
+            .collect();
+        result.push(VisibleLink { target, spans });
+    }
+    let mut previous_uri = None;
+    let mut program_links: Vec<VisibleLink> = Vec::new();
+    for link in frame
+        .hyperlinks
+        .iter()
+        .filter(|link| rows.contains(&usize::from(link.row)))
+    {
+        let span = LinkSpan {
+            row: link.row,
+            columns: link.columns.clone(),
+        };
+        if let Some(previous) = program_links.last_mut()
+            && previous_uri == Some(&link.uri)
+            && let Some(last) = previous.spans.last()
+            && last.row + 1 == span.row
+            && span.columns.start == 0
+            && frame.lines[usize::from(last.row)][usize::from(last.columns.end)..]
                 .iter()
-                .any(|c| c.has(flags::LINK))
-            {
-                continue;
-            }
-            if let Target::Path(path) = &target
-                && local
-                && resolve(path, cwd).is_none()
-            {
-                continue;
-            }
-            result.push(VisibleLink {
+                .all(|cell| cell.has(flags::SPACER))
+        {
+            previous.spans.push(span);
+        } else if let Some(target) = from_uri(&link.uri) {
+            program_links.push(VisibleLink {
                 target,
-                row: row as u16,
-                columns: start..end,
+                spans: vec![span],
             });
         }
+        previous_uri = Some(&link.uri);
     }
-    let mut previous: Option<VisibleLink> = None;
-    for (column, row, uri) in program_links {
-        let Some(target) = from_uri(uri) else {
-            continue;
-        };
-        if let Some(link) = &mut previous
-            && link.row == *row
-            && link.columns.end == *column
-            && link.target == target
-        {
-            link.columns.end += 1;
-            continue;
-        }
-        if let Some(link) = previous.take() {
-            result.push(link);
-        }
-        previous = Some(VisibleLink {
-            target,
-            row: *row,
-            columns: *column..*column + 1,
-        });
-    }
-    if let Some(link) = previous {
-        result.push(link);
-    }
-    result.sort_by_key(|link| (link.row, link.columns.start));
+    result.extend(program_links);
+    result.sort_by_key(|link| (link.spans[0].row, link.spans[0].columns.start));
     result
 }
 
@@ -248,9 +370,17 @@ pub fn resolve(path: &str, cwd: Option<&str>) -> Option<PathBuf> {
     let full = if path.is_absolute() {
         path
     } else {
-        PathBuf::from(cwd?).join(path)
+        let cwd = Path::new(cwd?);
+        if !cwd.is_absolute() {
+            return None;
+        }
+        cwd.join(path)
     };
     full.exists().then_some(full)
+}
+
+pub fn needs_cwd(path: &str) -> bool {
+    !Path::new(path).is_absolute() && path != "~" && !path.starts_with("~/")
 }
 
 /// A `file://` URI for a local path.
@@ -266,7 +396,7 @@ mod tests {
 
     #[test]
     fn links_keep_terminal_columns_and_program_targets() {
-        use crate::rex::stream::{Cell, Frame, flags};
+        use crate::rex::stream::{Cell, Hyperlink};
         let cell = |text: &str, flags| Cell {
             text: text.into(),
             fg: 0,
@@ -285,18 +415,20 @@ mod tests {
                 .chars()
                 .map(|c| cell(&c.to_string(), flags::LINK)),
         );
-        let program: Vec<_> = (label_start..line.len() as u16)
-            .map(|x| (x, 0, "https://b.test".into()))
-            .collect();
         let frame = Frame {
+            hyperlinks: vec![Hyperlink {
+                row: 0,
+                columns: label_start..line.len() as u16,
+                uri: "https://b.test".into(),
+            }],
             lines: vec![line],
             ..Default::default()
         };
-        let links = visible_links(&frame, &program, None, false);
+        let links = visible_links(&frame);
         assert_eq!(links.len(), 2);
-        assert_eq!(links[0].columns.start, 3);
+        assert_eq!(links[0].spans[0].columns.start, 3);
         assert_eq!(links[0].target, Target::Web("https://a.test".into()));
-        assert_eq!(links[1].columns.start, label_start);
+        assert_eq!(links[1].spans[0].columns.start, label_start);
         assert_eq!(links[1].target, Target::Web("https://b.test".into()));
         assert_eq!(
             from_uri("file://remote/tmp/a%20b.txt"),
@@ -322,6 +454,15 @@ mod tests {
             target_at("x file:///tmp/a b", 4),
             Some(Target::Path("/tmp/a".into()))
         );
+    }
+
+    #[test]
+    fn quoted_and_escaped_paths_include_spaces_and_location_suffixes() {
+        let path = Some(Target::Path("src/my notes.rs".into()));
+        assert_eq!(target_at("error: 'src/my notes.rs':12:4,", 14), path);
+        assert_eq!(target_at("error: \"src/my notes.rs:12:4\"", 24), path);
+        assert_eq!(target_at(r"open src/my\ notes.rs:12", 12), path);
+        assert_eq!(target_at("see (src/main.rs:12:4),", 22), None);
     }
 
     #[test]

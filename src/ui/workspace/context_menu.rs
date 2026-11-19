@@ -4,7 +4,6 @@
 use super::{Workspace, actions::Target};
 use crate::{
     quick_look::{self, Target as Under},
-    rex::host::PaneCommand,
     ui::theme::Theme,
 };
 use gpui::{
@@ -19,8 +18,8 @@ pub enum Command {
     /// One of rexia's actions, or a block action the server knows (Clear, Reset).
     Run(&'static str),
     OpenLink(String),
-    QuickLook,
-    DownloadFile(String),
+    QuickLook(Under),
+    OpenFile(String),
     Copy(String),
     ShowInFiles(PathBuf),
     /// Something done to a tab, by its window ID.
@@ -87,33 +86,34 @@ impl Workspace {
         let session = self.model().selected.clone().unwrap_or_default();
         let snapshot = pane.snapshot();
         let selected = snapshot.frame.as_ref().is_some_and(|f| f.has_selection);
-        let line = snapshot
+        let under = snapshot
             .frame
             .as_ref()
-            .map(|f| f.line_text(usize::from(cell.1)))
-            .unwrap_or_default();
-        let cwd = self
-            .model()
-            .blocks
-            .get(&block)
-            .and_then(|b| b.pwd.clone().or(b.process.cwd.clone()));
-        let local = self.host().handle.endpoint.is_local();
+            .and_then(|frame| quick_look::link_at(frame, cell.0, cell.1))
+            .map(|link| link.target);
+        let host = self.host().handle.clone();
+        let local = host.endpoint.is_local();
+        let host_index = self.active;
         cx.spawn(async move |this, cx| {
-            let (x, y) = cell;
-            let link = pane
-                .ask(|reply| PaneCommand::LinkAt { x, y, reply })
-                .await
-                .flatten();
-            let under = match link {
-                Some(link) if link.starts_with("file://") => url::Url::parse(&link)
-                    .ok()
-                    .and_then(|u| u.to_file_path().ok())
-                    .map(|p| Under::Path(p.display().to_string())),
-                Some(link) => Some(Under::Web(link)),
-                None => quick_look::target_at(&line, usize::from(x)),
+            let found = match &under {
+                Some(Under::Path(path)) if local => {
+                    let cwd = if quick_look::needs_cwd(path) {
+                        host.process_directory(&session, &block).await
+                    } else {
+                        None
+                    };
+                    let path = path.clone();
+                    cx.background_executor()
+                        .spawn(async move { quick_look::resolve(&path, cwd.as_deref()) })
+                        .await
+                }
+                _ => None,
             };
             let _ = this.update(cx, |ws, cx| {
-                let groups = ws.context_items(selected, under, cwd.as_deref(), local);
+                if ws.active != host_index || ws.model().selected.as_deref() != Some(&session) {
+                    return;
+                }
+                let groups = ws.context_items(selected, under, found, local);
                 ws.context_menu = Some(Box::new(ContextMenu {
                     session,
                     block,
@@ -131,7 +131,7 @@ impl Workspace {
         &self,
         selected: bool,
         under: Option<Under>,
-        cwd: Option<&str>,
+        full_path: Option<PathBuf>,
         local: bool,
     ) -> Vec<Vec<Item>> {
         let item = |label: &str, command: Command, enabled: bool| {
@@ -157,28 +157,36 @@ impl Workspace {
         match under {
             Some(Under::Web(link)) => {
                 here.push(item("Open Link", Command::OpenLink(link.clone()), true));
-                here.push(item("Copy Link", Command::Copy(link), true));
-                here.push(item("Quick Look", Command::QuickLook, true));
+                here.push(item("Copy Link", Command::Copy(link.clone()), true));
+                here.push(item(
+                    "Quick Look",
+                    Command::QuickLook(Under::Web(link)),
+                    true,
+                ));
             }
             Some(Under::Path(path)) => {
-                let found = local.then(|| quick_look::resolve(&path, cwd)).flatten();
-                if let Some(full) = found {
-                    here.push(item(
-                        "Open File",
-                        Command::OpenLink(quick_look::file_uri(&full)),
-                        true,
-                    ));
+                if let Some(full) = full_path {
+                    let path = full.display().to_string();
+                    here.push(item("Open File", Command::OpenFile(path.clone()), true));
                     here.push(item(
                         "Copy Path",
                         Command::Copy(full.display().to_string()),
                         true,
                     ));
                     here.push(item("Show in Files", Command::ShowInFiles(full), true));
-                    here.push(item("Quick Look", Command::QuickLook, true));
+                    here.push(item(
+                        "Quick Look",
+                        Command::QuickLook(Under::Path(path)),
+                        true,
+                    ));
                 } else if !local {
-                    here.push(item("Open File", Command::DownloadFile(path.clone()), true));
-                    here.push(item("Copy Path", Command::Copy(path), true));
-                    here.push(item("Quick Look", Command::QuickLook, true));
+                    here.push(item("Open File", Command::OpenFile(path.clone()), true));
+                    here.push(item("Copy Path", Command::Copy(path.clone()), true));
+                    here.push(item(
+                        "Quick Look",
+                        Command::QuickLook(Under::Path(path)),
+                        true,
+                    ));
                 } else {
                     here.push(item("Copy Path", Command::Copy(path), true));
                 }
@@ -312,12 +320,10 @@ impl Workspace {
                 }
             }
             Command::OpenLink(link) => self.open_link(link, cx),
-            Command::QuickLook => {
-                if let Err(error) = self.quick_look_one(cx) {
-                    self.notice = Some(error);
-                }
+            Command::QuickLook(target) => self.show_quick_target(target, true, &menu.block, cx),
+            Command::OpenFile(path) => {
+                self.show_quick_target(Under::Path(path), false, &menu.block, cx)
             }
-            Command::DownloadFile(path) => self.show_quick_target(Under::Path(path), false, cx),
             Command::Copy(text) => cx.write_to_clipboard(ClipboardItem::new_string(text)),
             Command::ShowInFiles(path) => self.show_in_files(path, cx),
             Command::Tab(command, id) => self.tab_command(command, id, window, cx),

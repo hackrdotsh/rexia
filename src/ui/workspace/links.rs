@@ -77,10 +77,16 @@ impl Workspace {
             cx.notify();
             return;
         }
-        if !self.host().handle.endpoint.is_local()
-            && let Some(crate::quick_look::Target::Path(path)) = crate::quick_look::from_uri(&link)
-        {
-            self.show_quick_target(crate::quick_look::Target::Path(path), false, cx);
+        if url::Url::parse(&link).is_ok_and(|url| url.scheme() == "file") {
+            if let Some(target @ crate::quick_look::Target::Path(_)) =
+                crate::quick_look::from_uri(&link)
+            {
+                let block = self.focused.clone().unwrap_or_default();
+                self.show_quick_target(target, false, &block, cx);
+            } else {
+                self.notice = Some("Invalid file link".into());
+                cx.notify();
+            }
             return;
         }
         let terminal = &self.settings.terminal;
