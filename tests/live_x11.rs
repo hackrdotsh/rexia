@@ -52,3 +52,8 @@ fn closing_a_tab_waits_for_its_cold_successor() {
 fn another_tab_can_be_selected_while_the_successor_waits() {
     native("close-select");
 }
+
+#[test]
+fn jumping_sessions_waits_for_both_cold_terminal_frames() {
+    native("cross-session");
+}

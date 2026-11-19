@@ -218,15 +218,18 @@ class X11:
         finally:
             self.destroy_image(frame)
 
-    def key(self, letter, alt=False):
-        code = self.keycode(self.display, 0xFF1B if letter == "Escape" else ord(letter))
-        if alt:
-            alt_code = self.keycode(self.display, 0xFFE9)  # Alt_L
-            self.key_event(self.display, alt_code, 1, 0)
+    def key(self, letter, modifiers=()):
+        named = {"Escape": 0xFF1B, "Return": 0xFF0D}
+        code = self.keycode(
+            self.display, named[letter] if letter in named else ord(letter)
+        )
+        modifier_codes = [self.keycode(self.display, key) for key in modifiers]
+        for modifier in modifier_codes:
+            self.key_event(self.display, modifier, 1, 0)
         self.key_event(self.display, code, 1, 0)
         self.key_event(self.display, code, 0, 0)
-        if alt:
-            self.key_event(self.display, alt_code, 0, 0)
+        for modifier in reversed(modifier_codes):
+            self.key_event(self.display, modifier, 0, 0)
         self.sync(self.display, 0)
 
 
@@ -347,6 +350,8 @@ def run(binary, case, directory):
         old_color, cold_color, split_color = 0xD92143, 0x16CB52, 0x1379DE
         other_color = 0xB552E0
         closing = case in ("close", "close-select")
+        cross_session = case == "cross-session"
+        destination_label = "coldsplit"
         clicks = directory / "clicks"
         clicks.write_bytes(b"")
         probe = (
@@ -367,7 +372,22 @@ def run(binary, case, directory):
         )
         session = created["session_id"]
         old_window = created["initial_windows"][0]["window_id"]
-        if case != "focus":
+        if cross_session:
+            color = b"\x1b[48;2;22;203;82m\x1b[2J\x1b[H"
+            script = f"import os,time; os.write(1,{color!r}); time.sleep(60)"
+            destination = rex(
+                "new",
+                destination_label,
+                "--shell=none",
+                "--",
+                sys.executable,
+                "-c",
+                script,
+            )
+            split_session = destination["session_id"]
+            cold = destination["initial_windows"][0]
+        elif case != "focus":
+            split_session = session
             tabs = []
             for index in range(5):
                 rgb = "181;82;224" if index == 0 else "22;203;82"
@@ -405,12 +425,13 @@ def run(binary, case, directory):
                 ),
                 as_json=False,
             )
+        if case != "focus":
             color = b"\x1b[48;2;19;121;222m\x1b[2J\x1b[H"
             script = f"import os,time; os.write(1,{color!r}); time.sleep(60)"
             rex(
                 "split",
                 "-s",
-                session,
+                split_session,
                 "-b",
                 cold["block_ids"][0],
                 "--split=right",
@@ -490,6 +511,31 @@ def run(binary, case, directory):
             after_focus = clicks.read_bytes().split(b"b", 1)[1]
             assert len(re.findall(press, after_focus)) == 1, after_focus
             print("X11: programmatic activation did not eat the next click", flush=True)
+        elif cross_session:
+            wait(
+                "the original terminal accepting keyboard input",
+                lambda: send_marker(x, clicks),
+            )
+            assert gate.opened == 1, "destination streams were not cold"
+            gate.hold.set()
+            x.key("k", modifiers=(0xFFE3, 0xFFE1))  # Ctrl_L, Shift_L
+            for letter in destination_label:
+                x.key(letter)
+            x.key("Return")
+            wait(
+                "one destination stream held and the other opened",
+                lambda: gate.waiting.is_set() and gate.opened == 2,
+            )
+            wait(
+                "the loading area replacing the original terminal",
+                lambda: old_color not in x.sample(window)[1],
+            )
+            loading = assert_loading(x, window, {old_color, cold_color, split_color})
+            verify_first_layout(x, window, gate, loading, {cold_color, split_color})
+            print(
+                "Cross-session jump: loading card held for 1.25s; first observed destination layout contained both terminals",
+                flush=True,
+            )
         else:
             wait("the old tab and four prewarmed neighbors", lambda: gate.opened == 5)
             gate.hold.set()
@@ -588,6 +634,34 @@ def send_marker(x, log):
     return b"d" in log.read_bytes()
 
 
+def assert_loading(x, window, terminal_colors):
+    start = time.monotonic()
+    while time.monotonic() - start < 1.25:
+        loading = x.sample(window)
+        _, colors = loading
+        assert not terminal_colors & colors, (
+            "a terminal appeared while the other stream was held"
+        )
+        assert len(colors) > 1, (
+            "the waiting area was blank instead of showing a loading card"
+        )
+        time.sleep(0.01)
+    return loading
+
+
+def verify_first_layout(x, window, gate, loading, terminal_colors):
+    gate.release.set()
+
+    def new_layout():
+        sample = x.sample(window)
+        return sample if sample != loading else None
+
+    first = wait("the destination selected in a native frame", new_layout)
+    assert terminal_colors <= first[1], (
+        "first observed destination layout lacked a terminal"
+    )
+
+
 def verify_closed_tab(
     x, window, gate, old, cold, split, other, case, active_tab, other_window
 ):
@@ -596,18 +670,9 @@ def verify_closed_tab(
         lambda: gate.waiting.is_set() and gate.opened == 6,
     )
     wait("the closed terminal disappearing", lambda: old not in x.sample(window)[1])
-    start = time.monotonic()
-    while time.monotonic() - start < 1.25:
-        loading_strip, colors = x.sample(window)
-        assert not {old, cold, split, other} & colors, (
-            "a successor terminal appeared while the other stream was held"
-        )
-        assert len(colors) > 1, (
-            "the waiting area was blank instead of showing a loading card"
-        )
-        time.sleep(0.01)
+    loading = assert_loading(x, window, {old, cold, split, other})
     if case == "close-select":
-        x.key("1", alt=True)
+        x.key("1", modifiers=(0xFFE9,))  # Alt_L
         wait(
             "Alt+1 selecting the first tab on Rex", lambda: active_tab() == other_window
         )
@@ -630,16 +695,7 @@ def verify_closed_tab(
         )
         return
 
-    gate.release.set()
-
-    def new_layout():
-        sample = x.sample(window)
-        return sample if sample[0] != loading_strip else None
-
-    first = wait("the successor selected in a native frame", new_layout)
-    assert {cold, split} <= first[1], (
-        "first observed successor layout lacked a terminal"
-    )
+    verify_first_layout(x, window, gate, loading, {cold, split})
     print(
         "Closed tab: separate loading state for 1.25s; first observed successor layout contained both terminals",
         flush=True,
@@ -648,7 +704,16 @@ def verify_closed_tab(
 
 if __name__ == "__main__":
     case = sys.argv[2]
-    assert case in ("focus", "tabs", "slow", "retry", "cancel", "close", "close-select")
+    assert case in (
+        "focus",
+        "tabs",
+        "slow",
+        "retry",
+        "cancel",
+        "close",
+        "close-select",
+        "cross-session",
+    )
     parent = os.environ.get("REXIA_TEST_X11_LOG_DIR")
     if parent:
         directory = Path(tempfile.mkdtemp(prefix=f"x11-{case}-", dir=parent))

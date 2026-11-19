@@ -39,7 +39,7 @@ impl Workspace {
     /// sync records the pending switch, so compare the presented tab to this model.
     pub(super) fn apply_presented_tab(&self, model: &mut HostModel) -> bool {
         let shown = self.presented_in(model).map(|tab| tab.window.clone());
-        let loading = self.presented_for_session(model).is_some()
+        let loading = self.presented_tab.is_some()
             && model
                 .view()
                 .and_then(View::active_window)
@@ -69,7 +69,8 @@ impl Workspace {
             return;
         };
         let Some(tab) = model.view().and_then(View::active_window) else {
-            self.presented_tab = None;
+            // A session's view can arrive after selection. Keep the previous
+            // identity so the new layout still goes through the frame check.
             self.pending_tab = None;
             return;
         };
@@ -78,10 +79,11 @@ impl Workspace {
             session: session.clone(),
             window: tab.id().to_owned(),
         };
-        // A closed tab still counts as a previous presentation in this session.
-        // Only the first view of a session may show its terminals as they attach.
+        // Once a terminal tab has been presented, replacements wait for frames
+        // even if the previous tab closed or belongs to a different session.
         if self
-            .presented_for_session(model)
+            .presented_tab
+            .as_ref()
             .is_none_or(|shown| *shown == target)
         {
             self.presented_tab = Some(target);
