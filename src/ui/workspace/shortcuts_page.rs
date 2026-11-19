@@ -59,6 +59,29 @@ pub struct ShortcutRow {
 }
 
 impl Workspace {
+    pub(super) fn mode_shortcut_binding(
+        &self,
+        binding: &actions::ModeShortcut,
+    ) -> Option<&keymap::Binding> {
+        let keys = self.settings.shortcuts.get(&binding.id());
+        let args: Option<serde_json::Value> = binding
+            .args
+            .map(|args| serde_json::from_str(args).expect("valid binding args"));
+        self.keymap.bindings.iter().find(|row| {
+            let correct_keys = keys.map_or(row.keys == binding.keys, |keys| &row.keys == keys);
+            row.mode.as_deref() == Some(binding.mode)
+                && correct_keys
+                && row.action == binding.action.name
+                && (row.args == args
+                    || (args.is_none()
+                        && row
+                            .args
+                            .as_ref()
+                            .and_then(serde_json::Value::as_object)
+                            .is_some_and(|args| args.is_empty())))
+        })
+    }
+
     /// Watch the containing directory so atomic replacement by an editor still works.
     pub(super) fn watch_shortcuts(
         path: std::path::PathBuf,
@@ -171,26 +194,9 @@ impl Workspace {
         rows.extend(actions::mode_shortcuts().map(|binding| {
             let action = binding.id();
             let changed = self.settings.shortcuts.contains_key(&action);
-            let keys = self
-                .settings
-                .shortcuts
-                .get(&action)
-                .cloned()
-                .unwrap_or_else(|| binding.keys.iter().map(|key| (*key).into()).collect());
-            let expected_args: Option<serde_json::Value> = binding
-                .args
-                .map(|args| serde_json::from_str(args).expect("valid binding args"));
-            let effective = self.keymap.bindings.iter().find(|row| {
-                row.mode.as_deref() == Some(binding.mode)
-                    && row.keys == keys
-                    && row.action == binding.action.name
-                    && (row.args == expected_args
-                        || (expected_args.is_none()
-                            && row.args.as_ref().is_some_and(|args| {
-                                args.as_object().is_some_and(|obj| obj.is_empty())
-                            })))
-            });
-            let shown = effective.map(|_| format!("{}: {}", binding.mode, keymap::display(&keys)));
+            let effective = self.mode_shortcut_binding(&binding);
+            let shown =
+                effective.map(|row| format!("{}: {}", binding.mode, keymap::display(&row.keys)));
             let source = match effective.and_then(|row| row.source.as_deref()) {
                 Some(file) if file.contains(".lua") => Source::Config(file.to_owned()),
                 _ if shown.is_some() && changed => Source::Yours,

@@ -239,6 +239,7 @@ pub enum Dialog {
     Shortcut {
         action: String,
         title: String,
+        previous: Option<Box<ListOverlay>>,
     },
 }
 
@@ -920,9 +921,10 @@ impl Workspace {
                     }
                     _ => None,
                 };
-                self.close_overlay(window, cx);
                 if let Some(choice) = choice {
                     self.choose(choice, kind, window, cx);
+                } else {
+                    self.close_overlay(window, cx);
                 }
             }
         }
@@ -1068,6 +1070,9 @@ impl Workspace {
         window: &mut Window,
         cx: &mut Context<Self>,
     ) {
+        if !matches!(choice, Choice::Shortcut { .. }) {
+            self.close_overlay(window, cx);
+        }
         match choice {
             Choice::OpenForward(id) => self.open_forward(id, cx),
             Choice::Setting(path) => {
@@ -1733,7 +1738,6 @@ impl Workspace {
                                 .child(keys)
                         }))
                         .on_click(cx.listener(move |ws, _, window, cx| {
-                            ws.close_overlay(window, cx);
                             ws.choose(choice.clone(), kind, window, cx);
                         }))
                         .into_any_element(),
@@ -2033,7 +2037,7 @@ impl Workspace {
                         .into_any_element(),
                 ]))
                 .into_any_element(),
-            Dialog::Shortcut { action, title } => div()
+            Dialog::Shortcut { action, title, .. } => div()
                 .flex()
                 .flex_col()
                 .gap(px(10.))
@@ -2047,6 +2051,7 @@ impl Workspace {
                 .child(
                     div()
                         .text_size(px(13.))
+                        .whitespace_normal()
                         .text_color(theme.text_muted)
                         .child(format!("Now: {}", self.shortcut_of(action))),
                 )

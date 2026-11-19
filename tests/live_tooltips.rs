@@ -69,6 +69,12 @@ fn buttons_show_their_names_and_shortcuts() {
         h.workspace(|ws| ws.recording_shortcut()).as_deref(),
         Some("pane.split.right")
     );
+    h.press("left");
+    h.wait_ui("back at the filtered shortcut list", |ws| {
+        (ws.list_titles().first().map(String::as_str) == Some("Split Pane Right")).then_some(())
+    });
+    assert!(h.workspace(|ws| !ws.settings.shortcuts.contains_key("pane.split.right")));
+    h.press("enter");
     h.press("ctrl-alt-k");
     h.wait_ui("the new binding", |ws| {
         ws.keys_for_action("pane.split.right")

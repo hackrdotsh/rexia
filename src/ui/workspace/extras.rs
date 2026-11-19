@@ -8,7 +8,7 @@ use crate::{
     rex::endpoint::Endpoint,
     ui::{actions, keys},
 };
-use gpui::{Context, Keystroke, Window};
+use gpui::{Context, Focusable, Keystroke, Window};
 use serde_json::{Value, json};
 use std::time::Duration;
 
@@ -125,7 +125,15 @@ impl Workspace {
         window: &mut Window,
         cx: &mut Context<Self>,
     ) {
-        self.overlay = Some(Overlay::Dialog(Dialog::Shortcut { action, title }));
+        let previous = match self.overlay.take() {
+            Some(Overlay::List(list)) if list.kind == ListKind::Shortcuts => Some(Box::new(list)),
+            _ => None,
+        };
+        self.overlay = Some(Overlay::Dialog(Dialog::Shortcut {
+            action,
+            title,
+            previous,
+        }));
         // Keys come to the workspace, not a field or the terminal.
         window.focus(&self.focus, cx);
         cx.notify();
@@ -153,8 +161,18 @@ impl Workspace {
         let plain = !m.control && !m.alt && !m.platform && !m.shift;
         let keys = match keystroke.key.as_str() {
             "escape" | "left" if plain => {
-                self.close_overlay(window, cx);
-                self.back_to_shortcuts(window, cx);
+                if let Some(Overlay::Dialog(Dialog::Shortcut {
+                    previous: Some(list),
+                    ..
+                })) = self.overlay.take()
+                {
+                    let focus = list.input.read(cx).focus_handle(cx);
+                    self.overlay = Some(Overlay::List(*list));
+                    window.focus(&focus, cx);
+                    cx.notify();
+                } else {
+                    self.close_overlay(window, cx);
+                }
                 return;
             }
             "backspace" if plain => Vec::new(),
@@ -184,7 +202,6 @@ impl Workspace {
         );
         self.send_keymap();
         self.close_overlay(window, cx);
-        self.back_to_shortcuts(window, cx);
     }
 
     /// The keys bound to an action in the keymap in use, as Rex spells them.
@@ -213,6 +230,11 @@ impl Workspace {
 
     /// The keys an action has now, for the shortcut dialog.
     pub(super) fn shortcut_of(&self, action: &str) -> String {
+        if let Some(binding) = crate::ui::actions::ModeShortcut::find(action) {
+            return self
+                .mode_shortcut_binding(&binding)
+                .map_or_else(|| "None".into(), |row| keymap::display(&row.keys));
+        }
         self.keymap
             .keys_for(action, None)
             .map(keymap::display)
