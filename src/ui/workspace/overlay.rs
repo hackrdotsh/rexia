@@ -2032,6 +2032,7 @@ impl Workspace {
                 .child(
                     div()
                         .text_size(px(14.))
+                        .whitespace_normal()
                         .child(format!("Press the new key for {title}.")),
                 )
                 .child(
@@ -2043,8 +2044,9 @@ impl Workspace {
                 .child(
                     div()
                         .text_size(px(12.))
+                        .whitespace_normal()
                         .text_color(theme.text_muted)
-                        .child("Esc keeps it · Backspace removes it"),
+                        .child("Esc or ← goes back · Backspace removes it"),
                 )
                 .into_any_element(),
             Dialog::Diagnostics { text } => {

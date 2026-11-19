@@ -139,8 +139,7 @@ impl Workspace {
         }
     }
 
-    /// The key pressed while recording: Esc keeps the old shortcut, Backspace removes it,
-    /// anything else becomes it.
+    /// Esc or Left keeps the old shortcut. Backspace removes it.
     pub(super) fn shortcut_key(
         &mut self,
         keystroke: &Keystroke,
@@ -153,7 +152,7 @@ impl Workspace {
         let m = &keystroke.modifiers;
         let plain = !m.control && !m.alt && !m.platform && !m.shift;
         let keys = match keystroke.key.as_str() {
-            "escape" if plain => {
+            "escape" | "left" if plain => {
                 self.close_overlay(window, cx);
                 self.back_to_shortcuts(window, cx);
                 return;

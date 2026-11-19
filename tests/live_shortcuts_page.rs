@@ -119,6 +119,22 @@ fn shortcuts_page_lists_changes_resets_and_exports() {
     assert!(zoomed.keys.contains(&"Ctrl+Alt+Z".to_owned()));
     assert_eq!(zoomed.source, Source::Yours);
     assert!(zoomed.config.is_some(), "init.lua's binding is noted");
+    for (key, expected) in [
+        ("pageup", "pageup"),
+        ("pagedown", "pagedown"),
+        ("home", "home"),
+        ("end", "end"),
+        ("ctrl-j", "ctrl+j"),
+        ("ctrl-k", "ctrl+k"),
+        ("left", "ctrl+k"),
+    ] {
+        record(&mut h, "pane.zoom", key);
+        assert_eq!(
+            h.workspace(|ws| ws.settings.shortcuts["pane.zoom"].clone()),
+            [expected],
+            "when recording {key}"
+        );
+    }
     h.cx.update(|cx| {
         window
             .update(cx, |ws, _, cx| ws.remove_shortcut("client.tab.new", cx))
