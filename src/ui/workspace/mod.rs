@@ -1835,10 +1835,19 @@ impl Workspace {
         model: &HostModel,
         theme: &Theme,
         cx: &mut Context<Self>,
-    ) -> AnyElement {
+    ) -> (AnyElement, bool) {
         let entity = cx.entity();
         let tracker = canvas(
-            move |bounds, _, cx| entity.update(cx, |ws, _| ws.area = bounds),
+            move |bounds, _, cx| {
+                entity.update(cx, |ws, cx| {
+                    let width_changed = ws.area.size.width != bounds.size.width
+                        || (ws.area.size.height == px(0.) && bounds.size.height > px(0.));
+                    ws.area = bounds;
+                    if width_changed {
+                        cx.notify();
+                    }
+                })
+            },
             |_, _, _, _| {},
         )
         .absolute()
@@ -1851,7 +1860,7 @@ impl Workspace {
                 crate::rex::host::Connection::Connected => "Choose a session",
                 _ => "Connecting…",
             };
-            return div()
+            let empty = div()
                 .flex_1()
                 .relative()
                 .flex()
@@ -1862,6 +1871,7 @@ impl Workspace {
                 .child(tracker)
                 .child(message)
                 .into_any_element();
+            return (empty, false);
         };
         let session = model.selected.clone().unwrap_or_default();
         let gap = match self.settings.interface.pane_style {
@@ -1897,6 +1907,7 @@ impl Workspace {
         let shown: Vec<String> = panes.iter().map(|p| p.block_id.clone()).collect();
         self.keep_pane_motion(&shown);
         let style = self.settings.interface.animation;
+        let mut shared_actions = false;
         for pane in panes {
             let walkthrough = window
                 .block(&pane.block_id)
@@ -1937,6 +1948,10 @@ impl Workspace {
                 let inner_width = f32::from(self.area.size.width) * rect.w as f32
                     - gap
                     - 2. * f32::from(theme.border_width);
+                let overflow = floating.is_some()
+                    && self.area.size.height > px(0.)
+                    && inner_width < SMALL_ICON_BUTTON_WIDTH;
+                shared_actions |= overflow;
                 self.pane_header(
                     &pane.block_id,
                     &block,
@@ -1950,6 +1965,7 @@ impl Workspace {
                         .copied()
                         .unwrap_or(rect),
                     inner_width,
+                    overflow,
                     header_fill,
                     opacity,
                     faded_header,
@@ -2142,7 +2158,55 @@ impl Workspace {
                     .children(chips),
             );
         }
-        area.into_any_element()
+        (area.into_any_element(), shared_actions)
+    }
+
+    fn floating_actions_footer(&self, theme: &Theme, cx: &mut Context<Self>) -> AnyElement {
+        let button = div()
+            .id("floating-pane-actions")
+            .role(Role::Button)
+            .aria_label("Floating Pane Actions")
+            .relative()
+            .focusable()
+            .tab_index(0)
+            .h(px(28.))
+            .min_w(px(28.))
+            .max_w_full()
+            .px(px(6.))
+            .flex()
+            .items_center()
+            .gap(px(6.))
+            .rounded(theme.radius_small())
+            .border_2()
+            .border_color(theme.text.opacity(0.))
+            .focus_visible(|d| d.border_color(theme.primary))
+            .hover(|d| d.bg(theme.overlay(0.1)))
+            .cursor_pointer()
+            .child(self.track_bounds("floating-pane-actions".into(), cx))
+            .child(icon("dots").size(px(14.)).text_color(theme.text))
+            .child(
+                div()
+                    .min_w_0()
+                    .overflow_hidden()
+                    .whitespace_nowrap()
+                    .text_ellipsis()
+                    .child("Floating Pane Actions"),
+            )
+            .tooltip(self.tip("pane.floating_actions", None))
+            .on_click(cx.listener(|ws, _, window, cx| {
+                ws.open_list(overlay::ListKind::FloatingPaneActions, window, cx);
+            }));
+        div()
+            .flex()
+            .flex_none()
+            .justify_end()
+            .px(px(6.))
+            .border_t(theme.border_width)
+            .border_color(theme.border)
+            .bg(theme.surface)
+            .text_size(px(12.))
+            .child(button)
+            .into_any_element()
     }
 
     /// Expand a floating layer proportionally first, then constrain individual splits
@@ -2244,6 +2308,7 @@ impl Workspace {
         session: &str,
         rect: Rect,
         inner_width: f32,
+        overflow: bool,
         fill: Option<u32>,
         opacity: f32,
         faded: bool,
@@ -2283,7 +2348,9 @@ impl Workspace {
         let compact = floating.is_some()
             && self.area.size.width > px(0.)
             && inner_width + 0.01 < FLOATING_HEADER_MIN_WIDTH;
-        let padding = if compact {
+        let padding = if overflow {
+            0.
+        } else if compact {
             ((inner_width - SMALL_ICON_BUTTON_WIDTH - HEADER_GAP) / 2.).clamp(0., HEADER_PADDING)
         } else {
             HEADER_PADDING
@@ -2398,6 +2465,9 @@ impl Workspace {
                     cx.stop_propagation();
                 }),
             );
+            if overflow {
+                return background.child(header).into_any_element();
+            }
             if compact {
                 let block = block_id.to_owned();
                 let actions = small_icon_button(
@@ -2933,21 +3003,26 @@ impl Render for Workspace {
         } else {
             None
         };
-        let panes = if loading_tab {
+        let (panes, shared_actions) = if loading_tab {
             let previous_available = model
                 .view()
                 .is_some_and(|view| view.active_window_id.is_some());
-            div()
+            let (previous, shared_actions) = if previous_available {
+                let (panes, shared_actions) = self.render_panes(&model, &theme, cx);
+                (Some(panes), shared_actions)
+            } else {
+                (None, false)
+            };
+            let area = div()
                 .relative()
                 .flex()
                 .flex_1()
                 .min_w_0()
-                .when(previous_available, |area| {
-                    area.child(self.render_panes(&model, &theme, cx))
-                })
+                .children(previous)
                 .bg(theme.background)
                 .child(self.render_tab_wait(previous_available, &theme, cx))
-                .into_any_element()
+                .into_any_element();
+            (area, shared_actions)
         } else {
             self.render_panes(&model, &theme, cx)
         };
@@ -3062,6 +3137,7 @@ impl Render for Workspace {
             .on_mouse_up(MouseButton::Left, cx.listener(Self::on_mouse_up))
             .children(toolbar)
             .child(body)
+            .children(shared_actions.then(|| self.floating_actions_footer(&theme, cx)))
             .children(floating_bar.map(|bar| {
                 div()
                     .id("floating-toolbar")

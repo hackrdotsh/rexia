@@ -77,6 +77,136 @@ fn uneven_floating_split_keeps_actions_accessible_with_sidebar() {
     exercise_floating_header(true);
 }
 
+#[test]
+fn crowded_floating_split_has_a_shared_actions_picker() {
+    fn row(first: usize, count: usize) -> Value {
+        if count == 1 {
+            return json!({"block": {
+                "label": format!("Float {first:02}"),
+                "flavor": rexia::rex::data::SHELL_FLAVOR,
+                "options": {"shell": "none", "command": ["cat"]},
+            }});
+        }
+        let left = count / 2;
+        json!({"split": {"direction": "horizontal", "ratio": left as f64 / count as f64,
+            "before": row(first, left), "after": row(first + left, count - left)}})
+    }
+
+    let Some(address) = common::server() else {
+        return;
+    };
+    let control = common::connect(&address);
+    let sessions = Sessions::create(&control, "rexia-crowded-float");
+    let session = &sessions.ids[0];
+    let mut settings = common::test_settings(&address, session);
+    settings.interface.sidebar = true;
+    settings.interface.animation = rexia::settings::AnimationStyle::Off;
+    let mut h = Harness::open_with(settings, 480., 320.);
+    const COUNT: usize = 8;
+    common::request(
+        &control,
+        "session.new_layer",
+        json!({
+            "session_id": session, "bounds": [0., 0.15, 1., 0.65], "layout": row(1, COUNT),
+            "focus": true,
+        }),
+    )
+    .unwrap();
+    let panes = h.wait("the eight floating terminals", |m| {
+        let tab = m.view()?.active_window()?;
+        let panes: Vec<_> = tab
+            .panes()
+            .into_iter()
+            .filter(|p| p.floating.is_some())
+            .collect();
+        (panes.len() == COUNT).then_some(panes)
+    });
+    h.wait_ui("the last crowded header drawn", |ws| {
+        ws.element_bounds(&format!("header:{}", panes.last()?.block_id))
+    });
+    let slot = f32::from(h.workspace(Workspace::pane_area).size.width) / COUNT as f32;
+    // The comfortable pane gap alone leaves less than a 22px button, even without borders.
+    assert!(slot - 8. < 22., "fixture must crowd all eight headers");
+    println!("Crowded floating split: {slot}px per pane before gaps and borders");
+    screenshot(&mut h, "crowded-floating-split");
+    let open_picker = |h: &mut Harness| {
+        let button = h
+            .workspace(|ws| ws.element_bounds("floating-pane-actions"))
+            .expect("show a shared actions button when even compact controls cannot fit");
+        assert!(button.size.width >= px(24.));
+        assert!(button.size.height >= px(24.));
+        assert!(button.right() <= px(480.) && button.bottom() <= px(320.));
+        click(h, button.center());
+        assert_eq!(h.workspace(Workspace::list_titles).len(), COUNT);
+    };
+    for (index, pane) in panes.iter().enumerate() {
+        open_picker(&mut h);
+        if index == 0 {
+            screenshot(&mut h, "crowded-floating-picker");
+            h.press("up");
+            assert!(h.workspace(Workspace::list_selection_visible));
+        }
+        h.type_text(&format!("Float {:02}", index + 1));
+        h.press("enter");
+        assert_eq!(
+            h.workspace(Workspace::context_menu_labels).unwrap(),
+            [
+                "Minimize",
+                "Split Right",
+                "Zoom Pane",
+                "Dock Pane",
+                "Close Pane",
+            ]
+        );
+        if index == COUNT - 1 {
+            screenshot(&mut h, "crowded-floating-actions");
+        }
+        h.press("down down down enter");
+        h.wait(
+            "Zoom targeted the pane picked from the shared actions",
+            |m| {
+                (m.view()?.active_window()?.zoomed_block_id.as_ref() == Some(&pane.block_id))
+                    .then_some(())
+            },
+        );
+        h.run("pane.zoom", json!({"block_id": pane.block_id}));
+        h.wait("the crowded split restored", |m| {
+            m.view()?
+                .active_window()?
+                .zoomed_block_id
+                .is_none()
+                .then_some(())
+        });
+    }
+    println!(
+        "Shared actions showed all five commands and zoomed each of the {COUNT} selected panes"
+    );
+
+    h.cx.update(|cx| {
+        h.window
+            .update(cx, |ws, _, cx| ws.toggle_sidebar(cx))
+            .unwrap();
+    });
+    h.wait_ui("the shared button hidden when inline buttons fit", |ws| {
+        (ws.pane_area().size.width == px(480.)
+            && ws.element_bounds("floating-pane-actions").is_none())
+        .then_some(())
+    });
+    h.press("ctrl-shift-p");
+    h.type_text("Floating Pane Actions");
+    assert_eq!(
+        h.workspace(Workspace::list_titles).first().unwrap(),
+        "Floating Pane Actions…"
+    );
+    h.press("enter");
+    assert_eq!(h.workspace(Workspace::list_titles).len(), COUNT);
+    h.press("escape");
+    assert!(h.workspace(Workspace::list_kind).is_none());
+    println!(
+        "Widening the pane area hid the shared button; the command palette still opens the picker"
+    );
+}
+
 fn exercise_floating_header(sidebar: bool) {
     let Some(address) = common::server() else {
         return;

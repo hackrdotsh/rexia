@@ -29,6 +29,7 @@ pub enum ListKind {
     Commands,
     Sessions,
     GoTo,
+    FloatingPaneActions,
     Activity,
     MoveToTab,
     Hosts,
@@ -50,6 +51,7 @@ impl ListKind {
             Self::Commands => "Run a command",
             Self::Sessions => "Go to a session, or name a new one",
             Self::GoTo => "Sessions, tabs and panes",
+            Self::FloatingPaneActions => "Choose a floating pane",
             Self::Activity => "Programs that reported a status",
             Self::MoveToTab => "Move the pane to a tab",
             Self::Hosts => "Switch to a host",
@@ -67,6 +69,7 @@ impl ListKind {
             Self::Commands => "client.palette.toggle",
             Self::Sessions => "session.switch",
             Self::GoTo => "pane.go_to",
+            Self::FloatingPaneActions => "pane.floating_actions",
             Self::Activity => "pane.view_activity",
             Self::MoveToTab => "pane.move_to_tab",
             Self::Hosts => "client.host.switch",
@@ -99,6 +102,11 @@ pub enum Choice {
         window: String,
     },
     Block {
+        host: usize,
+        session: String,
+        block: String,
+    },
+    FloatingPaneActions {
         host: usize,
         session: String,
         block: String,
@@ -398,6 +406,41 @@ fn go_to_items(ws: &Workspace) -> Vec<Item> {
         }
     }
     items
+}
+
+fn floating_pane_items(ws: &Workspace) -> Vec<Item> {
+    let model = ws.model();
+    let (Some(session), Some(tab)) = (
+        model.selected.as_ref(),
+        model.view().and_then(View::active_window),
+    ) else {
+        return Vec::new();
+    };
+    tab.panes()
+        .into_iter()
+        .filter(|pane| pane.floating.is_some())
+        .filter_map(|pane| {
+            let block = tab.block(&pane.block_id)?;
+            Some((pane.block_id, block))
+        })
+        .enumerate()
+        .map(|(index, (id, block))| {
+            let state = model.blocks.get(&id);
+            Item {
+                title: titles::pane_title(block, state),
+                detail: Some(format!("Pane {}", index + 1)),
+                keys: None,
+                icon: titles::program_icon(state),
+                status: None,
+                current: tab.focused_block_id.as_ref() == Some(&id),
+                choice: Choice::FloatingPaneActions {
+                    host: ws.active,
+                    session: session.clone(),
+                    block: id,
+                },
+            }
+        })
+        .collect()
 }
 
 /// The new quick switcher: every program reporting a status (each of a pane's reporting
@@ -725,6 +768,7 @@ impl Workspace {
             ListKind::Sessions => session_items(self),
             ListKind::GoTo if self.settings.interface.quick_switcher => quick_switcher_items(self),
             ListKind::GoTo => go_to_items(self),
+            ListKind::FloatingPaneActions => floating_pane_items(self),
             ListKind::Activity => activity_items(self),
             ListKind::MoveToTab => move_items(self),
             ListKind::Hosts => host_items(self),
@@ -1115,6 +1159,20 @@ impl Workspace {
                 self.hosts[host]
                     .handle
                     .call("session.focus_block", json!({"session_id": session, "block_id": block}));
+            }
+            Choice::FloatingPaneActions { host, session, block } => {
+                let model = self.model();
+                if self.active == host && model.selected.as_ref() == Some(&session)
+                    && model.view().and_then(View::active_window).is_some_and(|tab| {
+                        tab.panes().iter().any(|pane| pane.block_id == block && pane.floating.is_some())
+                    })
+                {
+                    let at = self.element_bounds("floating-pane-actions").map_or_else(
+                        || gpui::point(self.area.right(), self.area.bottom()),
+                        |bounds| bounds.center(),
+                    );
+                    self.open_floating_header_menu(block, at, cx);
+                }
             }
             Choice::MoveToWindow { block, anchor } => {
                 if let Some(session) = self.model().selected {
@@ -1593,6 +1651,9 @@ impl Workspace {
         let content = match overlay {
             Overlay::List(list) => panel
                 .w(px(640.))
+                .when(list.kind == ListKind::FloatingPaneActions, |d| {
+                    d.max_w(window.viewport_size().width - px(32.))
+                })
                 .max_h(px(520.))
                 .child(self.render_list(list, window, theme, cx))
                 .into_any_element(),
@@ -1659,9 +1720,12 @@ impl Workspace {
                 let kind = list.kind;
                 let choice = item.choice.clone();
                 let terminal_colors = match &choice {
-                    Choice::Block { host, block, .. } => self.hosts.get(*host).and_then(|host| {
-                        crate::ui::program_icons::pane_colors(&host.handle.snapshot(), block)
-                    }),
+                    Choice::Block { host, block, .. }
+                    | Choice::FloatingPaneActions { host, block, .. } => {
+                        self.hosts.get(*host).and_then(|host| {
+                            crate::ui::program_icons::pane_colors(&host.handle.snapshot(), block)
+                        })
+                    }
                     _ => None,
                 };
                 Some(
@@ -1757,6 +1821,9 @@ impl Workspace {
                 .child(match list.kind {
                     ListKind::Activity => "No program has reported a status",
                     ListKind::MoveToTab => "This session has no other tab",
+                    ListKind::FloatingPaneActions if list.items.is_empty() => {
+                        "No visible floating panes"
+                    }
                     ListKind::RemoveHost => "No remote hosts are saved on the home server",
                     _ => "No matches",
                 })

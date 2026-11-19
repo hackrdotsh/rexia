@@ -649,6 +649,13 @@ pub const ACTIONS: &[ActionDef] = &[
         [(&["ctrl+alt+g"], None)]
     ),
     action!(
+        "pane.floating_actions",
+        "Floating Pane Actions…",
+        "Pane",
+        "floating pane controls menu minimize split zoom dock close",
+        []
+    ),
+    action!(
         "pane.go_to",
         "Go to Anything…",
         "Pane",

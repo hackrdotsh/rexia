@@ -481,6 +481,9 @@ impl Workspace {
             "client.palette.toggle" => self.open_list(overlay::ListKind::Commands, window, cx),
             "session.switch" => self.open_list(overlay::ListKind::Sessions, window, cx),
             "pane.go_to" => self.open_list(overlay::ListKind::GoTo, window, cx),
+            "pane.floating_actions" => {
+                self.open_list(overlay::ListKind::FloatingPaneActions, window, cx)
+            }
             "pane.view_activity" => self.open_list(overlay::ListKind::Activity, window, cx),
             "pane.move_to_tab" => self.open_list(overlay::ListKind::MoveToTab, window, cx),
             "pane.go_to_directory" => {
