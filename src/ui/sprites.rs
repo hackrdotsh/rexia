@@ -1,33 +1,93 @@
-//! Characters rexia draws itself instead of taking from a font, as Ghostty does: braille
-//! (U+2800–28FF) and block elements (U+2580–259F). Fonts often lack braille, and a fallback
-//! font's dots don't fit the cell (some draw unset dots hollow, so btop's graphs turn into
-//! hatching); blocks drawn from a font leave gaps when the line height isn't the font's.
-//! Drawn here, they fill the cell exactly and line up with their neighbors.
+//! Cell-sized glyphs drawn without the font, as in Ghostty. Box drawing and blocks
+//! meet at cell edges even with extra line spacing, and braille draws only set dots.
 
-/// Whether rexia draws `c` itself.
-pub fn is_sprite(c: char) -> bool {
-    matches!(c as u32, 0x2800..=0x28FF | 0x2580..=0x259F)
+mod box_drawing;
+
+use box_drawing::BoxDrawing;
+use gpui::{Bounds, Hsla, Pixels, Point, Window, fill, point, px, size};
+
+pub(super) enum Sprite {
+    Box(BoxDrawing),
+    Braille(u8),
+    Block(u32),
+}
+
+impl Sprite {
+    pub(super) fn from_text(text: &str) -> Option<Self> {
+        let mut chars = text.chars();
+        let c = chars.next()?;
+        if chars.next().is_some() {
+            return None;
+        }
+        let code = c as u32;
+        match code {
+            0x2800..=0x28FF => Some(Self::Braille((code - 0x2800) as u8)),
+            0x2580..=0x259F => Some(Self::Block(code)),
+            _ => BoxDrawing::from_char(c).map(Self::Box),
+        }
+    }
+
+    pub(super) fn is_box(&self) -> bool {
+        matches!(self, Self::Box(_))
+    }
+
+    pub(super) fn paint(self, area: Bounds<Pixels>, light: f32, fg: Hsla, window: &mut Window) {
+        let cell = DeviceCell::new(area, window.scale_factor());
+        let (w, h) = (cell.width, cell.height);
+        let pieces = match self {
+            Self::Box(drawing) => return drawing.paint(cell, light, fg, window),
+            Self::Braille(bits) => braille(bits, w, h),
+            Self::Block(code) => block(code, w, h),
+        };
+        for p in pieces {
+            cell.paint(p, fg.opacity(fg.a), window);
+        }
+    }
+}
+
+struct DeviceCell {
+    origin: Point<f32>,
+    width: f32,
+    height: f32,
+    scale: f32,
+}
+
+impl DeviceCell {
+    fn new(bounds: Bounds<Pixels>, scale: f32) -> Self {
+        Self {
+            origin: bounds.origin.map(|v| (f32::from(v) * scale).round()),
+            width: (f32::from(bounds.size.width) * scale).round(),
+            height: (f32::from(bounds.size.height) * scale).round(),
+            scale,
+        }
+    }
+
+    fn point(&self, x: f32, y: f32) -> Point<Pixels> {
+        point(
+            px((self.origin.x + x) / self.scale),
+            px((self.origin.y + y) / self.scale),
+        )
+    }
+
+    fn paint(&self, p: Piece, fg: Hsla, window: &mut Window) {
+        if p.w > 0. && p.h > 0. {
+            let area = Bounds::new(
+                self.point(p.x, p.y),
+                size(px(p.w / self.scale), px(p.h / self.scale)),
+            );
+            window.paint_quad(fill(area, fg.opacity(p.alpha)));
+        }
+    }
 }
 
 /// A filled rectangle within a cell, in pixels from the cell's top-left, with its opacity.
 #[derive(Clone, Copy, Debug, PartialEq)]
-pub struct Piece {
-    pub x: f32,
-    pub y: f32,
-    pub w: f32,
-    pub h: f32,
-    pub alpha: f32,
-}
-
-/// The pieces that draw `c` in a cell `width` × `height` device pixels, or nothing when rexia
-/// doesn't draw it. Edges land on whole pixels.
-pub fn pieces(c: char, width: f32, height: f32) -> Vec<Piece> {
-    let code = c as u32;
-    match code {
-        0x2800..=0x28FF => braille((code - 0x2800) as u8, width.round(), height.round()),
-        0x2580..=0x259F => block(code, width.round(), height.round()),
-        _ => Vec::new(),
-    }
+struct Piece {
+    x: f32,
+    y: f32,
+    w: f32,
+    h: f32,
+    alpha: f32,
 }
 
 fn piece(x: f32, y: f32, w: f32, h: f32) -> Piece {
@@ -180,6 +240,14 @@ fn block(code: u32, w: f32, h: f32) -> Vec<Piece> {
 mod tests {
     use super::*;
 
+    fn pieces(c: char, width: f32, height: f32) -> Vec<Piece> {
+        match Sprite::from_text(c.encode_utf8(&mut [0; 4])) {
+            Some(Sprite::Braille(bits)) => braille(bits, width, height),
+            Some(Sprite::Block(code)) => block(code, width, height),
+            _ => Vec::new(),
+        }
+    }
+
     #[test]
     fn braille_draws_only_the_dots_that_are_set() {
         assert!(pieces('⠀', 10., 20.).is_empty());
@@ -227,6 +295,10 @@ mod tests {
         assert_eq!(pieces('▐', 10., 20.), vec![piece(5., 0., 5., 20.)]);
         assert_eq!(pieces('▒', 10., 20.)[0].alpha, 0.5);
         assert_eq!(pieces('▚', 10., 20.).len(), 2);
-        assert!(!is_sprite('a') && is_sprite('⣿') && is_sprite('▓'));
+        assert!(Sprite::from_text("a").is_none());
+        assert!(Sprite::from_text("⣿").is_some());
+        assert!(Sprite::from_text("▓").is_some());
+        assert!(Sprite::from_text("│").unwrap().is_box());
+        assert!(Sprite::from_text("│\u{301}").is_none());
     }
 }

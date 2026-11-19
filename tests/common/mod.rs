@@ -179,12 +179,12 @@ impl Harness {
         height: f32,
         renderer: impl Fn() -> anyhow::Result<Option<Box<dyn gpui::PlatformHeadlessRenderer>>> + 'static,
     ) -> Self {
-        let mut cx = HeadlessAppContext::with_platform(
-            Arc::new(gpui_wgpu::CosmicTextSystem::new("DM Sans")),
-            Arc::new(Assets),
-            renderer,
-        );
-        cx.update(|cx| cx.set_global(Theme::from_noctalia(&noctalia::load())));
+        let text = Arc::new(gpui_wgpu::CosmicTextSystem::new("DM Sans"));
+        let mut cx = HeadlessAppContext::with_platform(text.clone(), Arc::new(Assets), renderer);
+        cx.update(|cx| {
+            cx.set_global(Theme::from_noctalia(&noctalia::load()));
+            cx.set_global(rexia::ui::fonts::TerminalFontMetrics(text));
+        });
         let window = cx
             .open_window(size(px(width), px(height)), |window, cx| {
                 cx.new(|cx| Workspace::new(settings, path, false, window, cx))

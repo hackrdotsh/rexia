@@ -9,7 +9,7 @@ pub mod icons;
 pub mod input;
 pub mod keys;
 pub mod program_icons;
-pub mod sprites;
+mod sprites;
 pub mod terminal;
 pub mod text_color;
 pub mod theme;

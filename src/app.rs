@@ -69,10 +69,13 @@ pub fn run() -> anyhow::Result<()> {
         settings.last_session = Some(session);
     }
 
-    gpui_platform::application()
+    let platform = gpui_platform::current_platform(false);
+    let font_metrics = crate::ui::fonts::TerminalFontMetrics(platform.text_system());
+    gpui::Application::with_platform(platform)
         .with_assets(Assets)
         .run(move |cx: &mut App| {
             cx.set_global(Theme::from_noctalia(&noctalia::load()));
+            cx.set_global(font_metrics);
             // rexia quits when its last window closes.
             cx.on_window_closed(|cx, _| {
                 if cx.windows().is_empty() {

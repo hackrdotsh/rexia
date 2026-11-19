@@ -149,6 +149,8 @@ Working:
 
 - Braille draws with Ghostty's dot size and spacing: spare pixels widen the margins and the
   gaps between dots before the dots grow, so btop's graphs look as they do in Ghostty.
+- Common light and heavy box-drawing lines and rounded corners draw to the cell edges,
+  so jj graphs and OpenCode borders stay connected even with extra line spacing.
 - Terminal cells round to the nearest device pixel, as Ghostty's do, so a font's cell is
   the same size in both (DepartureMono 11 pt at 1.5×: 14 × 28) and braille stays evenly
   spaced across rows.

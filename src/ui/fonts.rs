@@ -1,6 +1,20 @@
 //! The terminal font: the user's choice, else Ghostty's `font-family`/`font-size`, else
 //! fontconfig's monospace font.
 use std::path::PathBuf;
+use std::sync::Arc;
+
+use gpui::{FontId, Global, Pixels, PlatformTextSystem};
+
+/// Access to metrics GPUI's window text API doesn't expose.
+pub struct TerminalFontMetrics(pub Arc<dyn PlatformTextSystem>);
+
+impl Global for TerminalFontMetrics {}
+
+impl TerminalFontMetrics {
+    pub(super) fn underline_thickness(&self, font: FontId, size: Pixels) -> f32 {
+        f32::from(self.0.font_metrics(font).underline_thickness(size))
+    }
+}
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct TerminalFont {

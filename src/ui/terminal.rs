@@ -1513,8 +1513,8 @@ pub fn cell_in_device_pixels(width: Pixels, height: Pixels, scale: f32) -> CellS
     }
 }
 
-/// A character rexia draws itself (see `sprites`): its column, the character and its color.
-type Sprite = (u16, char, Hsla);
+/// The column, drawing, and foreground of a cell painted without shaping text.
+type SpriteCell = (u16, super::sprites::Sprite, Hsla);
 
 fn hovered_link(frame: &Frame, x: u16, y: u16) -> Option<std::ops::Range<u16>> {
     let cells = frame.lines.get(usize::from(y))?;
@@ -1557,9 +1557,9 @@ fn hovered_link(frame: &Frame, x: u16, y: u16) -> Option<std::ops::Range<u16>> {
 fn segments(
     cells: &[crate::rex::stream::Cell],
     look: &Look,
-) -> (Vec<Segment>, Vec<Background>, Vec<Sprite>) {
+) -> (Vec<Segment>, Vec<Background>, Vec<SpriteCell>) {
     let palette = &look.palette;
-    let mut sprites: Vec<Sprite> = Vec::new();
+    let mut sprites: Vec<SpriteCell> = Vec::new();
     let mut segments: Vec<Segment> = Vec::new();
     let mut backgrounds: Vec<Background> = Vec::new();
     for (col, cell) in cells.iter().enumerate() {
@@ -1603,12 +1603,10 @@ fn segments(
             .then_some(cell.has(flags::CURLY_UNDERLINE)),
             strike: cell.has(flags::STRIKE),
         };
-        let mut chars = cell.text.chars();
-        if let (Some(c), None) = (chars.next(), chars.next())
-            && !cell.has(flags::WIDE)
-            && super::sprites::is_sprite(c)
+        if !cell.has(flags::WIDE)
+            && let Some(sprite) = super::sprites::Sprite::from_text(&cell.text)
         {
-            sprites.push((col, c, fg));
+            sprites.push((col, sprite, fg));
             continue;
         }
         // Nerd Fonts and Powerline use private-use glyphs that can deliberately
@@ -1930,25 +1928,24 @@ impl Render for TerminalPane {
                             }
                         }
                     }
-                    // Braille and block elements, drawn to fit the cell exactly.
-                    let scale = window.scale_factor();
-                    let (cw, ch) = (
-                        f32::from(cell.width) * scale,
-                        f32::from(cell.height) * scale,
-                    );
-                    for (row, col, c, fg) in drawn {
-                        let at = cell_bounds(col, row, 1).origin;
-                        let (x0, y0) = (
-                            (f32::from(at.x) * scale).round(),
-                            (f32::from(at.y) * scale).round(),
-                        );
-                        for p in super::sprites::pieces(c, cw, ch) {
-                            let area = Bounds::new(
-                                point(px((x0 + p.x) / scale), px((y0 + p.y) / scale)),
-                                size(px(p.w / scale), px(p.h / scale)),
-                            );
-                            window.paint_quad(fill(area, fg.opacity(fg.a * p.alpha)));
-                        }
+                    let box_stroke = if drawn.iter().any(|(_, _, sprite, _)| sprite.is_box()) {
+                        let text = window.text_system();
+                        let font = text.resolve_font(&terminal_font);
+                        let thickness = cx
+                            .try_global::<super::fonts::TerminalFontMetrics>()
+                            .map_or(0., |metrics| metrics.underline_thickness(font, font_size));
+                        // Ghostty's light box stroke uses the font's underline thickness.
+                        let thickness = if thickness > 0. {
+                            thickness
+                        } else {
+                            f32::from(text.x_height(font, font_size)) * 0.15
+                        };
+                        (thickness * scale).ceil().max(1.)
+                    } else {
+                        1.
+                    };
+                    for (row, col, sprite, fg) in drawn {
+                        sprite.paint(cell_bounds(col, row, 1), box_stroke, fg, window);
                     }
                     paint_images(Layer::AboveText, window);
                     if let Some((row, range)) = hover {
@@ -1997,7 +1994,11 @@ impl Render for TerminalPane {
                                     .get(cursor.x as usize)
                                     .map(|c| c.text.clone())
                                     .unwrap_or_default();
-                                if !text.trim().is_empty() {
+                                if !cursor.wide
+                                    && let Some(sprite) = super::sprites::Sprite::from_text(&text)
+                                {
+                                    sprite.paint(area, box_stroke, cursor_text, window);
+                                } else if !text.trim().is_empty() {
                                     let run = TextRun {
                                         len: text.len(),
                                         font: terminal_font.clone(),
