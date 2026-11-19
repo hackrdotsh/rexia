@@ -218,10 +218,15 @@ class X11:
         finally:
             self.destroy_image(frame)
 
-    def key(self, letter):
+    def key(self, letter, alt=False):
         code = self.keycode(self.display, 0xFF1B if letter == "Escape" else ord(letter))
+        if alt:
+            alt_code = self.keycode(self.display, 0xFFE9)  # Alt_L
+            self.key_event(self.display, alt_code, 1, 0)
         self.key_event(self.display, code, 1, 0)
         self.key_event(self.display, code, 0, 0)
+        if alt:
+            self.key_event(self.display, alt_code, 0, 0)
         self.sync(self.display, 0)
 
 
@@ -340,6 +345,8 @@ def run(binary, case, directory):
             return json.loads(result) if as_json else result
 
         old_color, cold_color, split_color = 0xD92143, 0x16CB52, 0x1379DE
+        other_color = 0xB552E0
+        closing = case in ("close", "close-select")
         clicks = directory / "clicks"
         clicks.write_bytes(b"")
         probe = (
@@ -363,7 +370,8 @@ def run(binary, case, directory):
         if case != "focus":
             tabs = []
             for index in range(5):
-                color = b"\x1b[48;2;22;203;82m\x1b[2J\x1b[H"
+                rgb = "181;82;224" if index == 0 else "22;203;82"
+                color = f"\x1b[48;2;{rgb}m\x1b[2J\x1b[H".encode()
                 script = f"import os,time; os.write(1,{color!r}); time.sleep(60)"
                 tabs.append(
                     rex(
@@ -485,6 +493,39 @@ def run(binary, case, directory):
         else:
             wait("the old tab and four prewarmed neighbors", lambda: gate.opened == 5)
             gate.hold.set()
+            if closing:
+                rex(
+                    "api",
+                    "call",
+                    "-s",
+                    session,
+                    "session.move_window",
+                    json.dumps(
+                        {
+                            "window_id": cold["window_id"],
+                            "before_window_id": tabs[2]["window_id"],
+                        }
+                    ),
+                    as_json=False,
+                )
+                rex("window", "close", "-s", session, old_window, as_json=False)
+                assert (
+                    rex("session", "inspect", session)["active_window_id"]
+                    == cold["window_id"]
+                )
+                verify_closed_tab(
+                    x,
+                    window,
+                    gate,
+                    old_color,
+                    cold_color,
+                    split_color,
+                    other_color,
+                    case,
+                    lambda: rex("session", "inspect", session)["active_window_id"],
+                    tabs[0]["window_id"],
+                )
+                return
             rex("focus", "-s", session, cold["window_id"], as_json=False)
             wait(
                 "one cold stream held and the other opened",
@@ -547,9 +588,67 @@ def send_marker(x, log):
     return b"d" in log.read_bytes()
 
 
+def verify_closed_tab(
+    x, window, gate, old, cold, split, other, case, active_tab, other_window
+):
+    wait(
+        "one successor stream held and one opened",
+        lambda: gate.waiting.is_set() and gate.opened == 6,
+    )
+    wait("the closed terminal disappearing", lambda: old not in x.sample(window)[1])
+    start = time.monotonic()
+    while time.monotonic() - start < 1.25:
+        loading_strip, colors = x.sample(window)
+        assert not {old, cold, split, other} & colors, (
+            "a successor terminal appeared while the other stream was held"
+        )
+        assert len(colors) > 1, (
+            "the waiting area was blank instead of showing a loading card"
+        )
+        time.sleep(0.01)
+    if case == "close-select":
+        x.key("1", alt=True)
+        wait(
+            "Alt+1 selecting the first tab on Rex", lambda: active_tab() == other_window
+        )
+        wait(
+            "another tab selected while the successor is still held",
+            lambda: other in x.sample(window)[1],
+        )
+        gate.release.set()
+        wait("the abandoned successor stream opening", lambda: gate.opened == 7)
+        until = time.monotonic() + 0.2
+        while time.monotonic() < until:
+            _, colors = x.sample(window)
+            assert other in colors and not {cold, split} & colors, (
+                "late data reopened the successor"
+            )
+            time.sleep(0.01)
+        print(
+            "Closed tab: Alt+1 selected another tab; late data did not reopen the successor",
+            flush=True,
+        )
+        return
+
+    gate.release.set()
+
+    def new_layout():
+        sample = x.sample(window)
+        return sample if sample[0] != loading_strip else None
+
+    first = wait("the successor selected in a native frame", new_layout)
+    assert {cold, split} <= first[1], (
+        "first observed successor layout lacked a terminal"
+    )
+    print(
+        "Closed tab: separate loading state for 1.25s; first observed successor layout contained both terminals",
+        flush=True,
+    )
+
+
 if __name__ == "__main__":
     case = sys.argv[2]
-    assert case in ("focus", "tabs", "slow", "retry", "cancel")
+    assert case in ("focus", "tabs", "slow", "retry", "cancel", "close", "close-select")
     parent = os.environ.get("REXIA_TEST_X11_LOG_DIR")
     if parent:
         directory = Path(tempfile.mkdtemp(prefix=f"x11-{case}-", dir=parent))

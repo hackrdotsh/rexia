@@ -646,6 +646,21 @@ impl Workspace {
         for block in walkthroughs {
             self.fetch_onboarding(&session_id, &block, cx);
         }
+        if let Some(block) = self
+            .focused
+            .as_ref()
+            .filter(|id| !model.panes.contains_key(*id))
+        {
+            // Preserve workspace shortcuts when a tab closes before its successor can draw.
+            if self
+                .panes
+                .get(block)
+                .is_some_and(|pane| pane.read(cx).has_focus(window))
+            {
+                window.focus(&self.focus, cx);
+            }
+            self.focused = None;
+        }
         // Keep the GPUI terminal entities for tabs we've shown. A switch then
         // reuses focus, sizing and drawing state rather than creating new panes.
         self.panes
@@ -2750,7 +2765,7 @@ impl Render for Workspace {
         self.settle_session_preview();
         let theme = Theme::get(cx).clone();
         let mut model = self.model();
-        self.apply_presented_tab(&mut model);
+        let loading_tab = self.apply_presented_tab(&mut model);
         let layout = self.settings.interface.toolbar_layout;
         let floats = self.toolbar_floats();
         let shown = self.toolbar_visible();
@@ -2849,8 +2864,10 @@ impl Render for Workspace {
         } else {
             None
         };
-        let previous_available = self.presented_in(&model).is_some();
-        let panes = if self.pending_tab.is_some() {
+        let panes = if loading_tab {
+            let previous_available = model
+                .view()
+                .is_some_and(|view| view.active_window_id.is_some());
             div()
                 .relative()
                 .flex()

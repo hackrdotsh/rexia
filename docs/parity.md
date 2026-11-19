@@ -28,7 +28,8 @@ uses an external Rex server and has been tested on API revisions 14 and 18.
 - Rexia retains terminal views when switching back and prepares nearby tabs in
   the background. When switching to a cold tab, Rexia keeps the previous layout
   visible until all the new terminals have a frame, even if a stream needs to
-  retry. Press Escape or choose Cancel to stay on the previous tab.
+  retry. Press Escape or choose Cancel to stay on the previous tab. If it was
+  closed, Rexia shows a loading card instead. You can still select another tab.
 - First clicks focus inactive terminal panes without sending a click to the
   program. On X11, this also applies to the click the window manager replays
   after activating Rexia. Minimized floating panes stay restorable when a tab

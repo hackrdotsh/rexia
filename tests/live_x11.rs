@@ -42,3 +42,13 @@ fn cold_tab_waits_through_an_automatic_retry() {
 fn escape_cancels_a_pending_tab_switch() {
     native("cancel");
 }
+
+#[test]
+fn closing_a_tab_waits_for_its_cold_successor() {
+    native("close");
+}
+
+#[test]
+fn another_tab_can_be_selected_while_the_successor_waits() {
+    native("close-select");
+}

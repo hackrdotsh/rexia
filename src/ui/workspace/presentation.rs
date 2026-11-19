@@ -21,19 +21,30 @@ pub(super) struct Pending {
 }
 
 impl Workspace {
-    pub(super) fn presented_in(&self, model: &HostModel) -> Option<&Tab> {
+    fn presented_for_session(&self, model: &HostModel) -> Option<&Tab> {
         self.presented_tab.as_ref().filter(|tab| {
-            tab.host == self.host().config.id
-                && model.selected.as_ref() == Some(&tab.session)
-                && model
-                    .view()
-                    .is_some_and(|view| view.window(&tab.window).is_some())
+            tab.host == self.host().config.id && model.selected.as_ref() == Some(&tab.session)
         })
     }
 
-    pub(super) fn apply_presented_tab(&self, model: &mut HostModel) {
+    fn presented_in(&self, model: &HostModel) -> Option<&Tab> {
+        self.presented_for_session(model).filter(|tab| {
+            model
+                .view()
+                .is_some_and(|view| view.window(&tab.window).is_some())
+        })
+    }
+
+    /// Return whether to show the loading card. A redraw can see the close before
+    /// sync records the pending switch, so compare the presented tab to this model.
+    pub(super) fn apply_presented_tab(&self, model: &mut HostModel) -> bool {
         let shown = self.presented_in(model).map(|tab| tab.window.clone());
-        if (shown.is_some() || self.pending_tab.is_some())
+        let loading = self.presented_for_session(model).is_some()
+            && model
+                .view()
+                .and_then(View::active_window)
+                .is_some_and(|active| shown.as_deref() != Some(active.id()));
+        if (shown.is_some() || loading)
             && let Some(view) = model
                 .selected
                 .as_ref()
@@ -41,6 +52,7 @@ impl Workspace {
         {
             view.active_window_id = shown;
         }
+        loading
     }
 
     /// Keep the last drawn tab until its replacement can be painted alongside its tab
@@ -66,11 +78,12 @@ impl Workspace {
             session: session.clone(),
             window: tab.id().to_owned(),
         };
-        let already_shown = self.presented_in(model);
-        let waiting_here = self.pending_tab.as_ref().is_some_and(|pending| {
-            pending.target.host == target.host && pending.target.session == target.session
-        });
-        if already_shown == Some(&target) || (already_shown.is_none() && !waiting_here) {
+        // A closed tab still counts as a previous presentation in this session.
+        // Only the first view of a session may show its terminals as they attach.
+        if self
+            .presented_for_session(model)
+            .is_none_or(|shown| *shown == target)
+        {
             self.presented_tab = Some(target);
             self.pending_tab = None;
             return;
@@ -104,11 +117,13 @@ impl Workspace {
             .is_none_or(|pending| pending.target != target)
         {
             // Keep shortcut handling active without sending text to either terminal mid-switch.
-            if self
-                .focused
-                .as_ref()
-                .and_then(|id| self.panes.get(id))
-                .is_some_and(|pane| pane.read(cx).focus_handle(cx).is_focused(window))
+            if self.overlay.is_none()
+                && (window.focused(cx).is_none()
+                    || self
+                        .focused
+                        .as_ref()
+                        .and_then(|id| self.panes.get(id))
+                        .is_some_and(|pane| pane.read(cx).focus_handle(cx).is_focused(window)))
             {
                 window.focus(&self.focus, cx);
                 self.focused = None;
