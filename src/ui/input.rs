@@ -8,10 +8,11 @@ use gpui::{
 #[derive(Clone, Debug, PartialEq)]
 pub enum InputEvent {
     Changed(String),
-    /// Enter, with whether shift was held.
+    /// Enter and its modifiers.
     Submit {
         shift: bool,
         alt: bool,
+        primary: bool,
     },
     Cancel,
     /// Up (-1) or Down (1), for moving through a list under the field.
@@ -158,6 +159,7 @@ impl TextInput {
                 cx.emit(InputEvent::Submit {
                     shift: m.shift,
                     alt: m.alt,
+                    primary: ctrl,
                 });
                 true
             }

@@ -25,6 +25,7 @@ pub mod palette_host;
 mod preferences;
 pub mod quick_look;
 pub mod remote;
+mod script_prompt;
 pub mod server_status;
 pub mod sessions;
 pub mod settings_search;
@@ -587,6 +588,7 @@ impl Workspace {
         self.prune_forwards();
         self.refresh_keymap();
         self.handle_performs(window, cx);
+        self.sync_script_prompt(window, cx);
         self.fetch_unknown_tabs(cx);
         self.process_activity(window);
         self.check_tailscale();

@@ -6,6 +6,7 @@ use super::{
     client::{self, Control, Event, Identity},
     data::{self, PROTOCOL, TERMINAL_CREATOR},
     endpoint::{self, Endpoint},
+    prompt,
     stream::{CursorShape, Frame, SelectMode, TermEvent, TerminalState, TerminalTheme},
     view::{SessionSummary, View},
 };
@@ -92,6 +93,7 @@ pub struct HostModel {
     pub notices: Vec<String>,
     pub notifications: Vec<Notification>,
     pub performs: Vec<PerformRequest>,
+    pub prompt: Option<prompt::Request>,
     pub keymap: Option<Value>,
     pub hosts: Vec<Value>,
     /// Bumped on every reconnect, when activity is re-read from scratch.
@@ -339,6 +341,10 @@ pub enum HostCommand {
     PerformReply {
         call_id: String,
         result: Result<Value, (String, String)>,
+    },
+    PromptReply {
+        call_id: String,
+        result: Value,
     },
     SetLabel(Option<String>),
     /// Show this tab of the session in this client whatever the session's active tab is,
@@ -593,6 +599,7 @@ async fn run(
     loop {
         let outcome = host.session(&commands, &mut token).await;
         host.link.lock().expect("link").control = None;
+        host.shared.update(|m| m.prompt = None);
         let mut stopped = false;
         match outcome {
             Ok(Stop::Shutdown) => return,
@@ -673,6 +680,32 @@ enum Stop {
 }
 
 impl Host {
+    fn start_promptable(
+        &self,
+        control: &Control,
+        method: &str,
+        payload: Value,
+        reply: Option<Reply>,
+    ) -> Result<()> {
+        let answer = control.start_call(method, payload, client::ACTION_TIMEOUT)?;
+        let shared = self.shared.clone();
+        tokio::spawn(async move {
+            let result = answer.await;
+            if let Some(reply) = reply {
+                let _ = reply.send(
+                    result
+                        .map(|reply| reply.value)
+                        .map_err(|err| format!("{err:#}")),
+                );
+            } else if let Err(error) = result
+                && !client::is_disconnect(&error)
+            {
+                shared.notice(format!("{error:#}"));
+            }
+        });
+        Ok(())
+    }
+
     async fn session(
         &mut self,
         commands: &flume::Receiver<HostCommand>,
@@ -715,7 +748,9 @@ impl Host {
                     let Some(event) = event else {
                         return Err(anyhow!("the connection to Rex ended"));
                     };
-                    if floors.admits(&event) {
+                    if matches!(event.name.as_str(), "client_prompt_requested" | "client_prompt_ended")
+                        || floors.admits(&event)
+                    {
                         self.handle_event(&control, &mut floors, event).await?;
                     }
                 }
@@ -1096,6 +1131,28 @@ impl Host {
                     self.shared.update(|m| m.performs.push(request));
                 }
             }
+            "client_prompt_requested" => {
+                match serde_json::from_value::<prompt::Request>(event.payload.clone()) {
+                    Ok(request) if self.shared.read(|m| m.prompt.is_none()) => {
+                        self.shared.update(|m| m.prompt = Some(request));
+                    }
+                    _ => {
+                        if let Some(call_id) = event.payload["call_id"].as_str() {
+                            let _ = control.call("client.reply", json!({"call_id": call_id,
+                                "error": {"code": "not_supported", "message": "Rexia can't show this prompt"}})).await;
+                        }
+                    }
+                }
+            }
+            "client_prompt_ended" => {
+                if let Some(id) = event.payload["call_id"].as_str() {
+                    self.shared.update(|m| {
+                        if m.prompt.as_ref().is_some_and(|p| p.call_id == id) {
+                            m.prompt = None;
+                        }
+                    });
+                }
+            }
             "keymap_changed" => {
                 let changed = self.shared.read(|m| {
                     m.keymap
@@ -1196,6 +1253,15 @@ impl Host {
                 method,
                 payload,
                 reply,
+            } if method == "client.action"
+                && control.welcome.api_revision >= client::PROMPT_REVISION =>
+            {
+                self.start_promptable(control, &method, payload, reply)?;
+            }
+            HostCommand::Call {
+                method,
+                payload,
+                reply,
             } => {
                 let result = control.value(&method, payload).await;
                 match (result, reply) {
@@ -1228,7 +1294,12 @@ impl Host {
                 if claim && !owner {
                     self.claim(control, &session_id, &block_id).await;
                 }
-                control.call(method, payload).await?;
+                if method == "client.key" && control.welcome.api_revision >= client::PROMPT_REVISION
+                {
+                    self.start_promptable(control, method, payload, None)?;
+                } else {
+                    control.call(method, payload).await?;
+                }
             }
             HostCommand::Resize {
                 session_id,
@@ -1275,6 +1346,27 @@ impl Host {
                     }
                 };
                 control.call("client.reply", payload).await?;
+            }
+            HostCommand::PromptReply { call_id, result } => {
+                if !self
+                    .shared
+                    .read(|m| m.prompt.as_ref().is_some_and(|p| p.call_id == call_id))
+                {
+                    return Ok(());
+                }
+                let reply = control
+                    .call(
+                        "client.reply",
+                        json!({"call_id": call_id, "result": result}),
+                    )
+                    .await;
+                if reply.is_ok()
+                    || reply.as_ref().err().and_then(client::error_code) == Some("not_found")
+                {
+                    self.shared.update(|m| m.prompt = None);
+                } else {
+                    reply?;
+                }
             }
             HostCommand::SetLabel(label) => {
                 self.identity.label = label.clone();

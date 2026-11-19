@@ -242,6 +242,7 @@ pub enum Overlay {
     List(ListOverlay),
     Dialog(Dialog),
     Settings(Box<super::preferences::SettingsPage>),
+    ScriptPrompt(Box<super::script_prompt::ScriptPrompt>),
 }
 
 fn forward_port_title(port: u16) -> String {
@@ -762,6 +763,10 @@ impl Workspace {
     }
 
     pub fn close_overlay(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        if matches!(&self.overlay, Some(Overlay::ScriptPrompt(_))) {
+            self.answer_script_prompt(serde_json::json!({"cancelled": true}), window, cx);
+            return;
+        }
         self.overlay = None;
         self.refocus(window, cx);
         // A question asked from the Shortcuts page goes back to it, either way.
@@ -1583,6 +1588,11 @@ impl Workspace {
                 .w(px(820.))
                 .h(px(600.))
                 .child(self.render_settings(page, theme, cx))
+                .into_any_element(),
+            Overlay::ScriptPrompt(prompt) => panel
+                .w(px(640.).min(window.viewport_size().width - px(32.)))
+                .max_h(px(520.).min(window.viewport_size().height - px(96.)))
+                .child(self.render_script_prompt(prompt, theme, cx))
                 .into_any_element(),
         };
         Some(

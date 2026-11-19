@@ -10,6 +10,7 @@ pub mod host;
 pub mod images;
 pub mod install;
 pub mod onboarding;
+pub mod prompt;
 pub mod ssh_agent;
 pub mod stream;
 pub mod upload;

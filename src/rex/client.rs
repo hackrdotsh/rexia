@@ -19,9 +19,11 @@ use tokio_tungstenite::tungstenite::Message;
 pub const PROTOCOL: &str = "rex.control.v1";
 /// The oldest API revision rexia speaks.
 pub const MIN_API_REVISION: u32 = 8;
-/// The newest API revision rexia speaks: Rex v0.1.0-preview.19.
-pub const API_REVISION: u32 = 14;
+/// The newest API revision rexia speaks: Rex v0.1.0-preview.21.
+pub const API_REVISION: u32 = 18;
+pub const PROMPT_REVISION: u32 = 17;
 const REQUEST_TIMEOUT: Duration = Duration::from_secs(10);
+pub(super) const ACTION_TIMEOUT: Duration = Duration::from_secs(3660);
 
 /// Who this client is, as the server lists it in `client.list` and `rex client ls`.
 #[derive(Clone, Debug)]
@@ -291,6 +293,16 @@ impl Control {
 
     /// Send a request and wait for its reply.
     pub async fn call(&self, method: &str, payload: Value) -> Result<Reply> {
+        self.start_call(method, payload, REQUEST_TIMEOUT)?.await
+    }
+
+    /// Send now so an action can wait for a UI prompt without blocking the event loop.
+    pub(super) fn start_call(
+        &self,
+        method: &str,
+        payload: Value,
+        timeout: Duration,
+    ) -> Result<impl Future<Output = Result<Reply>> + use<>> {
         let id = (self.next_id.fetch_add(1, Ordering::Relaxed) + 1).to_string();
         let (reply, answer) = oneshot::channel();
         self.pending
@@ -306,14 +318,18 @@ impl Control {
             self.pending.lock().expect("pending requests").remove(&id);
             return Err(Disconnected("the connection is closed".into()).into());
         }
-        match tokio::time::timeout(REQUEST_TIMEOUT, answer).await {
-            Ok(Ok(result)) => result,
-            Ok(Err(_)) => Err(Disconnected("the connection is closed".into()).into()),
-            Err(_) => {
-                self.pending.lock().expect("pending requests").remove(&id);
-                Err(anyhow!("{method} timed out; it was not retried"))
+        let pending = self.pending.clone();
+        let method = method.to_owned();
+        Ok(async move {
+            match tokio::time::timeout(timeout, answer).await {
+                Ok(Ok(result)) => result,
+                Ok(Err(_)) => Err(Disconnected("the connection is closed".into()).into()),
+                Err(_) => {
+                    pending.lock().expect("pending requests").remove(&id);
+                    Err(anyhow!("{method} timed out; it was not retried"))
+                }
             }
-        }
+        })
     }
 
     /// The value of a successful call.

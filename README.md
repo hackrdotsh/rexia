@@ -2,8 +2,8 @@
 
 A native Linux client for [Rex](https://www.superlogical.com/rex), built on
 [GPUI](https://github.com/zed-industries/zed/tree/main/crates/gpui) and themed by
-[Noctalia](https://noctalia.dev). It attaches to Rex servers (API revisions 8–14,
-current with Rex v0.1.0-preview.19) and follows Noctalia's palette, corner
+[Noctalia](https://noctalia.dev). It attaches to Rex servers (API revisions 8–18,
+including Rex v0.1.0-preview.21) and follows Noctalia's palette, corner
 radius, borders, and fonts.
 
 rexia is unofficial and isn't affiliated with Superlogical.
