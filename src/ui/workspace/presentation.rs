@@ -1,14 +1,12 @@
-use super::Workspace;
+use super::{Workspace, preferences};
 use crate::rex::{
     data::TERMINAL_CREATOR,
-    host::{HostModel, PaneStatus},
+    host::{HostCommand, HostModel},
     view::View,
 };
-use gpui::{Context, Focusable, Window};
-use std::time::{Duration, Instant};
-
-// A slow or unavailable server must not leave the old tab on screen indefinitely.
-const WAIT_FOR_FRAME: Duration = Duration::from_millis(800);
+use crate::ui::theme::Theme;
+use gpui::{Context, Focusable, Role, Window, div, prelude::*, px};
+use serde_json::json;
 
 #[derive(Clone, Eq, PartialEq)]
 pub(super) struct Tab {
@@ -19,12 +17,11 @@ pub(super) struct Tab {
 
 pub(super) struct Pending {
     target: Tab,
-    since: Instant,
-    _timeout: gpui::Task<()>,
+    returning: bool,
 }
 
 impl Workspace {
-    fn presented_in(&self, model: &HostModel) -> Option<&Tab> {
+    pub(super) fn presented_in(&self, model: &HostModel) -> Option<&Tab> {
         self.presented_tab.as_ref().filter(|tab| {
             tab.host == self.host().config.id
                 && model.selected.as_ref() == Some(&tab.session)
@@ -35,10 +32,14 @@ impl Workspace {
     }
 
     pub(super) fn apply_presented_tab(&self, model: &mut HostModel) {
-        if let Some(tab) = self.presented_in(model)
-            && let Some(view) = model.views.get_mut(&tab.session)
+        let shown = self.presented_in(model).map(|tab| tab.window.clone());
+        if (shown.is_some() || self.pending_tab.is_some())
+            && let Some(view) = model
+                .selected
+                .as_ref()
+                .and_then(|id| model.views.get_mut(id))
         {
-            view.active_window_id = Some(tab.window.clone());
+            view.active_window_id = shown;
         }
     }
 
@@ -66,9 +67,19 @@ impl Workspace {
             window: tab.id().to_owned(),
         };
         let already_shown = self.presented_in(model);
-        if already_shown.is_none_or(|shown| *shown == target) {
+        let waiting_here = self.pending_tab.as_ref().is_some_and(|pending| {
+            pending.target.host == target.host && pending.target.session == target.session
+        });
+        if already_shown == Some(&target) || (already_shown.is_none() && !waiting_here) {
             self.presented_tab = Some(target);
             self.pending_tab = None;
+            return;
+        }
+        if self
+            .pending_tab
+            .as_ref()
+            .is_some_and(|pending| pending.returning && pending.target == target)
+        {
             return;
         }
         let ready = tab.panes().into_iter().all(|pane| {
@@ -79,19 +90,12 @@ impl Workspace {
                 return true;
             }
             self.panes.contains_key(&pane.block_id)
-                && model.panes.get(&pane.block_id).is_some_and(|handle| {
-                    let pane = handle.snapshot();
-                    pane.frame.is_some()
-                        || matches!(
-                            pane.status,
-                            PaneStatus::Reconnecting(_) | PaneStatus::Closed
-                        )
-                })
+                && model
+                    .panes
+                    .get(&pane.block_id)
+                    .is_some_and(|handle| handle.snapshot().frame.is_some())
         });
-        let expired = self.pending_tab.as_ref().is_some_and(|pending| {
-            pending.target == target && pending.since.elapsed() >= WAIT_FOR_FRAME
-        });
-        if ready || expired {
+        if ready {
             self.presented_tab = Some(target);
             self.pending_tab = None;
         } else if self
@@ -109,16 +113,106 @@ impl Workspace {
                 window.focus(&self.focus, cx);
                 self.focused = None;
             }
-            let since = Instant::now();
-            let timeout = cx.background_executor().timer(WAIT_FOR_FRAME);
             self.pending_tab = Some(Pending {
                 target,
-                since,
-                _timeout: cx.spawn_in(window, async move |workspace, cx| {
-                    timeout.await;
-                    let _ = workspace.update_in(cx, |ws, window, cx| ws.sync(window, cx));
-                }),
+                returning: false,
             });
         }
+    }
+
+    pub(super) fn cancel_tab_switch(&mut self, cx: &mut Context<Self>) -> bool {
+        let Some(previous) = self.presented_in(&self.model()).cloned() else {
+            return false;
+        };
+        let Some(pending) = self.pending_tab.as_mut() else {
+            return false;
+        };
+        if pending.returning {
+            return true;
+        }
+        // Hold the previous layout even if the last frame arrives before Rex confirms the return.
+        pending.returning = true;
+        let target = pending.target.clone();
+        self.pending.clear();
+        let host = self.host().handle.clone();
+        if self.pinned(self.active, &previous.session) {
+            host.send(HostCommand::Pin {
+                session: previous.session.clone(),
+                window: Some(previous.window.clone()),
+            });
+        }
+        cx.spawn(async move |workspace, cx| {
+            let result = host
+                .request(
+                    "session.focus_window",
+                    json!({
+                        "session_id": previous.session, "window_id": previous.window,
+                    }),
+                )
+                .await;
+            if let Err(reason) = result {
+                let _ = workspace.update(cx, |ws, cx| {
+                    if let Some(pending) = ws.pending_tab.as_mut()
+                        && pending.target == target
+                        && pending.returning
+                    {
+                        pending.returning = false;
+                        ws.notice = Some(format!("Couldn't cancel the tab switch: {reason}"));
+                        cx.notify();
+                    }
+                });
+            }
+        })
+        .detach();
+        cx.notify();
+        true
+    }
+
+    pub(super) fn render_tab_wait(
+        &self,
+        can_cancel: bool,
+        theme: &Theme,
+        cx: &mut Context<Self>,
+    ) -> impl IntoElement {
+        let returning = self
+            .pending_tab
+            .as_ref()
+            .is_some_and(|pending| pending.returning);
+        div()
+            .id("switching-tab")
+            .absolute()
+            .inset_0()
+            .occlude()
+            .flex()
+            .items_center()
+            .justify_center()
+            .child(
+                div()
+                    .flex()
+                    .items_center()
+                    .gap(px(10.))
+                    .px(px(12.))
+                    .py(px(6.))
+                    .rounded(theme.radius_small())
+                    .bg(theme.surface)
+                    .border(theme.border_width)
+                    .border_color(theme.border)
+                    .text_color(theme.text)
+                    .text_size(px(13.))
+                    .child(if returning {
+                        "Returning to tab…"
+                    } else {
+                        "Connecting tab…"
+                    })
+                    .when(can_cancel && !returning, |card| {
+                        card.child(
+                            preferences::button("cancel-tab-switch", "Cancel (Esc)", false, theme)
+                                .role(Role::Button)
+                                .on_click(cx.listener(|ws, _, _, cx| {
+                                    ws.cancel_tab_switch(cx);
+                                })),
+                        )
+                    }),
+            )
     }
 }

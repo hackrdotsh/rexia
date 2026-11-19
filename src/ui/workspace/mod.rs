@@ -2849,18 +2849,21 @@ impl Render for Workspace {
         } else {
             None
         };
-        let panes = self.render_panes(&model, &theme, cx);
+        let previous_available = self.presented_in(&model).is_some();
         let panes = if self.pending_tab.is_some() {
             div()
                 .relative()
                 .flex()
                 .flex_1()
                 .min_w_0()
-                .child(panes)
-                .child(div().id("switching-tab").absolute().inset_0().occlude())
+                .when(previous_available, |area| {
+                    area.child(self.render_panes(&model, &theme, cx))
+                })
+                .bg(theme.background)
+                .child(self.render_tab_wait(previous_available, &theme, cx))
                 .into_any_element()
         } else {
-            panes
+            self.render_panes(&model, &theme, cx)
         };
         let row = div().relative().flex().flex_1().min_h_0();
         // The sidebar's edge goes over both sides of the border, drawn after the panes so

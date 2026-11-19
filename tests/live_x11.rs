@@ -29,6 +29,16 @@ fn cold_tab_draws_all_its_terminals_with_its_first_layout() {
 }
 
 #[test]
-fn stalled_tab_shows_its_connecting_panes_and_still_recovers() {
-    native("stalled");
+fn cold_tab_waits_for_a_healthy_slow_stream() {
+    native("slow");
+}
+
+#[test]
+fn cold_tab_waits_through_an_automatic_retry() {
+    native("retry");
+}
+
+#[test]
+fn escape_cancels_a_pending_tab_switch() {
+    native("cancel");
 }

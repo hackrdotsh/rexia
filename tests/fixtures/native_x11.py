@@ -219,17 +219,21 @@ class X11:
             self.destroy_image(frame)
 
     def key(self, letter):
-        code = self.keycode(self.display, ord(letter))
+        code = self.keycode(self.display, 0xFF1B if letter == "Escape" else ord(letter))
         self.key_event(self.display, code, 1, 0)
         self.key_event(self.display, code, 0, 0)
         self.sync(self.display, 0)
 
 
 class DataGate:
-    def __init__(self, address, destination):
+    def __init__(self, address, destination, retry):
         self.hold = threading.Event()
         self.waiting = threading.Event()
         self.release = threading.Event()
+        self.lock = threading.Lock()
+        self.opened = 0
+        self.attempts = 0
+        self.retry = retry
         listener = socket.socket(socket.AF_UNIX)
         listener.bind(str(address))
         listener.listen()
@@ -260,14 +264,32 @@ class DataGate:
                 if not chunk:
                     return
                 header += chunk
-            if self.hold.is_set() and header.startswith(b"GET /api/data "):
-                self.waiting.set()
-                if not self.release.wait(10):
+            is_data = header.startswith(b"GET /api/data ")
+            if is_data and self.hold.is_set():
+                with self.lock:
+                    self.attempts += 1
+                    attempt = self.attempts
+                if self.retry and attempt == 1:
+                    client.sendall(
+                        b"HTTP/1.1 503 Service Unavailable\r\nContent-Length: 0\r\n\r\n"
+                    )
                     return
+                delayed = 3 if self.retry else 1
+                if attempt == delayed:
+                    self.waiting.set()
+                    if not self.release.wait(10):
+                        return
             server.connect(str(destination))
             server.sendall(header)
             outgoing = threading.Thread(target=copy, args=(client, server), daemon=True)
             outgoing.start()
+            if is_data:
+                response = server.recv(65536)
+                if not response:
+                    return
+                client.sendall(response)
+                with self.lock:
+                    self.opened += 1
             copy(server, client)
 
 
@@ -326,7 +348,7 @@ def run(binary, case, directory):
             "log=open(sys.argv[1],'ab',buffering=0)\n"
             "while data:=os.read(0,1024): log.write(data)\n"
         )
-        session = rex(
+        created = rex(
             "new",
             "native-first-frame",
             "--shell=none",
@@ -335,24 +357,46 @@ def run(binary, case, directory):
             "-c",
             probe,
             str(clicks),
-        )["session_id"]
+        )
+        session = created["session_id"]
+        old_window = created["initial_windows"][0]["window_id"]
         if case != "focus":
+            tabs = []
             for index in range(5):
                 color = b"\x1b[48;2;22;203;82m\x1b[2J\x1b[H"
                 script = f"import os,time; os.write(1,{color!r}); time.sleep(60)"
-                cold = rex(
-                    "window",
-                    "new",
-                    "-s",
-                    session,
-                    "--focus=false",
-                    "--shell=none",
-                    f"tab-{index}",
-                    "--",
-                    sys.executable,
-                    "-c",
-                    script,
+                tabs.append(
+                    rex(
+                        "window",
+                        "new",
+                        "-s",
+                        session,
+                        "--focus=false",
+                        "--shell=none",
+                        f"tab-{index}",
+                        "--",
+                        sys.executable,
+                        "-c",
+                        script,
+                    )
                 )
+            cold = tabs[-1]
+            # Put the old tab in the middle. The two nearest tabs on each side
+            # prewarm, leaving just the last tab's two streams unopened.
+            rex(
+                "api",
+                "call",
+                "-s",
+                session,
+                "session.move_window",
+                json.dumps(
+                    {
+                        "window_id": old_window,
+                        "before_window_id": tabs[2]["window_id"],
+                    }
+                ),
+                as_json=False,
+            )
             color = b"\x1b[48;2;19;121;222m\x1b[2J\x1b[H"
             script = f"import os,time; os.write(1,{color!r}); time.sleep(60)"
             rex(
@@ -369,7 +413,7 @@ def run(binary, case, directory):
                 "-c",
                 script,
             )
-            gate = DataGate(directory / "gate.sock", server)
+            gate = DataGate(directory / "gate.sock", server, retry=case == "retry")
         config = directory / "settings.toml"
         config.write_text(
             '[interface]\nsidebar = false\npane_headers = "hidden"\ntabs_fill = true\n'
@@ -439,34 +483,51 @@ def run(binary, case, directory):
             assert len(re.findall(press, after_focus)) == 1, after_focus
             print("X11: programmatic activation did not eat the next click", flush=True)
         else:
-            # Allow initial neighbor prewarming to finish; the last of six tabs is cold.
-            time.sleep(0.3)
+            wait("the old tab and four prewarmed neighbors", lambda: gate.opened == 5)
             gate.hold.set()
             rex("focus", "-s", session, cold["window_id"], as_json=False)
-            wait("the cold tab opening a data socket", gate.waiting.is_set)
-            for _ in range(6):
+            wait(
+                "one cold stream held and the other opened",
+                lambda: gate.waiting.is_set() and gate.opened == 6,
+            )
+            delay = 0.12 if case == "tabs" else 1.25
+            start = time.monotonic()
+            while time.monotonic() - start < delay:
                 strip, colors = x.sample(window)
-                assert strip == initial[0] and old_color in colors, (
-                    "cold layout drew before its data socket opened"
+                assert (
+                    strip == initial[0]
+                    and old_color in colors
+                    and not {cold_color, split_color} & colors
+                ), (
+                    f"cold layout drew with one stream still held ({time.monotonic() - start:.3f}s)"
                 )
-                time.sleep(0.025)
+                time.sleep(0.01)
 
             def new_layout():
                 sample = x.sample(window)
                 return sample if sample[0] != initial[0] else None
 
-            if case == "stalled":
-                first = wait(
-                    "the cold tab shown after the grace period", new_layout, timeout=4
+            if case == "cancel":
+                x.key("Escape")
+                wait(
+                    "Escape returning focus to the old tab",
+                    lambda: (
+                        rex("session", "inspect", session)["active_window_id"]
+                        == old_window
+                    ),
                 )
-                assert not {old_color, cold_color, split_color} & first[1]
                 gate.release.set()
                 wait(
-                    "both terminals to recover",
-                    lambda: {cold_color, split_color} <= x.sample(window)[1],
+                    "the old terminal getting keyboard focus back",
+                    lambda: send_marker(x, clicks),
                 )
+                wait("the abandoned stream still attaching", lambda: gate.opened == 7)
+                until = time.monotonic() + 0.2
+                while time.monotonic() < until:
+                    assert not new_layout(), "late data revived the canceled switch"
+                    time.sleep(0.01)
                 print(
-                    "Stalled tab: grace period expired, then both terminals attached without Retry",
+                    "Escape canceled the switch, restored terminal input, and late data did not switch tabs",
                     flush=True,
                 )
             else:
@@ -476,14 +537,19 @@ def run(binary, case, directory):
                     1
                 ], "first new tab frame did not contain both cold terminals"
                 print(
-                    "Cold tab: old layout stayed visible while data was held; first observed new layout contained both terminals",
+                    f"Cold tab ({case}): held one stream for {delay:.2f}s; first observed new layout contained both terminals",
                     flush=True,
                 )
 
 
+def send_marker(x, log):
+    x.key("d")
+    return b"d" in log.read_bytes()
+
+
 if __name__ == "__main__":
     case = sys.argv[2]
-    assert case in ("focus", "tabs", "stalled")
+    assert case in ("focus", "tabs", "slow", "retry", "cancel")
     parent = os.environ.get("REXIA_TEST_X11_LOG_DIR")
     if parent:
         directory = Path(tempfile.mkdtemp(prefix=f"x11-{case}-", dir=parent))

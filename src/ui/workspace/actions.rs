@@ -152,6 +152,10 @@ impl Workspace {
         if self.filter_focused(window, cx) {
             return;
         }
+        if keys::stroke(&event.keystroke).is_escape() && self.cancel_tab_switch(cx) {
+            cx.stop_propagation();
+            return;
+        }
         let stroke = keys::stroke(&event.keystroke);
         let copy_block = self.panes.iter().find_map(|(block, pane)| {
             let pane = pane.read(cx);
