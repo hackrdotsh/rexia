@@ -11,6 +11,7 @@ mod developer;
 pub mod dragging;
 mod extras;
 mod filter;
+mod floating_layout;
 mod forwards;
 pub mod gestures;
 mod highlight;
@@ -43,7 +44,7 @@ pub mod uploads;
 mod windows;
 
 use super::{
-    components::{dot, heading, icon_button, small_icon_button, title},
+    components::{SMALL_ICON_BUTTON_WIDTH, dot, heading, icon_button, small_icon_button, title},
     fonts::{self, TerminalFont},
     icons::icon,
     terminal::{PaneEvent, TerminalPane},
@@ -68,8 +69,8 @@ use crate::{
 pub use actions::{Outcome, Target};
 use gpui::{
     AnimationExt as _, AnyElement, App, Bounds, Context, Entity, FocusHandle, Focusable, Hsla,
-    MouseButton, MouseMoveEvent, MouseUpEvent, Pixels, Point, SharedString, Task, Window, canvas,
-    div, prelude::*, px, relative,
+    MouseButton, MouseMoveEvent, MouseUpEvent, Pixels, Point, Role, SharedString, Task, Window,
+    canvas, div, prelude::*, px, relative,
 };
 pub use overlay::{Confirm, ListKind, RenameTarget};
 pub use preferences::Section as SettingsSection;
@@ -1121,13 +1122,15 @@ impl Workspace {
             Some(Drag::Layer {
                 session,
                 layer_id,
+                origin,
                 bounds,
                 ..
-            }) => self.call(
+            }) if bounds != origin => self.call(
                 "session.resize_layer",
                 json!({"session_id": session, "layer_id": layer_id,
                     "bounds": [bounds.x, bounds.y, bounds.w, bounds.h]}),
             ),
+            Some(Drag::Layer { .. }) => {}
             Some(Drag::Minimized { moved: true, .. }) => {
                 let (x, y) = self.fraction(event.position);
                 let corner = crate::settings::MinimizedCorner::from_position(x, y);
@@ -1931,6 +1934,9 @@ impl Workspace {
                 .then(|| terminal.as_ref().and_then(|t| t.read(cx).header_fill()))
                 .flatten();
             let header = self.header_shown(&pane.block_id).then(|| {
+                let inner_width = f32::from(self.area.size.width) * rect.w as f32
+                    - gap
+                    - 2. * f32::from(theme.border_width);
                 self.pane_header(
                     &pane.block_id,
                     &block,
@@ -1943,6 +1949,7 @@ impl Workspace {
                         .and_then(|id| floating_bounds.get(id))
                         .copied()
                         .unwrap_or(rect),
+                    inner_width,
                     header_fill,
                     opacity,
                     faded_header,
@@ -2138,7 +2145,8 @@ impl Workspace {
         area.into_any_element()
     }
 
-    /// Fit the whole floating layer so its panes keep their proportions and move together.
+    /// Expand a floating layer proportionally first, then constrain individual splits
+    /// if the viewport can't fit those proportions at the minimum header width.
     fn fit_floating_layers(
         &self,
         window: &view::Window,
@@ -2147,8 +2155,9 @@ impl Workspace {
         theme: &Theme,
     ) -> HashMap<String, Rect> {
         let area = f32::from(self.area.size.width);
+        let frame_width = gap + 2. * f32::from(theme.border_width);
         let header_width = if area > 0. {
-            f64::from((FLOATING_HEADER_MIN_WIDTH + gap + 2. * f32::from(theme.border_width)) / area)
+            f64::from((FLOATING_HEADER_MIN_WIDTH + frame_width) / area)
         } else {
             0.
         };
@@ -2169,10 +2178,16 @@ impl Workspace {
                 .map(|pane| pane.rect.w)
                 .reduce(f64::min);
             let mut fitted = original;
-            if let Some(narrowest) = narrowest_header.filter(|&width| width > 0.) {
-                fitted.w = original
-                    .w
-                    .max((original.w * header_width / narrowest).min(1.));
+            if let Some(narrowest) = narrowest_header
+                && header_width > 0.
+            {
+                fitted.w = if narrowest > 0. {
+                    original
+                        .w
+                        .max((original.w * header_width / narrowest).min(1.))
+                } else {
+                    1.
+                };
                 fitted.x = original.x.clamp(0., (1. - fitted.w).max(0.));
             }
             if let Some(Drag::Layer {
@@ -2183,13 +2198,34 @@ impl Workspace {
                 fitted = *bounds;
             }
             let scale = fitted.w / original.w;
+            let mut adjusted = HashMap::new();
+            if narrowest_header.is_some_and(|width| width * scale + 1e-6 < header_width)
+                && let Some(layout) = &layer.layout
+            {
+                let available_per_column = fitted.w / floating_layout::columns(layout) as f64;
+                let compact_width = f64::from((FLOATING_HEADER_COMPACT_WIDTH + frame_width) / area);
+                let min_width = if available_per_column + 1e-6 >= header_width {
+                    header_width
+                } else {
+                    compact_width
+                };
+                floating_layout::horizontal_bounds(
+                    layout,
+                    fitted,
+                    min_width.min(available_per_column),
+                    &mut adjusted,
+                );
+            }
             for pane in panes
                 .iter_mut()
                 .filter(|pane| pane.floating.as_deref() == Some(id))
             {
-                pane.rect.x = fitted.x + (pane.rect.x - original.x) * scale;
+                (pane.rect.x, pane.rect.w) =
+                    adjusted.get(pane.block_id.as_str()).copied().unwrap_or((
+                        fitted.x + (pane.rect.x - original.x) * scale,
+                        pane.rect.w * scale,
+                    ));
                 pane.rect.y += fitted.y - original.y;
-                pane.rect.w *= scale;
             }
             bounds.insert(id.to_owned(), fitted);
         }
@@ -2207,6 +2243,7 @@ impl Workspace {
         focused: bool,
         session: &str,
         rect: Rect,
+        inner_width: f32,
         fill: Option<u32>,
         opacity: f32,
         faded: bool,
@@ -2243,14 +2280,27 @@ impl Workspace {
         let hover_only = self.settings.interface.pane_headers == PaneHeaders::Hover
             && !self.header_revealed(block_id);
         let group = SharedString::from(format!("pane-{block_id}"));
+        let compact = floating.is_some()
+            && self.area.size.width > px(0.)
+            && inner_width + 0.01 < FLOATING_HEADER_MIN_WIDTH;
+        let padding = if compact {
+            ((inner_width - SMALL_ICON_BUTTON_WIDTH - HEADER_GAP) / 2.).clamp(0., HEADER_PADDING)
+        } else {
+            HEADER_PADDING
+        };
+        let gap = if compact {
+            HEADER_GAP.min((inner_width - SMALL_ICON_BUTTON_WIDTH).max(0.))
+        } else {
+            HEADER_GAP
+        };
         let mut header = div()
             .id(SharedString::from(format!("header-{block_id}")))
             .flex()
             .flex_none()
             .items_center()
-            .gap(px(6.))
+            .gap(px(gap))
             .h(px(28.))
-            .px(px(8.))
+            .px(px(padding))
             .when(faded, |d| d.opacity(0.55))
             .border_b(theme.border_width)
             .border_color(theme.border)
@@ -2312,6 +2362,17 @@ impl Workspace {
                         status.map(|(state, badge)| activity_mark(state, badge, false, theme)),
                     ),
             );
+        let surface = if faded {
+            theme.background.blend(surface.opacity(0.55))
+        } else {
+            surface
+        };
+        let background = div()
+            .bg(surface.opacity(surface_opacity))
+            .when(hover_only, |d| {
+                d.bg(theme.background.opacity(opacity))
+                    .group_hover(group, |d| d.bg(surface.opacity(surface_opacity)))
+            });
         if floating.is_none() {
             let grab = block_id.to_owned();
             header = header.on_mouse_down(
@@ -2337,6 +2398,22 @@ impl Workspace {
                     cx.stop_propagation();
                 }),
             );
+            if compact {
+                let block = block_id.to_owned();
+                let actions = small_icon_button(
+                    SharedString::from(format!("pane-actions-{block_id}")),
+                    "dots",
+                    muted,
+                    theme,
+                    cx.listener(move |ws, event: &gpui::ClickEvent, _, cx| {
+                        ws.open_floating_header_menu(block.clone(), event.position(), cx);
+                    }),
+                )
+                .role(Role::Button)
+                .aria_label("Pane Actions")
+                .tooltip(crate::ui::components::tooltip("Pane Actions", None));
+                return background.child(header.child(actions)).into_any_element();
+            }
             let minimize = layer.to_owned();
             header = header.child(
                 small_icon_button(
@@ -2413,21 +2490,8 @@ impl Workspace {
                     }),
                 )
                 .tooltip(self.tip("pane.close", None)),
-            )
-            .into_any_element();
-        let surface = if faded {
-            theme.background.blend(surface.opacity(0.55))
-        } else {
-            surface
-        };
-        div()
-            .bg(surface.opacity(surface_opacity))
-            .when(hover_only, |d| {
-                d.bg(theme.background.opacity(opacity))
-                    .group_hover(group, |d| d.bg(surface.opacity(surface_opacity)))
-            })
-            .child(header)
-            .into_any_element()
+            );
+        background.child(header).into_any_element()
     }
 
     fn divider(
@@ -2498,8 +2562,13 @@ fn resize_pane(session: &str, divider: &view::Divider) -> (&'static str, Value) 
     )
 }
 
-// Five buttons and gaps, horizontal padding, and room for the icon and truncated title.
-const FLOATING_HEADER_MIN_WIDTH: f32 = 5. * 22. + 5. * 6. + 2. * 8. + 48.;
+const HEADER_GAP: f32 = 6.;
+const HEADER_PADDING: f32 = 8.;
+const HEADER_TITLE_WIDTH: f32 = 48.;
+const FLOATING_HEADER_MIN_WIDTH: f32 =
+    5. * (SMALL_ICON_BUTTON_WIDTH + HEADER_GAP) + 2. * HEADER_PADDING + HEADER_TITLE_WIDTH;
+const FLOATING_HEADER_COMPACT_WIDTH: f32 =
+    SMALL_ICON_BUTTON_WIDTH + HEADER_GAP + 2. * HEADER_PADDING + HEADER_TITLE_WIDTH;
 
 /// A line where a dragged divider will land.
 fn divider_guide(divider: &view::Divider, theme: &Theme) -> AnyElement {

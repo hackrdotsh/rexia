@@ -34,8 +34,9 @@ uses an external Rex server and has been tested on API revisions 14 and 18.
 - First clicks focus inactive terminal panes without sending a click to the
   program. On X11, this also applies to the click the window manager replays
   after activating Rexia. Minimized floating panes stay restorable when a tab
-  moves into its own window. Floating headers keep room for their title and
-  controls, and short notices fit their text.
+  moves into its own window. Narrow floating splits make room for their header
+  controls. If the window can't fit the full controls, they move into the pane's
+  actions menu. Short notices fit their text.
 - The shortcut recorder accepts Page Up, Page Down, Home, End, Ctrl+J and
   Ctrl+K. Left returns without replacing the shortcut. Git keeps its title
   and icon while Delta pages its output.

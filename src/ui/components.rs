@@ -35,6 +35,8 @@ pub fn icon_button(
         .on_click(on_click)
 }
 
+pub const SMALL_ICON_BUTTON_WIDTH: f32 = 22.;
+
 /// A borderless icon button for dense rows such as pane headers and tabs.
 pub fn small_icon_button(
     id: impl Into<ElementId>,
@@ -49,7 +51,7 @@ pub fn small_icon_button(
         .flex_none()
         .items_center()
         .justify_center()
-        .size(px(22.))
+        .size(px(SMALL_ICON_BUTTON_WIDTH))
         .rounded(theme.radius_small())
         .hover(|d| d.bg(theme.overlay(0.1)))
         .cursor_pointer()

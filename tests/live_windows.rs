@@ -4,7 +4,10 @@
 mod common;
 
 use common::{Harness, Sessions, focused_text};
-use gpui::{AnyWindowHandle, WindowHandle};
+use gpui::{
+    AnyWindowHandle, MouseButton, MouseDownEvent, MouseUpEvent, Pixels, PlatformInput, Point,
+    WindowHandle, point, px,
+};
 use rexia::{settings::PaneStyle, ui::workspace::Workspace};
 use serde_json::{Value, json};
 use std::time::{Duration, Instant};
@@ -46,6 +49,225 @@ fn wait_in<T>(
 /// The label of the tab a window shows.
 fn shown_tab(ws: &Workspace) -> Option<String> {
     Some(ws.model().view()?.active_window()?.label.clone())
+}
+
+fn click(h: &mut Harness, position: Point<Pixels>) {
+    h.input(PlatformInput::MouseDown(MouseDownEvent {
+        button: MouseButton::Left,
+        position,
+        modifiers: Default::default(),
+        click_count: 1,
+        first_mouse: false,
+    }));
+    h.input(PlatformInput::MouseUp(MouseUpEvent {
+        button: MouseButton::Left,
+        position,
+        modifiers: Default::default(),
+        click_count: 1,
+    }));
+}
+
+#[test]
+fn uneven_floating_split_keeps_title_and_controls_usable() {
+    exercise_floating_header(false);
+}
+
+#[test]
+fn uneven_floating_split_keeps_actions_accessible_with_sidebar() {
+    exercise_floating_header(true);
+}
+
+fn exercise_floating_header(sidebar: bool) {
+    let Some(address) = common::server() else {
+        return;
+    };
+    let control = common::connect(&address);
+    let sessions = Sessions::create(&control, "rexia-uneven-floating-split");
+    let session = &sessions.ids[0];
+    let mut settings = common::test_settings(&address, session);
+    settings.interface.sidebar = sidebar;
+    settings.interface.animation = rexia::settings::AnimationStyle::Off;
+    let mut h = Harness::open_with(settings, 480., 320.);
+    h.run("pane.new_floating", Value::Null);
+    let (layer_id, left) = h.wait("the floating terminal", |m| {
+        let pane = m
+            .view()?
+            .active_window()?
+            .panes()
+            .into_iter()
+            .find(|p| p.floating.is_some())?;
+        Some((pane.floating?, pane.block_id))
+    });
+    h.run("pane.split.right", json!({"block_id": left}));
+    let right = h.wait("the second floating terminal", |m| {
+        let layer = m.view()?.active_window()?.layer_of(&left)?;
+        rexia::rex::view::last_block(layer.layout.as_ref()?)
+            .filter(|block| *block != left)
+            .map(str::to_owned)
+    });
+    common::request(
+        &control,
+        "session.resize_layer",
+        json!({
+            "session_id": session, "layer_id": layer_id, "bounds": [0.78, 0.12, 0.2, 0.62]
+        }),
+    )
+    .unwrap();
+    common::request(
+        &control,
+        "session.resize_pane",
+        json!({
+            "session_id": session, "direction": "horizontal", "ratio": 0.95,
+            "before_block_id": left, "after_block_id": right
+        }),
+    )
+    .unwrap();
+    h.wait("the uneven split at the right edge", |m| {
+        let layer = m.view()?.active_window()?.layer_of(&left)?;
+        (layer.rect().x > 0.7 && layer.layout.as_ref()?.split.as_ref()?.ratio > 0.9).then_some(())
+    });
+
+    let title = |h: &mut Harness, block: &str| {
+        h.wait_ui("the floating title", |ws| {
+            ws.element_bounds(&format!("header:{block}"))
+        })
+    };
+    for block in [&left, &right] {
+        let bounds = title(&mut h, block);
+        println!(
+            "Uneven floating split: title width {}px",
+            f32::from(bounds.size.width)
+        );
+        assert!(
+            bounds.size.width >= px(47.),
+            "floating title and controls do not fit: {bounds:?}"
+        );
+    }
+    screenshot(
+        &mut h,
+        if sidebar {
+            "uneven-floating-split-sidebar"
+        } else {
+            "uneven-floating-split"
+        },
+    );
+
+    let click_control = |h: &mut Harness, block, index: u8| {
+        let bounds = title(h, block);
+        let inline_index = if sidebar { 0 } else { index };
+        let at = point(
+            bounds.right() + px(17. + f32::from(inline_index) * 28.),
+            bounds.center().y,
+        );
+        let area = h.workspace(Workspace::pane_area);
+        assert!(
+            at.x + px(11.) <= area.right(),
+            "floating control is offscreen"
+        );
+        click(h, at);
+        if sidebar {
+            assert_eq!(
+                h.workspace(Workspace::context_menu_labels).unwrap(),
+                [
+                    "Minimize",
+                    "Split Right",
+                    "Zoom Pane",
+                    "Dock Pane",
+                    "Close Pane"
+                ],
+            );
+            if index == 0 {
+                screenshot(h, "uneven-floating-split-menu");
+            }
+            // The menu anchors here, snapping to the window margin near the right edge.
+            let x = (at.x + px(20.)).min(px(450.));
+            click(h, point(x, at.y + px(17. + f32::from(index) * 26.)));
+        }
+    };
+    click_control(&mut h, &right, 0);
+    h.wait("Minimize clicked on the narrow pane", |m| {
+        let layer = m.view()?.active_window()?.layer_of(&right)?;
+        if layer.state.as_deref() != Some("minimized") {
+            return None;
+        }
+        assert!(
+            layer.rect().x > 0.7,
+            "a button click saved the expanded layer bounds"
+        );
+        Some(())
+    });
+    h.run("pane.minimize_floating", json!({"block_id": right}));
+    h.wait("the floating layer restored", |m| {
+        (m.view()?
+            .active_window()?
+            .layer_of(&right)?
+            .state
+            .as_deref()
+            != Some("minimized"))
+        .then_some(())
+    });
+
+    click_control(&mut h, &right, 2);
+    h.wait("Zoom clicked on the narrow pane", |m| {
+        (m.view()?.active_window()?.zoomed_block_id.as_ref() == Some(&right)).then_some(())
+    });
+    h.run("pane.zoom", json!({"block_id": right}));
+    h.wait("the split unzoomed", |m| {
+        m.view()?
+            .active_window()?
+            .zoomed_block_id
+            .is_none()
+            .then_some(())
+    });
+
+    click_control(&mut h, &right, 1);
+    let added = h.wait("Split Right clicked on the narrow pane", |m| {
+        let layer = m.view()?.active_window()?.layer_of(&right)?;
+        layer
+            .blocks
+            .iter()
+            .filter_map(|block| block.block_id.as_ref())
+            .find(|block| *block != &left && *block != &right)
+            .cloned()
+    });
+    if !sidebar {
+        common::request(
+            &control,
+            "block.close",
+            json!({"session_id": session, "block_id": added}),
+        )
+        .unwrap();
+        h.wait("the original two-pane split", |m| {
+            m.view()?
+                .active_window()?
+                .block(&added)
+                .is_none()
+                .then_some(())
+        });
+    }
+
+    click_control(&mut h, &right, 4);
+    h.wait("Close clicked on the narrow pane", |m| {
+        m.view()?
+            .active_window()?
+            .block(&right)
+            .is_none()
+            .then_some(())
+    });
+    click_control(&mut h, &left, 3);
+    h.wait("Dock clicked on the remaining floating header", |m| {
+        (m.view()?.active_window()?.layer_of(&left)?.kind == "tiled").then_some(())
+    });
+    println!("All five floating header actions clicked (sidebar: {sidebar})");
+}
+
+fn screenshot(h: &mut Harness, name: &str) {
+    let path = common::shot_dir().join(format!("{name}.png"));
+    h.cx.capture_screenshot(h.window.into())
+        .unwrap()
+        .save(&path)
+        .unwrap();
+    println!("saved {}", path.display());
 }
 
 #[test]

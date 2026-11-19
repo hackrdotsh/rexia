@@ -219,6 +219,38 @@ impl Workspace {
         groups
     }
 
+    pub(super) fn open_floating_header_menu(
+        &mut self,
+        block: String,
+        at: Point<Pixels>,
+        cx: &mut Context<Self>,
+    ) {
+        let Some(session) = self.model().selected else {
+            return;
+        };
+        let items = [
+            ("Minimize", "pane.minimize_floating"),
+            ("Split Right", "pane.split.right"),
+            ("Zoom Pane", "pane.zoom"),
+            ("Dock Pane", "pane.float"),
+            ("Close Pane", "pane.close"),
+        ]
+        .map(|(label, action)| Item {
+            label: label.to_owned(),
+            command: Command::Run(action),
+            enabled: true,
+            shortcut: Some(self.shortcut_of(action)).filter(|s| !s.is_empty() && s != "None"),
+        });
+        self.context_menu = Some(Box::new(ContextMenu {
+            session,
+            block,
+            at,
+            groups: vec![items.into()],
+            highlighted: None,
+        }));
+        cx.notify();
+    }
+
     /// Right-click on a tab: rename, mute and close it, as Rex's tab menu does.
     pub fn open_tab_menu(&mut self, window_id: String, at: Point<Pixels>, cx: &mut Context<Self>) {
         let model = self.model();
