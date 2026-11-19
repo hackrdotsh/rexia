@@ -1,5 +1,9 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128">
-  <rect x="8" y="8" width="112" height="112" rx="20" fill="#0e0e0e" stroke="#b2d26b" stroke-width="6"/>
-  <path d="M34 46 54 64 34 82" fill="none" stroke="#b2d26b" stroke-width="10" stroke-linecap="round" stroke-linejoin="round"/>
-  <path d="M62 84h32" stroke="#e2e2e2" stroke-width="10" stroke-linecap="round"/>
+  <title>Cyan Rexia with a pink hair bow</title>
+  <rect x="8" y="8" width="112" height="112" rx="26" fill="#171b16" stroke="#64d9f4" stroke-width="3"/>
+  <path fill="#64d9f4" fill-rule="evenodd" d="M46 37h40v8h10v25H73v8h13v10H64v12H34V71h7V52h5Zm14 14v11h10V51Z"/>
+  <g transform="rotate(-28 45 35)">
+    <path fill="#f3ada9" stroke="#171b16" stroke-width="3" stroke-linejoin="round" d="M26 23h9v3h6v5h8v-7h6v-4h9v24h-9v-3h-7v-3h-7v5h-6v4h-9Z"/>
+    <path fill="#b96e74" d="M41 31h8v7h-8z"/>
+  </g>
 </svg>
