@@ -495,8 +495,6 @@ pub struct InterfaceSettings {
     pub activity_view: bool,
     /// Include Activity under the Sessions list.
     pub activity_below_sessions: bool,
-    /// Group Activity by urgency instead of by session.
-    pub activity_by_priority: bool,
 }
 
 impl Default for InterfaceSettings {
@@ -531,7 +529,6 @@ impl Default for InterfaceSettings {
             autobalance_splits: true,
             activity_view: false,
             activity_below_sessions: false,
-            activity_by_priority: true,
         }
     }
 }
@@ -885,9 +882,12 @@ mod tests {
     fn sidebar_defaults_and_empty_selection_round_trip() {
         let dir = tempfile::tempdir().unwrap();
         let path = dir.path().join("settings.toml");
-        std::fs::write(&path, "[notifications]\neach_process = false\n").unwrap();
+        std::fs::write(
+            &path,
+            "[notifications]\neach_process = false\n[interface]\nactivity_by_priority = false\n",
+        )
+        .unwrap();
         let mut settings = Settings::load(&path).unwrap();
-        assert!(settings.interface.activity_by_priority);
         assert!(settings.sidebar.host_selected("new-host"));
 
         settings.sidebar.selected_hosts = Some(BTreeSet::new());
@@ -897,10 +897,8 @@ mod tests {
         assert!(!saved.sidebar.host_selected("new-host"));
         assert!(saved.sidebar.session_collapsed("local", "s"));
         assert!(!saved.sidebar.session_collapsed("remote", "s"));
-        assert!(
-            !std::fs::read_to_string(path)
-                .unwrap()
-                .contains("each_process")
-        );
+        let saved = std::fs::read_to_string(path).unwrap();
+        assert!(!saved.contains("each_process"));
+        assert!(!saved.contains("activity_by_priority"));
     }
 }

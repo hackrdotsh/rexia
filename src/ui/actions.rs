@@ -961,20 +961,6 @@ pub const ACTIONS: &[ActionDef] = &[
         "activity sidebar attention blocked done programs filter",
         [(&["ctrl+shift+."], None)]
     ),
-    action!(
-        "client.sidebar.activity.by_session",
-        "Group Activity by Session",
-        "View",
-        "activity sidebar group session",
-        []
-    ),
-    action!(
-        "client.sidebar.activity.by_priority",
-        "Sort Activity by Priority",
-        "View",
-        "activity sidebar sort priority urgency",
-        []
-    ),
 ];
 
 static SETTING_ENTRIES: std::sync::LazyLock<Vec<(String, crate::settings_index::Entry)>> =

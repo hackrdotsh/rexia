@@ -185,8 +185,7 @@ impl Window {
             let floating =
                 (layer.kind != "tiled").then(|| layer.layer_id.clone().unwrap_or_default());
             if let Some(node) = &layer.layout {
-                let bounds = Rect::from_slice(&layer.bounds).unwrap_or(Rect::FULL);
-                collect_panes(node, bounds, &floating, &mut panes);
+                collect_panes(node, layer.rect(), &floating, &mut panes);
             }
         }
         panes
@@ -220,6 +219,12 @@ impl Window {
                 .iter()
                 .any(|b| b.block_id.as_deref() == Some(block_id))
         })
+    }
+}
+
+impl Layer {
+    pub fn rect(&self) -> Rect {
+        Rect::from_slice(&self.bounds).unwrap_or(Rect::FULL)
     }
 }
 

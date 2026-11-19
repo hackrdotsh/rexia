@@ -27,6 +27,12 @@ fn wait_in<T>(
 ) -> T {
     let deadline = Instant::now() + Duration::from_secs(20);
     loop {
+        h.cx.update(|cx| {
+            let _ = window.update(cx, |ws, window, cx| {
+                ws.sync(window, cx);
+                window.refresh();
+            });
+        });
         h.pump();
         let found = h.cx.update(|cx| window.read(cx).ok().and_then(&check));
         if let Some(found) = found {
@@ -211,10 +217,31 @@ fn tabs_move_to_their_own_windows_and_windows_open_and_close() {
             }
             let title_width =
                 f32::from(ws.element_bounds(&format!("header:{floated}"))?.size.width);
-            (title_width >= 18.).then_some(title_width)
+            (47. ..200.).contains(&title_width).then_some(title_width)
         },
     );
     println!("Narrow floating pane leaves {width}px for its title");
+    h.cx.update(|cx| {
+        second
+            .update(cx, |ws, _, cx| {
+                ws.split(Some(floated.clone()), true, true, cx)
+            })
+            .unwrap();
+    });
+    let widths = wait_in(&mut h, second, "both split floating headers to fit", |ws| {
+        let model = ws.model();
+        let current = model.view()?.active_window()?.layer_of(&floated)?;
+        if current.blocks.len() != 2 {
+            return None;
+        }
+        let mut widths = Vec::new();
+        for block in &current.blocks {
+            let bounds = ws.element_bounds(&format!("header:{}", block.block_id.as_deref()?))?;
+            widths.push(f32::from(bounds.size.width));
+        }
+        widths.iter().all(|width| *width >= 47.).then_some(widths)
+    });
+    println!("Split floating pane title widths: {widths:?}");
     let shot = h.cx.capture_screenshot(second.into()).unwrap();
     let path = common::shot_dir().join("window-moved-tab.png");
     shot.save(&path).unwrap();

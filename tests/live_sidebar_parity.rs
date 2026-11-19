@@ -243,10 +243,7 @@ fn activity_groups_each_report_by_priority() {
     assert!(blocked.top() < working_heading.top());
     assert!(working_heading.top() < working.top());
     h.screenshot("sidebar-activity-priorities");
-    h.run("client.sidebar.activity.by_session", Value::Null);
-    h.wait_ui("the explicit session grouping still works", |ws| {
-        ws.element_bounds("activity-group:rexia-sidebar-activity")
-    });
+    assert!(h.workspace(|ws| ws.shortcut_rows("group activity by session").is_empty()));
 }
 
 #[test]
@@ -284,4 +281,30 @@ fn last_session_scrolls_past_the_fade() {
         fade.top()
     );
     h.screenshot("sidebar-scroll-bottom");
+
+    let last_id = sessions.ids.last().unwrap();
+    h.input(PlatformInput::Scroll(ScrollEvent {
+        position: point(fade.center().x, fade.top() - px(30.)),
+        delta: ScrollDelta::Pixels(point(px(0.), px(2400.))),
+        modifiers: Modifiers::default(),
+        touch_phase: TouchPhase::Moved,
+        source: ScrollSource::Pointer,
+    }));
+    h.wait_ui("the last row goes out of view again", |ws| {
+        (ws.element_bounds(&last)?.top() > fade.bottom()).then_some(())
+    });
+    h.run("client.sidebar.activity.toggle", Value::Null);
+    h.run("session.select", json!({"session_id": last_id}));
+    h.wait("the last session becomes active", |model| {
+        (model.selected.as_ref()? == last_id).then_some(())
+    });
+    h.run("client.sidebar.activity.toggle", Value::Null);
+    h.wait_ui(
+        "the selected row auto-scrolls clear of the bottom fade",
+        |ws| {
+            let last = ws.element_bounds(&last)?;
+            let fade = ws.element_bounds("sidebar-fade:bottom")?;
+            (last.bottom() <= fade.top() - px(3.)).then_some(())
+        },
+    );
 }

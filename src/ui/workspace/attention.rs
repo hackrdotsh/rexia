@@ -48,12 +48,6 @@ struct Row {
     state: ProgramState,
 }
 
-#[derive(PartialEq, Eq)]
-enum Group<'a> {
-    Priority(ProgramState),
-    Session(usize, &'a str),
-}
-
 impl Workspace {
     /// Use `notifier` for desktop notifications; clicking one shows its pane.
     pub fn set_notifier(
@@ -386,19 +380,11 @@ impl Workspace {
                 }
             }
         }
-        let by_priority = self.settings.interface.activity_by_priority;
         rows.sort_by(|a, b| {
-            let group = if by_priority {
-                b.state.cmp(&a.state)
-            } else {
-                (&a.session_label, a.host, &a.session)
-                    .cmp(&(&b.session_label, b.host, &b.session))
-                    .then(b.state.cmp(&a.state))
-            };
-            group.then(
+            b.state.cmp(&a.state).then_with(|| {
                 (&a.title, a.host, &a.block, &a.process)
-                    .cmp(&(&b.title, b.host, &b.block, &b.process)),
-            )
+                    .cmp(&(&b.title, b.host, &b.block, &b.process))
+            })
         });
         rows
     }
@@ -410,27 +396,17 @@ impl Workspace {
         cx: &mut Context<Self>,
     ) -> AnyElement {
         let rows = self.activity_rows();
-        let by_priority = self.settings.interface.activity_by_priority;
         let mut list = div().flex().flex_col().gap(px(2.));
         let mut last_group = None;
         for row in &rows {
-            let group = if by_priority {
-                Group::Priority(row.state)
-            } else {
-                Group::Session(row.host, &row.session)
-            };
-            if last_group.as_ref() != Some(&group) {
-                let name = if by_priority {
-                    row.state.name()
-                } else {
-                    &row.session_label
-                };
+            if last_group != Some(row.state) {
+                let name = row.state.name();
                 list = list.child(
                     heading(name.to_owned(), theme)
                         .relative()
                         .child(self.track_bounds(format!("activity-group:{name}"), cx)),
                 );
-                last_group = Some(group);
+                last_group = Some(row.state);
             }
             let (host, session, block) = (row.host, row.session.clone(), row.block.clone());
             let id = format!("activity:{host}:{block}:{}", row.process);
@@ -482,14 +458,15 @@ impl Workspace {
                                     .whitespace_nowrap()
                                     .child(d)
                             }))
-                            .when(by_priority, |d| {
-                                d.child(
-                                    div()
-                                        .text_size(px(11.))
-                                        .text_color(theme.text_muted)
-                                        .child(row.session_label.clone()),
-                                )
-                            })
+                            .child(
+                                div()
+                                    .text_size(px(11.))
+                                    .text_color(theme.text_muted)
+                                    .overflow_hidden()
+                                    .text_ellipsis()
+                                    .whitespace_nowrap()
+                                    .child(row.session_label.clone()),
+                            )
                             .when_some(row.message.clone(), |d, message| {
                                 d.child(
                                     div()
@@ -554,35 +531,6 @@ impl Workspace {
                     .px(px(6.))
                     .pb(px(4.))
                     .child(div().flex_1().child(title("Activity", theme)))
-                    .child(
-                        small_icon_button(
-                            "activity-grouping",
-                            if by_priority {
-                                "layout-columns"
-                            } else {
-                                "alert-triangle"
-                            },
-                            theme.text_muted,
-                            theme,
-                            cx.listener(|ws, _, _, cx| {
-                                ws.update_settings(
-                                    |s| {
-                                        s.interface.activity_by_priority =
-                                            !s.interface.activity_by_priority;
-                                    },
-                                    cx,
-                                );
-                            }),
-                        )
-                        .tooltip(self.tip(
-                            if by_priority {
-                                "client.sidebar.activity.by_session"
-                            } else {
-                                "client.sidebar.activity.by_priority"
-                            },
-                            None,
-                        )),
-                    )
                     .child(
                         small_icon_button(
                             "activity-close",

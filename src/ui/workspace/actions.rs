@@ -1035,7 +1035,6 @@ impl Workspace {
                 let interface = &mut self.settings.interface;
                 interface.activity_view = true;
                 interface.sidebar = true;
-                interface.activity_by_priority = name == "client.sidebar.activity.by_priority";
                 self.save_settings();
             }
             other => {

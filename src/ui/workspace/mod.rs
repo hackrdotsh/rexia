@@ -251,6 +251,9 @@ pub struct Workspace {
     /// Sessions opened in this window, by host and session ID. Explicit collapses override these.
     expanded_sessions: HashSet<(String, String)>,
     host_filter_open: bool,
+    sessions_scroll: gpui::ScrollHandle,
+    sidebar_scroll_target: Option<String>,
+    sidebar_scroll_pending: bool,
     pub notice: Option<String>,
     forwards: forwards::Forwards,
     new_window_session: Option<(String, Option<String>)>,
@@ -470,6 +473,9 @@ impl Workspace {
             focused: None,
             expanded_sessions: HashSet::new(),
             host_filter_open: false,
+            sessions_scroll: gpui::ScrollHandle::new(),
+            sidebar_scroll_target: None,
+            sidebar_scroll_pending: false,
             notice: None,
             forwards: forwards::Forwards::default(),
             new_window_session: None,
@@ -1835,21 +1841,11 @@ impl Workspace {
         let fade_content = matches!(fade, FadeInactive::Content | FadeInactive::Both);
         let focused = window.focused_block_id.clone();
         let zoomed = window.zoomed_block_id.is_some();
-        let dragged_layer = match &self.drag {
-            Some(Drag::Layer {
-                layer_id,
-                origin,
-                bounds,
-                ..
-            }) => Some((layer_id.clone(), *origin, *bounds)),
-            _ => None,
-        };
-
-        let highlighting =
-            self.settings.interface.highlight_active_pane && window.panes().len() > 1;
-        let focused_rect = window
-            .panes()
-            .into_iter()
+        let mut panes = window.panes();
+        let floating_bounds = self.fit_floating_layers(&window, &mut panes, gap, theme);
+        let highlighting = self.settings.interface.highlight_active_pane && panes.len() > 1;
+        let focused_rect = panes
+            .iter()
             .find(|p| focused.as_deref() == Some(p.block_id.as_str()))
             .map(|p| p.rect);
         self.track_highlight(focused.clone().filter(|_| highlighting), focused_rect);
@@ -1861,10 +1857,10 @@ impl Workspace {
         // A tab that's just been switched to shows its panes in place.
         let first = self.motion.window.as_deref() != Some(window.id());
         self.motion.window = Some(window.id().to_owned());
-        let shown: Vec<String> = window.panes().into_iter().map(|p| p.block_id).collect();
+        let shown: Vec<String> = panes.iter().map(|p| p.block_id.clone()).collect();
         self.keep_pane_motion(&shown);
         let style = self.settings.interface.animation;
-        for pane in window.panes() {
+        for pane in panes {
             let walkthrough = window
                 .block(&pane.block_id)
                 .is_some_and(onboarding::is_onboarding);
@@ -1872,23 +1868,10 @@ impl Workspace {
             if terminal.is_none() && !walkthrough {
                 continue;
             }
-            let mut rect = pane.rect;
-            let mut dragging = false;
-            if let (Some(layer), Some((dragged, origin, bounds))) = (&pane.floating, &dragged_layer)
-                && layer == dragged
-            {
-                rect.x += bounds.x - origin.x;
-                rect.y += bounds.y - origin.y;
-                dragging = true;
-            }
-            if pane.floating.is_some()
-                && self.header_shown(&pane.block_id)
-                && window
-                    .layer_of(&pane.block_id)
-                    .is_some_and(|layer| layer.blocks.len() == 1)
-            {
-                rect = fit_floating_header(rect, self.area.size.width, gap, theme.border_width);
-            }
+            let rect = pane.rect;
+            let layer = pane.floating.as_deref();
+            let dragging =
+                matches!(&self.drag, Some(Drag::Layer { layer_id, .. }) if layer == Some(layer_id));
             let place = self.place_pane(&pane.block_id, rect, dragging, first, cx);
             let block = window.block(&pane.block_id).cloned().unwrap_or_default();
             let state = model.blocks.get(&pane.block_id);
@@ -1922,7 +1905,10 @@ impl Workspace {
                     zoomed,
                     is_focused,
                     &session,
-                    rect,
+                    layer
+                        .and_then(|id| floating_bounds.get(id))
+                        .copied()
+                        .unwrap_or(rect),
                     header_fill,
                     opacity,
                     faded_header,
@@ -2116,6 +2102,64 @@ impl Workspace {
             );
         }
         area.into_any_element()
+    }
+
+    /// Fit the whole floating layer so its panes keep their proportions and move together.
+    fn fit_floating_layers(
+        &self,
+        window: &view::Window,
+        panes: &mut [view::Pane],
+        gap: f32,
+        theme: &Theme,
+    ) -> HashMap<String, Rect> {
+        let area = f32::from(self.area.size.width);
+        let header_width = if area > 0. {
+            f64::from((FLOATING_HEADER_MIN_WIDTH + gap + 2. * f32::from(theme.border_width)) / area)
+        } else {
+            0.
+        };
+        let mut bounds = HashMap::new();
+        for layer in &window.layers {
+            let Some(id) = layer.layer_id.as_deref() else {
+                continue;
+            };
+            let original = layer.rect();
+            if layer.kind == "tiled" || original.w <= 0. {
+                continue;
+            }
+            let narrowest_header = panes
+                .iter()
+                .filter(|pane| {
+                    pane.floating.as_deref() == Some(id) && self.header_shown(&pane.block_id)
+                })
+                .map(|pane| pane.rect.w)
+                .reduce(f64::min);
+            let mut fitted = original;
+            if let Some(narrowest) = narrowest_header.filter(|&width| width > 0.) {
+                fitted.w = original
+                    .w
+                    .max((original.w * header_width / narrowest).min(1.));
+                fitted.x = original.x.clamp(0., (1. - fitted.w).max(0.));
+            }
+            if let Some(Drag::Layer {
+                layer_id, bounds, ..
+            }) = &self.drag
+                && layer_id == id
+            {
+                fitted = *bounds;
+            }
+            let scale = fitted.w / original.w;
+            for pane in panes
+                .iter_mut()
+                .filter(|pane| pane.floating.as_deref() == Some(id))
+            {
+                pane.rect.x = fitted.x + (pane.rect.x - original.x) * scale;
+                pane.rect.y += fitted.y - original.y;
+                pane.rect.w *= scale;
+            }
+            bounds.insert(id.to_owned(), fitted);
+        }
+        bounds
     }
 
     #[allow(clippy::too_many_arguments)]
@@ -2420,16 +2464,8 @@ fn resize_pane(session: &str, divider: &view::Divider) -> (&'static str, Value) 
     )
 }
 
-/// The title keeps room for its icon, while the five controls keep their full hit targets.
-fn fit_floating_header(mut rect: Rect, area: Pixels, gap: f32, border: Pixels) -> Rect {
-    let area = f64::from(f32::from(area));
-    if area > 0. {
-        let chrome = 5. * 22. + 5. * 6. + 2. * 8. + 18. + gap + 2. * f32::from(border);
-        rect.w = rect.w.max((f64::from(chrome) / area).min(1.));
-        rect.x = rect.x.min(1. - rect.w).max(0.);
-    }
-    rect
-}
+// Five buttons and gaps, horizontal padding, and room for the icon and truncated title.
+const FLOATING_HEADER_MIN_WIDTH: f32 = 5. * 22. + 5. * 6. + 2. * 8. + 48.;
 
 /// A line where a dragged divider will land.
 fn divider_guide(divider: &view::Divider, theme: &Theme) -> AnyElement {
@@ -2534,8 +2570,17 @@ impl Workspace {
         let entity = cx.entity();
         canvas(
             move |bounds, _, cx| {
-                entity.update(cx, |ws, _| {
+                entity.update(cx, |ws, cx| {
                     ws.element_bounds.insert(key.clone(), bounds);
+                    if ws.sidebar_scroll_pending && ws.sidebar_scroll_target.as_ref() == Some(&key)
+                    {
+                        ws.sidebar_scroll_pending = false;
+                        let workspace = cx.entity().downgrade();
+                        cx.defer(move |cx| {
+                            let _ = workspace
+                                .update(cx, |ws, cx| ws.reveal_sidebar_session(bounds, cx));
+                        });
+                    }
                 })
             },
             |_, _, _, _| {},
@@ -2694,6 +2739,18 @@ impl Render for Workspace {
         let sidebar_drawn =
             self.settings.interface.sidebar || slide.is_some_and(|(showing, _)| !showing);
         let activity_only = self.settings.interface.activity_view;
+        let sidebar_target = (sidebar_drawn && !activity_only)
+            .then(|| {
+                model
+                    .selected
+                    .as_ref()
+                    .map(|id| format!("session:{}:{id}", self.active))
+            })
+            .flatten();
+        if self.sidebar_scroll_target != sidebar_target {
+            self.sidebar_scroll_pending = sidebar_target.is_some();
+            self.sidebar_scroll_target = sidebar_target;
+        }
         let session_label = (!sidebar_drawn || activity_only).then(|| {
             model
                 .view()

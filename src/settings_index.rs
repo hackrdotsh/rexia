@@ -132,11 +132,6 @@ const NAMES: &[(&str, &str, &str)] = &[
         "activity-below-sessions",
         "Show Activity below Sessions",
     ),
-    (
-        "interface.activity_by_priority",
-        "activity-priority",
-        "Sort activity by priority",
-    ),
     ("interface.pane_style", "pane-style", "Pane style"),
     (
         "interface.minimized_corner",

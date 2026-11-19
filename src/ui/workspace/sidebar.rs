@@ -8,9 +8,11 @@ use crate::{
     },
 };
 use gpui::{
-    AnyElement, Context, Div, ElementId, Role, SharedString, Stateful, Toggled, div,
-    linear_color_stop, linear_gradient, prelude::*, px,
+    AnyElement, Bounds, Context, Div, ElementId, Pixels, Role, SharedString, Stateful, Toggled,
+    div, linear_color_stop, linear_gradient, prelude::*, px,
 };
+
+const FADE_HEIGHT: gpui::Pixels = px(14.);
 
 impl Workspace {
     fn sidebar_settings_changed(&self, cx: &mut Context<Self>) {
@@ -249,13 +251,12 @@ impl Workspace {
         cx: &Context<Self>,
     ) -> AnyElement {
         // The spacers travel with the rows; the fades stay over the viewport edges.
-        let fade_height = px(14.);
         let fade = |top| {
             div()
                 .absolute()
                 .left_0()
                 .right_0()
-                .h(fade_height)
+                .h(FADE_HEIGHT)
                 .when(top, |d| d.top_0())
                 .when(!top, |d| d.bottom_0())
                 .bg(linear_gradient(
@@ -279,12 +280,35 @@ impl Workspace {
                     .flex_1()
                     .min_h_0()
                     .px(px(10.))
-                    .py(fade_height)
-                    .overflow_y_scroll(),
+                    .py(FADE_HEIGHT)
+                    .overflow_y_scroll()
+                    .when(id == "sidebar-sessions", |list| {
+                        list.track_scroll(&self.sessions_scroll)
+                    }),
             )
             .child(fade(true).child(self.track_bounds("sidebar-fade:top".into(), cx)))
             .child(fade(false).child(self.track_bounds("sidebar-fade:bottom".into(), cx)))
             .into_any_element()
+    }
+
+    /// Reveal the selected row once, without undoing manual scrolling or opening collapsed hosts.
+    pub(super) fn reveal_sidebar_session(&mut self, row: Bounds<Pixels>, cx: &mut Context<Self>) {
+        let scroll = &self.sessions_scroll;
+        let viewport = scroll.bounds();
+        let inset = FADE_HEIGHT + px(4.);
+        let top = viewport.top() + inset;
+        let bottom = viewport.bottom() - inset;
+        let dy = if row.top() < top {
+            top - row.top()
+        } else if row.bottom() > bottom {
+            bottom - row.bottom()
+        } else {
+            return;
+        };
+        let mut offset = scroll.offset();
+        offset.y = (offset.y + dy).clamp(-scroll.max_offset().y, px(0.));
+        scroll.set_offset(offset);
+        cx.notify();
     }
 }
 

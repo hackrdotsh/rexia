@@ -960,15 +960,6 @@ impl Workspace {
                 theme,
                 cx,
             ),
-            self.toggle_row(
-                "activity-priority",
-                "Sort activity by priority",
-                "Most urgent first, instead of grouped by session.",
-                |s| s.interface.activity_by_priority,
-                |s, v| s.interface.activity_by_priority = v,
-                theme,
-                cx,
-            ),
             self.choice_row(
                 "pane-style",
                 "Pane style",
