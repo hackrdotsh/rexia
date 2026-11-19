@@ -210,6 +210,7 @@ pub struct X11ClientState {
     pub(crate) windows: HashMap<xproto::Window, WindowRef>,
     pub(crate) mouse_focused_window: Option<xproto::Window>,
     pub(crate) keyboard_focused_window: Option<xproto::Window>,
+    activation_click: Option<(xproto::Window, MouseButton, xproto::Timestamp)>,
     pub(crate) xkb: xkbc::State,
     keyboard_layout: LinuxKeyboardLayout,
     pub(crate) ximc: Option<X11rbClient<Rc<XCBConnection>>>,
@@ -531,6 +532,7 @@ impl X11Connection {
                 windows: HashMap::default(),
                 mouse_focused_window: None,
                 keyboard_focused_window: None,
+                activation_click: None,
                 xkb: xkb_state,
                 keyboard_layout,
                 ximc,
@@ -1057,6 +1059,30 @@ impl X11Client {
                     .context("X11: Failed to handle property notify")
                     .log_err();
             }
+            Event::XinputFocusIn(event)
+                if matches!(
+                    event.mode,
+                    xinput::NotifyMode::NORMAL | xinput::NotifyMode::WHILE_GRABBED
+                ) =>
+            {
+                // The window manager can set focus and then replay the press. XI2's focus
+                // event carries the held button even when the replayed press hasn't arrived.
+                self.0.borrow_mut().activation_click = event
+                    .buttons
+                    .first()
+                    .copied()
+                    .and_then(pressed_button_from_mask)
+                    .map(|button| (event.event, button, event.time));
+            }
+            Event::XinputFocusOut(event) => {
+                let mut state = self.0.borrow_mut();
+                if state
+                    .activation_click
+                    .is_some_and(|(window, ..)| window == event.event)
+                {
+                    state.activation_click = None;
+                }
+            }
             Event::FocusIn(event) => {
                 let window = self.get_window(event.event)?;
                 window.set_active(true);
@@ -1255,8 +1281,18 @@ impl X11Client {
                 }
                 match button_or_scroll_from_event_detail(event.detail) {
                     Some(ButtonOrScroll::Button(button)) => {
+                        let replayed = state.activation_click.take().is_some_and(
+                            |(window, held, focus_time)| {
+                                window == event.event && held == button
+                                // X timestamps wrap; the replay keeps the original press time.
+                                && focus_time.wrapping_sub(event.time) < (1 << 31)
+                            },
+                        );
+                        let first_mouse =
+                            replayed || state.keyboard_focused_window != Some(event.event);
                         let click_elapsed = state.last_click.elapsed();
-                        if click_elapsed < DOUBLE_CLICK_INTERVAL
+                        if !first_mouse
+                            && click_elapsed < DOUBLE_CLICK_INTERVAL
                             && state
                                 .last_mouse_button
                                 .is_some_and(|prev_button| prev_button == button)
@@ -1268,7 +1304,7 @@ impl X11Client {
                         }
 
                         state.last_click = Instant::now();
-                        state.last_mouse_button = Some(button);
+                        state.last_mouse_button = (!first_mouse).then_some(button);
                         state.last_location = position;
                         let current_count = state.current_count;
 
@@ -1278,7 +1314,7 @@ impl X11Client {
                             position,
                             modifiers,
                             click_count: current_count,
-                            first_mouse: false,
+                            first_mouse,
                         }));
                     }
                     Some(ButtonOrScroll::Scroll(direction)) => {

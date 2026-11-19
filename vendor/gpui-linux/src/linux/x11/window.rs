@@ -720,7 +720,9 @@ impl X11WindowState {
                 | xinput::XIEventMask::BUTTON_PRESS
                 | xinput::XIEventMask::BUTTON_RELEASE
                 | xinput::XIEventMask::ENTER
-                | xinput::XIEventMask::LEAVE;
+                | xinput::XIEventMask::LEAVE
+                | xinput::XIEventMask::FOCUS_IN
+                | xinput::XIEventMask::FOCUS_OUT;
             if supports_xinput_gestures {
                 // x11rb 0.13 doesn't define XIEventMask constants for gesture
                 // events, so we construct them from the event opcodes (each
