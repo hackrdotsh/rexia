@@ -477,6 +477,29 @@ mod tests {
     }
 
     #[test]
+    fn delta_paging_git_keeps_gits_title_and_icon() {
+        let block = block("test", "shell");
+        for (ancestors, title, icon) in [
+            (serde_json::json!([{"name": "git"}]), "git", "programs/git"),
+            (
+                serde_json::json!([{"name": "sh"}]),
+                "delta",
+                "programs/delta",
+            ),
+        ] {
+            let state = BlockState {
+                process: Process::parse(&serde_json::json!({
+                    "foreground": {"argv0": "delta", "path": "/usr/bin/delta"},
+                    "ancestors": ancestors,
+                })),
+                ..Default::default()
+            };
+            assert_eq!(pane_title(&block, Some(&state)), title);
+            assert_eq!(program_icon(Some(&state)), icon);
+        }
+    }
+
+    #[test]
     fn wrapper_detection_does_not_guess_from_ancestors_or_directory_names() {
         let state = BlockState {
             process: crate::rex::activity::Process::parse(&serde_json::json!({

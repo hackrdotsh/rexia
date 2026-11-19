@@ -133,21 +133,26 @@ pub struct Process {
 impl Process {
     pub fn parse(payload: &Value) -> Self {
         let foreground = &payload["foreground"];
+        let ancestors = || payload["ancestors"].as_array().into_iter().flatten();
         let mut pids: Vec<u64> = foreground["pid"].as_u64().into_iter().collect();
-        pids.extend(
-            payload["ancestors"]
-                .as_array()
-                .into_iter()
-                .flatten()
-                .filter_map(|a| a["pid"].as_u64()),
-        );
-        Self {
-            name: program_name(foreground),
-            identities: ["script", "path", "invoked_path", "argv0", "name"]
+        pids.extend(ancestors().filter_map(|a| a["pid"].as_u64()));
+        let name = program_name(foreground);
+        // Git can make its delta pager the foreground process. Standalone tools
+        // named delta (including DeltaDB) still keep their own identity.
+        let git_pager = name.as_deref() == Some("delta")
+            && ancestors().any(|a| program_name(a).as_deref() == Some("git"));
+        let identities = if git_pager {
+            vec!["git".into()]
+        } else {
+            ["script", "path", "invoked_path", "argv0", "name"]
                 .into_iter()
                 .filter_map(|key| foreground[key].as_str().filter(|value| !value.is_empty()))
                 .map(str::to_owned)
-                .collect(),
+                .collect()
+        };
+        Self {
+            name: if git_pager { Some("git".into()) } else { name },
+            identities,
             cwd: foreground["cwd"].as_str().map(str::to_owned),
             pids,
         }
