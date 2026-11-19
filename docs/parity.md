@@ -16,9 +16,10 @@ uses an external Rex server and has been tested on API revisions 14 and 18.
 - **Insert File…** and **Insert Photo…** use the Linux desktop picker. Insert Photo
   filters to images. Local paths are pasted as quoted paths; remote files are uploaded first.
 - The Sessions filter can show only online hosts or a saved set of hosts. Clicking
-  a host in the filter selects only that host. Activity shows each report and defaults
-  to priority grouping. Explicit host and session collapses survive switching views
-  and relaunching.
+  a host in the filter selects only that host. Activity shows each report and always
+  groups by priority. Explicit host and session collapses survive switching views
+  and relaunching. When Sessions scrolls to the active row, it leaves room for the
+  fade at the edge of the list.
 - File links support quoted names, soft wrapping, relative paths without shell
   integration, and `:line[:column]`. The suffix identifies the file, not an editor
   position. Opening a detected runnable file asks first.
@@ -26,6 +27,13 @@ uses an external Rex server and has been tested on API revisions 14 and 18.
   or bind **Mute Tab** without arguments to toggle it.
 - Rexia retains terminal views when switching back and prepares nearby tabs in
   the background. Terminal data streams retry temporary connection failures.
+- First clicks focus inactive terminal panes without sending a click to the
+  program. Minimized floating panes stay restorable when a tab moves into its
+  own window. Floating headers keep room for their title and controls, and
+  short notices fit their text.
+- The shortcut recorder accepts Page Up, Page Down, Home, End, Ctrl+J and
+  Ctrl+K. Left returns without replacing the shortcut. Git keeps its title
+  and icon while Delta pages its output.
 - The Mac app's name, icon badge and embedded server don't apply to Rexia.
 
 ## Actions
@@ -133,7 +141,7 @@ Working:
 
 - **Settings → Interface → Show Activity below Sessions** starts Activity halfway down
   the sidebar, or below Sessions if that list extends farther. Both sections scroll
-  together. The Activity-only view and its grouping controls are still available.
+  together. The Activity-only view is still available.
 
 - Settings → Client & Hosts lets you choose, change, or clear a local image for each
   host. Icons appear next to host names in the Sessions sidebar. GIFs play only for
@@ -255,7 +263,7 @@ Working:
   their own OSC 9 and 777), play no sounds and add nothing to the launcher badge. Mutes are
   saved with rexia's settings, so they last across launches, and they hold for tabs in
   sessions that aren't on screen: rexia asks the server where those panes sit. Mute or
-  Unmute Tab is also in the palette (`client.tab.mute.toggle`).
+  Unmute Tab is also in the palette (`client.tab.mute`).
 
 - Hover cards: resting the pointer on a tab, in the tab bar or the sidebar, shows a card
   with each of its panes: its program and title, what each program reporting in it says
