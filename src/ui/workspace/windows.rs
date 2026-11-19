@@ -188,6 +188,7 @@ impl Workspace {
     /// Take another window's preferences; which host and session it shows stay its own.
     fn adopt_settings(&mut self, other: &Settings, cx: &mut Context<Self>) {
         self.settings.interface = other.interface.clone();
+        self.settings.sidebar = other.sidebar.clone();
         self.settings.terminal = other.terminal.clone();
         self.settings.notifications = other.notifications.clone();
         self.settings.host_icons = other.host_icons.clone();

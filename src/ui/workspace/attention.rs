@@ -4,18 +4,20 @@ use super::{Workspace, activity_mark};
 use crate::{
     notify::{Note, Notifier, Urgency},
     rex::{
-        activity::ProgramState,
+        activity::{ProgramState, StatusRecord},
         host::{BlockState, HostModel},
         view::Window as ViewWindow,
     },
     sound::{self, Cue},
     ui::{
         components::{heading, small_icon_button, title},
+        program_icons,
         theme::Theme,
         titles,
     },
 };
 use gpui::{AnyElement, Context, SharedString, Window, div, prelude::*, px};
+use std::collections::HashMap;
 
 /// A tab mark: the state shown and its badge word.
 type Mark = (ProgramState, &'static str);
@@ -31,18 +33,25 @@ fn parse_key(key: &str) -> Option<(usize, String, String)> {
     Some((host, parts.next()?.to_owned(), parts.next()?.to_owned()))
 }
 
-/// One row of the activity list: a tab (or a pane, with Show each process) that reports.
+/// One reporting process in the Activity list.
 struct Row {
     host: usize,
     session: String,
     session_label: String,
     block: String,
+    process: String,
     title: String,
     detail: Option<String>,
     message: Option<String>,
     icon: &'static str,
     mark: Option<(ProgramState, &'static str)>,
     state: ProgramState,
+}
+
+#[derive(PartialEq, Eq)]
+enum Group<'a> {
+    Priority(ProgramState),
+    Session(usize, &'a str),
 }
 
 impl Workspace {
@@ -116,11 +125,14 @@ impl Workspace {
         block: &str,
         state: Option<&BlockState>,
     ) -> Option<(ProgramState, &'static str)> {
+        self.record_mark(host, block, state?.status()?)
+    }
+
+    fn record_mark(&self, host: usize, block: &str, record: &StatusRecord) -> Option<Mark> {
         let settings = &self.settings.notifications;
         if !settings.activity_in_tabs {
             return None;
         }
-        let record = state?.status()?;
         if !settings.for_state(record.state).tabs {
             return None;
         }
@@ -310,99 +322,84 @@ impl Workspace {
         let mut rows = Vec::new();
         for (host, entry) in self.hosts.iter().enumerate() {
             let model = entry.handle.snapshot();
-            let mut placed = std::collections::HashSet::new();
-            for (session, view) in &model.views {
+            if !self.show_sidebar_host(&entry.config.id, &model.connection) {
+                continue;
+            }
+            let placed: HashMap<_, _> = model
+                .views
+                .values()
+                .flat_map(|view| &view.windows)
+                .flat_map(|window| window.blocks())
+                .filter_map(|block| Some((block.block_id.as_deref()?, block)))
+                .collect();
+            for (block, state) in &model.blocks {
+                if state.records.is_empty() {
+                    continue;
+                }
                 let session_label = model
-                    .session(session)
+                    .session(&state.session_id)
                     .map(|s| s.label.clone())
                     .unwrap_or_default();
-                for window in &view.windows {
-                    let mut panes: Vec<(String, Option<Mark>, ProgramState)> = window
-                        .blocks()
-                        .filter_map(|b| {
-                            let id = b.block_id.clone()?;
-                            let state = model.blocks.get(&id);
-                            let reported = state.and_then(|s| s.status()).map(|r| r.state)?;
-                            let mark = self.mark_for(host, &id, state);
-                            let keep = mark.is_some()
-                                || (settings.include_idle && reported == ProgramState::Idle);
-                            keep.then_some((id, mark, reported))
-                        })
-                        .collect();
-                    if panes.is_empty() {
+                let pane_title = placed.get(block.as_str()).map_or_else(
+                    || {
+                        state
+                            .current_title()
+                            .map(str::to_owned)
+                            .or_else(|| state.process.name.clone())
+                            .unwrap_or_else(|| "Shell".into())
+                    },
+                    |pane| titles::pane_title(pane, Some(state)),
+                );
+                for (process, record) in &state.records {
+                    let mark = self.record_mark(host, block, record);
+                    if mark.is_none()
+                        && !(settings.include_idle && record.state == ProgramState::Idle)
+                    {
                         continue;
                     }
-                    panes.sort_by_key(|p| std::cmp::Reverse(p.2));
-                    let chosen: Vec<_> = if settings.each_process {
-                        panes
-                    } else {
-                        panes.into_iter().take(1).collect()
-                    };
-                    for (block, mark, state) in chosen {
-                        placed.insert(block.clone());
-                        let block_state = model.blocks.get(&block);
-                        let record = block_state.and_then(|s| s.status());
-                        let title = if settings.each_process {
-                            window
-                                .block(&block)
-                                .map(|b| titles::pane_title(b, block_state))
-                                .unwrap_or_default()
-                        } else {
-                            titles::tab_title(window, &model)
-                        };
-                        rows.push(Row {
-                            host,
-                            session: session.clone(),
-                            session_label: session_label.clone(),
-                            block: block.clone(),
-                            title,
-                            detail: record.and_then(|r| r.app.clone()),
-                            message: record.and_then(|r| r.msg.clone()),
-                            icon: titles::program_icon(block_state),
-                            mark,
-                            state,
-                        });
-                    }
+                    let title = record
+                        .title
+                        .clone()
+                        .or_else(|| {
+                            (state.records.len() > 1)
+                                .then(|| record.app.clone())
+                                .flatten()
+                        })
+                        .unwrap_or_else(|| pane_title.clone());
+                    rows.push(Row {
+                        host,
+                        session: state.session_id.clone(),
+                        session_label: session_label.clone(),
+                        block: block.clone(),
+                        process: process.clone(),
+                        detail: record.app.as_ref().filter(|app| **app != title).cloned(),
+                        title,
+                        message: record.msg.clone(),
+                        icon: record
+                            .app
+                            .as_deref()
+                            .and_then(program_icons::find)
+                            .map_or_else(|| titles::program_icon(Some(state)), |app| app.icon),
+                        mark,
+                        state: record.state,
+                    });
                 }
-            }
-            // Sessions this client hasn't opened still report through block events.
-            for (block, state) in &model.blocks {
-                if placed.contains(block) {
-                    continue;
-                }
-                let Some(mark) = self.mark_for(host, block, Some(state)) else {
-                    continue;
-                };
-                rows.push(Row {
-                    host,
-                    session: state.session_id.clone(),
-                    session_label: model
-                        .session(&state.session_id)
-                        .map(|s| s.label.clone())
-                        .unwrap_or_default(),
-                    block: block.clone(),
-                    title: state
-                        .current_title()
-                        .map(str::to_owned)
-                        .or(state.process.name.clone())
-                        .unwrap_or_else(|| "Shell".into()),
-                    detail: state.status().and_then(|r| r.app.clone()),
-                    message: state.status().and_then(|r| r.msg.clone()),
-                    icon: titles::program_icon(Some(state)),
-                    mark: Some(mark),
-                    state: mark.0,
-                });
             }
         }
-        if self.settings.interface.activity_by_priority {
-            rows.sort_by(|a, b| b.state.cmp(&a.state).then(a.title.cmp(&b.title)));
-        } else {
-            rows.sort_by(|a, b| {
-                a.session_label
-                    .cmp(&b.session_label)
+        let by_priority = self.settings.interface.activity_by_priority;
+        rows.sort_by(|a, b| {
+            let group = if by_priority {
+                b.state.cmp(&a.state)
+            } else {
+                (&a.session_label, a.host, &a.session)
+                    .cmp(&(&b.session_label, b.host, &b.session))
                     .then(b.state.cmp(&a.state))
-            });
-        }
+            };
+            group.then(
+                (&a.title, a.host, &a.block, &a.process)
+                    .cmp(&(&b.title, b.host, &b.block, &b.process)),
+            )
+        });
         rows
     }
 
@@ -415,16 +412,32 @@ impl Workspace {
         let rows = self.activity_rows();
         let by_priority = self.settings.interface.activity_by_priority;
         let mut list = div().flex().flex_col().gap(px(2.));
-        let mut last_session: Option<String> = None;
-        for (index, row) in rows.iter().enumerate() {
-            if !by_priority && last_session.as_ref() != Some(&row.session) {
-                list = list.child(heading(row.session_label.clone(), theme));
-                last_session = Some(row.session.clone());
+        let mut last_group = None;
+        for row in &rows {
+            let group = if by_priority {
+                Group::Priority(row.state)
+            } else {
+                Group::Session(row.host, &row.session)
+            };
+            if last_group.as_ref() != Some(&group) {
+                let name = if by_priority {
+                    row.state.name()
+                } else {
+                    &row.session_label
+                };
+                list = list.child(
+                    heading(name.to_owned(), theme)
+                        .relative()
+                        .child(self.track_bounds(format!("activity-group:{name}"), cx)),
+                );
+                last_group = Some(group);
             }
             let (host, session, block) = (row.host, row.session.clone(), row.block.clone());
+            let id = format!("activity:{host}:{block}:{}", row.process);
             list = list.child(
                 div()
-                    .id(SharedString::from(format!("activity-{index}")))
+                    .id(SharedString::from(id.clone()))
+                    .relative()
                     .flex()
                     .items_start()
                     .gap(px(8.))
@@ -433,6 +446,7 @@ impl Workspace {
                     .rounded(theme.radius_small())
                     .cursor_pointer()
                     .hover(|d| d.bg(theme.overlay(0.06)))
+                    .child(self.track_bounds(id, cx))
                     .child(crate::ui::program_icons::render_icon(
                         row.icon,
                         20.,
@@ -519,12 +533,7 @@ impl Workspace {
                     .child("No program needs you"),
             );
         }
-        div()
-            .id(if below_sessions {
-                "sidebar-activity-section"
-            } else {
-                "sidebar"
-            })
+        let content = div()
             .flex()
             .flex_col()
             .relative()
@@ -536,9 +545,7 @@ impl Workspace {
                     .border_color(theme.overlay(0.12))
                     .child(self.track_bounds("activity-below-sessions".into(), cx))
             })
-            .when(!below_sessions, |d| {
-                d.flex_1().min_h_0().p(px(10.)).overflow_y_scroll()
-            })
+            .flex_none()
             .child(
                 div()
                     .flex()
@@ -558,10 +565,13 @@ impl Workspace {
                             theme.text_muted,
                             theme,
                             cx.listener(|ws, _, _, cx| {
-                                ws.settings.interface.activity_by_priority =
-                                    !ws.settings.interface.activity_by_priority;
-                                ws.save_settings();
-                                cx.notify();
+                                ws.update_settings(
+                                    |s| {
+                                        s.interface.activity_by_priority =
+                                            !s.interface.activity_by_priority;
+                                    },
+                                    cx,
+                                );
                             }),
                         )
                         .tooltip(self.tip(
@@ -595,8 +605,12 @@ impl Workspace {
                         .tooltip(self.tip("client.sidebar.activity.toggle", Some("Hide Activity"))),
                     ),
             )
-            .child(list)
-            .into_any_element()
+            .child(list);
+        if below_sessions {
+            content.into_any_element()
+        } else {
+            self.sidebar_scroll("sidebar-activity", div().child(content), theme, cx)
+        }
     }
 }
 

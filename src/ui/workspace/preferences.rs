@@ -1711,15 +1711,6 @@ impl Workspace {
                 cx,
             ),
             self.toggle_row(
-                "each-process",
-                "Show each process",
-                "List every reporting pane of a tab on its own row.",
-                |s| s.notifications.each_process,
-                |s, v| s.notifications.each_process = v,
-                theme,
-                cx,
-            ),
-            self.toggle_row(
                 "system-notifications",
                 "Show desktop notifications",
                 "Notify through the desktop when a pane out of view needs you.",

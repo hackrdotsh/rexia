@@ -541,16 +541,16 @@ impl Workspace {
             "session.refresh" => self.host().handle.send(HostCommand::Reconnect),
             "session.collapse" => {
                 if let Some(id) = session {
-                    self.set_session_expanded(self.active, id, false);
+                    self.set_session_expanded(self.active, id, false, cx);
                 }
             }
             "session.expand" => {
                 if let Some(id) = session {
-                    self.set_session_expanded(self.active, id, true);
+                    self.set_session_expanded(self.active, id, true, cx);
                 }
             }
             "session.collapse_others" => {
-                self.collapse_other_sessions(session.as_deref());
+                self.collapse_other_sessions(session.as_deref(), cx);
             }
             "client.host.switch" => {
                 let next = match arg(args, "host") {

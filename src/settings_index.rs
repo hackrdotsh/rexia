@@ -60,9 +60,7 @@ pub fn group(path: &str) -> &'static str {
             "advanced"
         }
     } else if path.starts_with("notifications.") {
-        if path.matches('.').count() > 1
-            || matches!(field, "activity_in_tabs" | "include_idle" | "each_process")
-        {
+        if path.matches('.').count() > 1 || matches!(field, "activity_in_tabs" | "include_idle") {
             "program-activity"
         } else if field == "notice_position" {
             "in-app-notifications"
@@ -309,11 +307,6 @@ const NAMES: &[(&str, &str, &str)] = &[
         "notifications.include_idle",
         "include-idle",
         "Include idle processes in activity",
-    ),
-    (
-        "notifications.each_process",
-        "each-process",
-        "Show each process",
     ),
     (
         "notifications.system_notifications",

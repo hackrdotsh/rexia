@@ -54,6 +54,9 @@ impl Workspace {
         }
         for (host, entry) in self.hosts.iter().enumerate() {
             let model = entry.handle.snapshot();
+            if !self.show_sidebar_host(&entry.config.id, &model.connection) {
+                continue;
+            }
             for session in &model.sessions {
                 let session_hit = fuzzy::score(query, &session.label).is_some();
                 let tabs: Vec<FilterMatch> = model

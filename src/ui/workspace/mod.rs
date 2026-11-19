@@ -30,6 +30,7 @@ pub mod server_status;
 pub mod sessions;
 pub mod settings_search;
 pub mod shortcuts_page;
+mod sidebar;
 pub mod sidebar_width;
 mod ssh;
 pub mod ssh_questions;
@@ -247,10 +248,9 @@ pub struct Workspace {
     drag: Option<Drag>,
     /// The block this client last focused for the server's focused block.
     focused: Option<String>,
-    /// Hosts whose session lists are hidden in this window.
-    collapsed_hosts: HashSet<String>,
-    /// Sidebar disclosure by host ID and session ID; an explicit collapse survives selection.
-    session_disclosure: HashMap<(String, String), bool>,
+    /// Sessions opened in this window, by host and session ID. Explicit collapses override these.
+    expanded_sessions: HashSet<(String, String)>,
+    host_filter_open: bool,
     pub notice: Option<String>,
     forwards: forwards::Forwards,
     new_window_session: Option<(String, Option<String>)>,
@@ -468,8 +468,8 @@ impl Workspace {
             window_active: true,
             drag: None,
             focused: None,
-            collapsed_hosts: HashSet::new(),
-            session_disclosure: HashMap::new(),
+            expanded_sessions: HashSet::new(),
+            host_filter_open: false,
             notice: None,
             forwards: forwards::Forwards::default(),
             new_window_session: None,
@@ -598,9 +598,8 @@ impl Workspace {
             return;
         }
         if let Some(id) = &model.selected {
-            self.session_disclosure
-                .entry((self.host().config.id.clone(), id.clone()))
-                .or_insert(true);
+            self.expanded_sessions
+                .insert((self.host().config.id.clone(), id.clone()));
         }
         if let Some(message) = model.notices.last().cloned() {
             self.notice = Some(message);
@@ -774,28 +773,6 @@ impl Workspace {
         self.switch_host(host, cx);
         self.hosts[host].handle.send(HostCommand::Select(session));
         cx.notify();
-    }
-
-    fn set_session_expanded(&mut self, host: usize, session: String, expanded: bool) {
-        let entry = &self.hosts[host];
-        self.session_disclosure
-            .insert((entry.config.id.clone(), session.clone()), expanded);
-        if expanded && !entry.handle.snapshot().views.contains_key(&session) {
-            entry.handle.send(HostCommand::LoadSession(session));
-        }
-    }
-
-    fn collapse_other_sessions(&mut self, session: Option<&str>) {
-        for host in &self.hosts {
-            for item in &host.handle.snapshot().sessions {
-                if host.config.id != self.host().config.id
-                    || Some(item.session_id.as_str()) != session
-                {
-                    self.session_disclosure
-                        .insert((host.config.id.clone(), item.session_id.clone()), false);
-                }
-            }
-        }
     }
 
     pub fn new_session(&mut self, host: usize, cx: &mut Context<Self>) {
@@ -1330,16 +1307,21 @@ impl Workspace {
         let (session_text, tab_text, tab_height) =
             self.settings.interface.sidebar_text_size.metrics();
         let mut list = div().flex().flex_col().gap(px(8.));
+        let mut any_host = false;
         for (index, host) in self.hosts.iter().enumerate() {
             let host_id = &host.config.id;
-            let collapsed = self.collapsed_hosts.contains(host_id);
+            let model = host.handle.snapshot();
+            if !self.show_sidebar_host(host_id, &model.connection) {
+                continue;
+            }
+            any_host = true;
+            let collapsed = self.settings.sidebar.collapsed_hosts.contains(host_id);
             let active_host = index == self.active;
             let host_surface = if active_host {
                 theme.surface
             } else {
                 theme.background.blend(theme.surface.opacity(0.5))
             };
-            let model = host.handle.snapshot();
             let status = match &model.connection {
                 crate::rex::host::Connection::Connected => None,
                 crate::rex::host::Connection::Connecting => Some("Connecting…".to_owned()),
@@ -1365,12 +1347,7 @@ impl Workspace {
                         .child(self.track_bounds(format!("host-disclosure:{host_id}"), cx))
                         .on_click(cx.listener({
                             let host_id = host_id.clone();
-                            move |ws, _, _, cx| {
-                                if !ws.collapsed_hosts.remove(&host_id) {
-                                    ws.collapsed_hosts.insert(host_id.clone());
-                                }
-                                cx.notify();
-                            }
+                            move |ws, _, _, cx| ws.toggle_host_collapsed(&host_id, cx)
                         }))
                         .child(
                             heading("", theme)
@@ -1440,11 +1417,11 @@ impl Workspace {
             for session in sessions {
                 let selected = active_host && model.selected.as_ref() == Some(&session.session_id);
                 let id = session.session_id.clone();
-                let expanded = self
-                    .session_disclosure
-                    .get(&(host.config.id.clone(), id.clone()))
-                    .copied()
-                    .unwrap_or(selected);
+                let expanded = !self.settings.sidebar.session_collapsed(host_id, &id)
+                    && (selected
+                        || self
+                            .expanded_sessions
+                            .contains(&(host_id.clone(), id.clone())));
                 let activity = self.session_mark(index, &session.session_id, &model);
                 let (offset, grabbed) = preview.as_ref().map_or((px(0.), false), |preview| {
                     preview.placement(&id, cx.reduce_motion())
@@ -1520,6 +1497,7 @@ impl Workspace {
                                                         index,
                                                         id.clone(),
                                                         true,
+                                                        cx,
                                                     );
                                                     ws.new_tab_in(index, id.clone(), cx);
                                                     cx.notify();
@@ -1575,8 +1553,7 @@ impl Workspace {
                                 if ws.sidebar_drag_consumed {
                                     return;
                                 }
-                                ws.set_session_expanded(index, id.clone(), !expanded);
-                                cx.notify();
+                                ws.set_session_expanded(index, id.clone(), !expanded, cx);
                             })),
                     );
                 if expanded && let Some(view) = model.views.get(&session.session_id) {
@@ -1780,6 +1757,9 @@ impl Workspace {
             }
             list = list.child(group);
         }
+        if !any_host {
+            list = list.child(heading("No hosts match", theme));
+        }
         let combined = self.settings.interface.activity_below_sessions;
         let sessions = div()
             .flex()
@@ -1787,14 +1767,7 @@ impl Workspace {
             .flex_none()
             .gap(px(6.))
             .when(combined, |d| d.min_h(relative(0.5)).pb(px(14.)))
-            .child(div().px(px(6.)).pb(px(4.)).child(title(
-                if cfg!(debug_assertions) {
-                    "Sessions (dev)"
-                } else {
-                    "Sessions"
-                },
-                theme,
-            )))
+            .child(self.render_sessions_header(theme, cx))
             .child(self.render_filter_field())
             .map(|d| {
                 if self.filter.query.trim().is_empty() {
@@ -1803,21 +1776,11 @@ impl Workspace {
                     d.child(self.render_filter_results(theme, cx))
                 }
             });
-        div()
-            .id("sidebar")
-            .relative()
-            .flex()
-            .flex_col()
-            .flex_1()
-            .min_h_0()
-            .p(px(10.))
-            .overflow_y_scroll()
-            .child(sessions)
-            .when(combined, |d| {
-                d.child(self.track_bounds("sessions-sidebar".into(), cx))
-                    .child(self.render_sidebar_activity(true, theme, cx))
-            })
-            .into_any_element()
+        let content = div().child(sessions).when(combined, |d| {
+            d.child(self.track_bounds("sessions-sidebar".into(), cx))
+                .child(self.render_sidebar_activity(true, theme, cx))
+        });
+        self.sidebar_scroll("sidebar-sessions", content, theme, cx)
     }
 
     fn render_panes(

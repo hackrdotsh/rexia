@@ -1,6 +1,7 @@
 //! rexia's preferences, saved as TOML in `$XDG_CONFIG_HOME/rexia/settings.toml`.
 use anyhow::{Context, Result};
 use serde::{Deserialize, Serialize};
+use std::collections::{BTreeMap, BTreeSet};
 use std::path::{Path, PathBuf};
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
@@ -494,7 +495,7 @@ pub struct InterfaceSettings {
     pub activity_view: bool,
     /// Include Activity under the Sessions list.
     pub activity_below_sessions: bool,
-    /// Sort the activity filter by urgency instead of grouping it by session.
+    /// Group Activity by urgency instead of by session.
     pub activity_by_priority: bool,
 }
 
@@ -530,7 +531,7 @@ impl Default for InterfaceSettings {
             autobalance_splits: true,
             activity_view: false,
             activity_below_sessions: false,
-            activity_by_priority: false,
+            activity_by_priority: true,
         }
     }
 }
@@ -630,8 +631,6 @@ pub struct NotificationSettings {
     pub activity_in_tabs: bool,
     /// Keep tabs whose programs report idle in the activity list.
     pub include_idle: bool,
-    /// List each reporting pane of a tab on its own row.
-    pub each_process: bool,
     /// Desktop notifications for program status while the pane isn't in view.
     pub system_notifications: bool,
     /// The count of unseen attention on rexia's launcher icon.
@@ -656,7 +655,6 @@ impl Default for NotificationSettings {
         Self {
             activity_in_tabs: true,
             include_idle: false,
-            each_process: false,
             system_notifications: true,
             badge: true,
             sounds: false,
@@ -707,6 +705,7 @@ pub struct Settings {
     /// The label this client shows in `rex client ls`.
     pub client_label: Option<String>,
     pub interface: InterfaceSettings,
+    pub sidebar: SidebarSettings,
     pub terminal: TerminalSettings,
     pub notifications: NotificationSettings,
     /// The host and session shown last, restored at launch.
@@ -734,6 +733,46 @@ pub struct Settings {
     pub muted_tabs: std::collections::BTreeMap<String, Vec<String>>,
 }
 
+#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct SidebarSettings {
+    /// Limit the sidebar to connected hosts without altering the checked hosts.
+    pub online_only: bool,
+    /// None shows all hosts, including hosts added after the filter was set.
+    pub selected_hosts: Option<BTreeSet<String>>,
+    pub collapsed_hosts: BTreeSet<String>,
+    /// Session IDs are scoped to the host that owns them.
+    pub collapsed_sessions: BTreeMap<String, BTreeSet<String>>,
+}
+
+impl SidebarSettings {
+    pub fn host_selected(&self, id: &str) -> bool {
+        self.selected_hosts
+            .as_ref()
+            .is_none_or(|selected| selected.contains(id))
+    }
+
+    pub fn session_collapsed(&self, host: &str, session: &str) -> bool {
+        self.collapsed_sessions
+            .get(host)
+            .is_some_and(|sessions| sessions.contains(session))
+    }
+
+    pub fn set_session_collapsed(&mut self, host: &str, session: &str, collapsed: bool) {
+        if collapsed {
+            self.collapsed_sessions
+                .entry(host.to_owned())
+                .or_default()
+                .insert(session.to_owned());
+        } else if let Some(sessions) = self.collapsed_sessions.get_mut(host) {
+            sessions.remove(session);
+            if sessions.is_empty() {
+                self.collapsed_sessions.remove(host);
+            }
+        }
+    }
+}
+
 /// Web client origins a server was started with.
 #[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(default)]
@@ -753,6 +792,7 @@ impl Default for Settings {
             host_icons: Default::default(),
             client_label: None,
             interface: InterfaceSettings::default(),
+            sidebar: SidebarSettings::default(),
             terminal: TerminalSettings::default(),
             notifications: NotificationSettings::default(),
             last_host: None,
@@ -839,5 +879,28 @@ mod tests {
             "unset fields keep their defaults"
         );
         assert!(!quiet.notifications.working.notify);
+    }
+
+    #[test]
+    fn sidebar_defaults_and_empty_selection_round_trip() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("settings.toml");
+        std::fs::write(&path, "[notifications]\neach_process = false\n").unwrap();
+        let mut settings = Settings::load(&path).unwrap();
+        assert!(settings.interface.activity_by_priority);
+        assert!(settings.sidebar.host_selected("new-host"));
+
+        settings.sidebar.selected_hosts = Some(BTreeSet::new());
+        settings.sidebar.set_session_collapsed("local", "s", true);
+        settings.save(&path).unwrap();
+        let saved = Settings::load(&path).unwrap();
+        assert!(!saved.sidebar.host_selected("new-host"));
+        assert!(saved.sidebar.session_collapsed("local", "s"));
+        assert!(!saved.sidebar.session_collapsed("remote", "s"));
+        assert!(
+            !std::fs::read_to_string(path)
+                .unwrap()
+                .contains("each_process")
+        );
     }
 }
