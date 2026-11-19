@@ -107,6 +107,17 @@ fn muted_tabs_stay_quiet_and_keep_their_mark() {
         let block = window.blocks().next()?.block_id.clone()?;
         Some((window.id().to_owned(), block))
     });
+    let client = h.wait("the Rexia client", |m| m.client_id.clone());
+    for muted in [true, true, false, false] {
+        h.call_from(
+            &control,
+            "client.perform",
+            json!({"client_id": client, "action": "client.tab.mute",
+                "args": {"window_id": tab, "muted": muted}}),
+        )
+        .unwrap();
+        assert_eq!(h.workspace(|ws| ws.tab_mutes()), [false, muted]);
+    }
     h.wait("the background shell", |m| {
         m.blocks.get(&block).and_then(|b| b.process.name.clone())
     });

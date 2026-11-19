@@ -575,12 +575,17 @@ impl Workspace {
                     .ok_or_else(|| refused("No tab is open"))?;
                 self.request_close(super::close_guard::CloseTarget::Tab(id), cx);
             }
-            "client.tab.mute.toggle" => {
-                let id = window_view
-                    .as_ref()
-                    .map(|w| w.id().to_owned())
+            "client.tab.mute" | "client.tab.mute.toggle" => {
+                let id = arg(args, "window_id")
+                    .or_else(|| window_view.as_ref().map(|w| w.id()))
                     .ok_or_else(|| refused("No tab is open"))?;
-                self.toggle_tab_mute(self.active, id, cx);
+                if !model.views.values().any(|view| view.window(id).is_some()) {
+                    return Err(refused("Tab not found"));
+                }
+                let muted = args["muted"]
+                    .as_bool()
+                    .unwrap_or_else(|| !self.tab_muted(self.active, id));
+                self.set_tab_muted(self.active, id.to_owned(), muted, cx);
             }
             "client.tab.close_others" => {
                 let keep = view

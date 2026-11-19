@@ -106,17 +106,30 @@ impl Workspace {
 
     /// Mute the tab, or unmute it if it's muted.
     pub fn toggle_tab_mute(&mut self, host: usize, window_id: String, cx: &mut Context<Self>) {
+        let muted = !self.tab_muted(host, &window_id);
+        self.set_tab_muted(host, window_id, muted, cx);
+    }
+
+    pub(super) fn set_tab_muted(
+        &mut self,
+        host: usize,
+        window_id: String,
+        muted: bool,
+        cx: &mut Context<Self>,
+    ) {
+        if self.tab_muted(host, &window_id) == muted {
+            return;
+        }
         let Some(id) = self.hosts.get(host).map(|h| h.config.id.clone()) else {
             return;
         };
         self.update_settings(
             move |s| {
                 let tabs = s.muted_tabs.entry(id.clone()).or_default();
-                match tabs.iter().position(|t| *t == window_id) {
-                    Some(at) => {
-                        tabs.remove(at);
-                    }
-                    None => tabs.push(window_id),
+                if muted {
+                    tabs.push(window_id);
+                } else {
+                    tabs.retain(|t| *t != window_id);
                 }
                 if tabs.is_empty() {
                     s.muted_tabs.remove(&id);

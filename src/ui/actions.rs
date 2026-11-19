@@ -24,6 +24,8 @@ const MODE: &str =
     r#"{"type":"object","properties":{"name":{"type":"string"}},"required":["name"]}"#;
 const KEY: &str = r#"{"type":"object","properties":{"key":{"type":"string"}},"required":["key"]}"#;
 const HOST: &str = r#"{"type":"object","properties":{"host":{"type":"string"}}}"#;
+const MUTE_TAB: &str =
+    r#"{"type":"object","properties":{"window_id":{"type":"string"},"muted":{"type":"boolean"}}}"#;
 
 macro_rules! action {
     ($name:literal, $title:literal, $category:literal, $keywords:literal, [$($keys:expr),* $(,)?] $(, args = $args:expr)? $(, repeats = $repeats:expr)?) => {
@@ -348,11 +350,12 @@ pub const ACTIONS: &[ActionDef] = &[
         []
     ),
     action!(
-        "client.tab.mute.toggle",
-        "Mute or Unmute Tab",
+        "client.tab.mute",
+        "Mute Tab",
         "Tab",
         "mute unmute silence quiet notifications sounds badge tab",
-        []
+        [],
+        args = MUTE_TAB
     ),
     action!(
         "client.tab.close_others",
@@ -872,6 +875,10 @@ pub fn all() -> impl Iterator<Item = &'static ActionDef> {
 }
 
 pub fn find(name: &str) -> Option<&'static ActionDef> {
+    let name = match name {
+        "client.tab.mute.toggle" => "client.tab.mute",
+        name => name,
+    };
     all().find(|a| a.name == name)
 }
 
@@ -904,7 +911,12 @@ pub fn keymap_request(shortcuts: &Shortcuts) -> Value {
     let claimed: Vec<&Vec<String>> = shortcuts.values().filter(|k| !k.is_empty()).collect();
     let bindings: Vec<Value> = all()
         .flat_map(|a| -> Vec<Value> {
-            if let Some(keys) = shortcuts.get(a.name).filter(|_| rebindable(a)) {
+            let keys = shortcuts.get(a.name).or_else(|| {
+                (a.name == "client.tab.mute")
+                    .then(|| shortcuts.get("client.tab.mute.toggle"))
+                    .flatten()
+            });
+            if let Some(keys) = keys.filter(|_| rebindable(a)) {
                 return if keys.is_empty() {
                     Vec::new()
                 } else {

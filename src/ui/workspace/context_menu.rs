@@ -231,7 +231,7 @@ impl Workspace {
                 item(
                     if muted { "Unmute Tab" } else { "Mute Tab" },
                     TabCommand::Mute,
-                    "client.tab.mute.toggle",
+                    "client.tab.mute",
                     true,
                 ),
             ],
