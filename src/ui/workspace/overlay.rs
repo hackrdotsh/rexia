@@ -182,13 +182,17 @@ pub enum Confirm {
         id: String,
     },
     RestartServer,
+    OpenFile(String),
 }
 
 impl Confirm {
     /// The button that leaves things as they are.
     fn keep_label(&self) -> &'static str {
         match self {
-            Self::Paste { .. } | Self::Close(_) | Self::ResetShortcut { .. } => "Cancel",
+            Self::Paste { .. }
+            | Self::Close(_)
+            | Self::ResetShortcut { .. }
+            | Self::OpenFile(_) => "Cancel",
             Self::RemoveHost { .. } => "Keep Host",
             Self::CloseSession { .. } | Self::RestartServer => "Keep Running",
         }
@@ -1300,6 +1304,9 @@ impl Workspace {
             Confirm::Close(target) => self.close_now(target),
             Confirm::ResetShortcut { action, from } => self.reset_now(&action, Some(from), cx),
             Confirm::RestartServer => self.restart_server(cx),
+            Confirm::OpenFile(uri) => {
+                self.finish_file_open(super::quick_look::Shown::Opener(uri), cx)
+            }
             Confirm::CloseSession { id } => self
                 .host()
                 .handle

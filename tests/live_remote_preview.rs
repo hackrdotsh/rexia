@@ -120,7 +120,7 @@ fn remote_files_download_before_preview_or_open() {
         .to_file_path()
         .unwrap();
     assert_ne!(open_copy, copy);
-    assert!(open_copy.starts_with(downloads));
+    assert!(open_copy.starts_with(&downloads));
     assert_eq!(std::fs::read_to_string(open_copy).unwrap(), content);
     assert_eq!(std::fs::read_to_string(copy).unwrap(), content);
     assert_eq!(desktop.previewed().len(), 1);
@@ -142,5 +142,51 @@ fn remote_files_download_before_preview_or_open() {
         opened_before,
         "a failed download must not open a partial file"
     );
+
+    // With the downloaded copy's execute bits stripped, a script is still detected.
+    let script = directory.path().join("remote-helper");
+    let script_text = "#!/bin/sh\nexit 0\n";
+    std::fs::write(&script, script_text).unwrap();
+    let script_uri = rexia::quick_look::file_uri(&script);
+    h.type_text(&format!(
+        "printf '%b\\n' '\\033]8;;{script_uri}\\033\\\\remote-script\\033]8;;\\033\\\\'"
+    ));
+    h.press("enter");
+    let row = h.wait("remote script link", |m| {
+        focused_text(m)
+            .lines()
+            .position(|line| line.trim() == "remote-script")
+    });
+    let at = h.cx.update(|cx| {
+        let pane = window.read(cx).unwrap().focused_terminal().unwrap();
+        pane.read(cx).cell_point(3, row as u16).unwrap()
+    });
+    h.input(PlatformInput::MouseMove(MouseMoveEvent {
+        position: at,
+        pressed_button: None,
+        modifiers: Default::default(),
+    }));
+    h.run("client.quick_look", serde_json::Value::Null);
+    h.wait_ui("remote script confirmation", |ws| ws.confirm_title());
+    assert_eq!(opened.borrow().len(), opened_before);
+    assert_eq!(desktop.previewed().len(), 1, "the script was not previewed");
+    h.press("tab");
+    h.press("enter");
+    let script_copy = url::Url::parse(opened.borrow().last().unwrap())
+        .unwrap()
+        .to_file_path()
+        .unwrap();
+    assert_ne!(script_copy, script);
+    assert!(script_copy.starts_with(&downloads));
+    assert_eq!(std::fs::read_to_string(&script_copy).unwrap(), script_text);
+    assert_eq!(
+        std::fs::metadata(&script_copy)
+            .unwrap()
+            .permissions()
+            .mode()
+            & 0o777,
+        0o600
+    );
+    println!("Open Anyway opened remote script copy {script_copy:?}");
     drop(sessions);
 }

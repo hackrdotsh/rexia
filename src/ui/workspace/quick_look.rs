@@ -1,11 +1,12 @@
 //! Navigate the focused pane's visible links, or preview one chosen link. Remote
 //! files are downloaded before being handed to the desktop previewer or opener.
-use super::Workspace;
+use super::{Workspace, overlay::Confirm};
 use crate::{
     quick_look::{self, Target},
     rex::download,
 };
 use gpui::{AnyElement, Context, IntoElement, ParentElement, Styled, div, prelude::*, px};
+use std::path::Path;
 use std::sync::{
     Arc,
     atomic::{AtomicBool, Ordering},
@@ -25,6 +26,11 @@ pub enum Shown {
     Previewer(String),
     /// With the desktop's opener: web links, or files without the previewer.
     Opener(String),
+}
+
+enum PreparedFile {
+    Show(Shown),
+    Confirm { uri: String, path: String },
 }
 
 impl Workspace {
@@ -70,7 +76,9 @@ impl Workspace {
             unreachable!()
         };
         let host = self.host().handle.clone();
+        let host_index = self.active;
         let session = self.model().selected.unwrap_or_default();
+        let origin_session = session.clone();
         let block = block.to_owned();
         let directory = self.download_directory.clone();
         let label = self.host().config.label.clone();
@@ -79,7 +87,7 @@ impl Workspace {
         self.preview_cancel = Some(cancelled.clone());
         let (send, receive) = flume::bounded(1);
         std::thread::spawn(move || {
-            let result: Result<Shown, String> = (|| {
+            let result: Result<PreparedFile, String> = (|| {
                 let runtime = tokio::runtime::Builder::new_current_thread()
                     .enable_all()
                     .build()
@@ -101,14 +109,22 @@ impl Workspace {
                         ))
                         .map_err(|e| format!("Couldn't download {path}: {e:#}"))?
                 };
-                let uri = quick_look::file_uri(&full);
                 if cancelled.load(Ordering::SeqCst) {
                     return Err("Preview cancelled".into());
                 }
+                let (checked, runnable) = quick_look::inspect_file(&full, Path::new(&path))
+                    .map_err(|error| format!("Couldn't open {path}: {error}"))?;
+                let uri = quick_look::file_uri(&checked);
+                if runnable {
+                    return Ok(PreparedFile::Confirm {
+                        uri,
+                        path: checked.to_string_lossy().escape_debug().to_string(),
+                    });
+                }
                 if preview && quick_look::preview(bus.as_deref(), &uri).is_ok() {
-                    Ok(Shown::Previewer(uri))
+                    Ok(PreparedFile::Show(Shown::Previewer(uri)))
                 } else {
-                    Ok(Shown::Opener(uri))
+                    Ok(PreparedFile::Show(Shown::Opener(uri)))
                 }
             })();
             let _ = send.send(result);
@@ -118,15 +134,22 @@ impl Workspace {
                 return;
             };
             let _ = this.update(cx, |ws, cx| {
-                if ws.preview_generation != generation {
+                if ws.preview_generation != generation
+                    || ws.active != host_index
+                    || ws.model().selected.unwrap_or_default() != origin_session
+                {
                     return;
                 }
                 match result {
-                    Ok(shown) => {
-                        if let Shown::Opener(link) = &shown {
-                            (ws.link_opener)(link, cx);
-                        }
-                        ws.quick_looks.push(shown);
+                    Ok(PreparedFile::Show(shown)) => ws.finish_file_open(shown, cx),
+                    Ok(PreparedFile::Confirm { uri, path }) => {
+                        ws.open_confirm(
+                            "Open this file?".into(),
+                            format!("{path}\n\nOpening this file may run code on this computer."),
+                            "Open Anyway".into(),
+                            Confirm::OpenFile(uri),
+                            cx,
+                        );
                     }
                     Err(error) => ws.notice = Some(error),
                 }
@@ -134,6 +157,13 @@ impl Workspace {
             });
         })
         .detach();
+    }
+
+    pub(super) fn finish_file_open(&mut self, shown: Shown, cx: &mut Context<Self>) {
+        if let Shown::Opener(link) = &shown {
+            (self.link_opener)(link, cx);
+        }
+        self.quick_looks.push(shown);
     }
 
     /// Preview every visible link, starting at the pointer or the first link.

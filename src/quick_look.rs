@@ -3,7 +3,9 @@
 //! links, the desktop's opener (`xdg-open`) takes them.
 use crate::rex::stream::{Frame, flags};
 use std::{
+    io::{Read, Result as IoResult},
     ops::Range,
+    os::unix::fs::PermissionsExt,
     path::{Path, PathBuf},
 };
 use zbus::proxy;
@@ -383,6 +385,80 @@ pub fn needs_cwd(path: &str) -> bool {
     !Path::new(path).is_absolute() && path != "~" && !path.starts_with("~/")
 }
 
+fn runnable_name(path: &Path) -> bool {
+    path.extension().is_some_and(|ext| {
+        matches!(
+            ext.to_ascii_lowercase().to_str(),
+            Some(
+                "app"
+                    | "appimage"
+                    | "desktop"
+                    | "exe"
+                    | "com"
+                    | "msi"
+                    | "command"
+                    | "bat"
+                    | "cmd"
+                    | "ps1"
+                    | "sh"
+                    | "bash"
+                    | "zsh"
+                    | "fish"
+                    | "ksh"
+                    | "csh"
+                    | "py"
+                    | "pyw"
+                    | "pl"
+                    | "rb"
+                    | "lua"
+                    | "js"
+                    | "mjs"
+                    | "vbs"
+                    | "jar"
+            )
+        )
+    })
+}
+
+/// Return the exact path to hand to the desktop and whether it needs confirmation.
+/// Downloaded files lose execute permissions, so inspect their headers too.
+pub fn inspect_file(path: &Path, printed_path: &Path) -> IoResult<(PathBuf, bool)> {
+    let canonical = path.canonicalize()?;
+    let metadata = canonical.metadata()?;
+    let named = runnable_name(path) || runnable_name(&canonical) || runnable_name(printed_path);
+    if metadata.is_dir() {
+        let app_bundle = [path, &canonical, printed_path]
+            .into_iter()
+            .any(|p| p.extension().is_some_and(|e| e.eq_ignore_ascii_case("app")));
+        return Ok((canonical, app_bundle));
+    }
+    if !metadata.is_file() {
+        return Err(std::io::Error::other("not a regular file or folder"));
+    }
+    if named || metadata.permissions().mode() & 0o111 != 0 {
+        return Ok((canonical, true));
+    }
+
+    let mut header = Vec::new();
+    std::fs::File::open(&canonical)?
+        .take(16)
+        .read_to_end(&mut header)?;
+    let magic: &[&[u8]] = &[
+        b"#!",
+        b"\x7fELF",
+        b"MZ",
+        b"[Desktop Entry]",
+        b"\xfe\xed\xfa\xce",
+        b"\xce\xfa\xed\xfe",
+        b"\xfe\xed\xfa\xcf",
+        b"\xcf\xfa\xed\xfe",
+        b"\xca\xfe\xba\xbe",
+        b"\xca\xfe\xba\xbf",
+    ];
+    let runnable = magic.iter().any(|prefix| header.starts_with(prefix));
+    Ok((canonical, runnable))
+}
+
 /// A `file://` URI for a local path.
 pub fn file_uri(path: &Path) -> String {
     url::Url::from_file_path(path)
@@ -476,5 +552,48 @@ mod tests {
         );
         assert_eq!(resolve("missing.md", Some(cwd)), None);
         assert!(file_uri(&dir.path().join("a b.md")).ends_with("a%20b.md"));
+    }
+
+    #[test]
+    fn risky_open_checks_the_name_target_mode_and_contents() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = |name| dir.path().join(name);
+        let check = |name| inspect_file(&path(name), &path(name)).unwrap().1;
+        for (name, contents) in [
+            ("notes.txt", "ordinary text"),
+            ("runner", "#!/bin/sh\n"),
+            ("script.PY", "print('text')"),
+            ("renamed-launcher", "[Desktop Entry]\n"),
+            ("program", "plain text marked executable"),
+        ] {
+            std::fs::write(path(name), contents).unwrap();
+        }
+        std::fs::set_permissions(path("program"), std::fs::Permissions::from_mode(0o700)).unwrap();
+        std::fs::create_dir(path("Example.app")).unwrap();
+        std::fs::create_dir(path("ordinary folder")).unwrap();
+        std::os::unix::fs::symlink(path("script.PY"), path("alias.txt")).unwrap();
+        for name in [
+            "runner",
+            "script.PY",
+            "program",
+            "Example.app",
+            "alias.txt",
+            "renamed-launcher",
+        ] {
+            assert!(check(name), "{name}");
+        }
+        assert!(!check("notes.txt"));
+        assert!(!check("ordinary folder"));
+        assert!(
+            inspect_file(&path("notes.txt"), Path::new("remote.js"))
+                .unwrap()
+                .1
+        );
+        assert_eq!(
+            inspect_file(&path("alias.txt"), &path("alias.txt"))
+                .unwrap()
+                .0,
+            path("script.PY").canonicalize().unwrap()
+        );
     }
 }
