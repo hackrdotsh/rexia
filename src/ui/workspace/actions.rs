@@ -6,11 +6,12 @@ use crate::{
     keymap::{Keymap, Lookup},
     rex::{
         host::{HostCommand, PerformRequest},
+        stream::copy_mode::{Command as CopyCommand, Motion, SelectionKind},
         view::{self, View},
     },
     ui::{actions, keys, terminal::TerminalPane, titles},
 };
-use gpui::{ClipboardItem, Context, Entity, KeyDownEvent, Window};
+use gpui::{ClipboardItem, Context, Entity, Focusable, KeyDownEvent, Window};
 use serde_json::{Value, json};
 
 /// The session and block an action applies to; the focused ones when left out.
@@ -152,7 +153,15 @@ impl Workspace {
             return;
         }
         let stroke = keys::stroke(&event.keystroke);
-        let mode = self.modes.last().cloned();
+        let copy_block = self.panes.iter().find_map(|(block, pane)| {
+            let pane = pane.read(cx);
+            (pane.focus_handle(cx).is_focused(window) && pane.in_copy_mode()).then(|| block.clone())
+        });
+        let mode = if copy_block.is_some() {
+            Some("copy".to_owned())
+        } else {
+            self.modes.last().cloned()
+        };
         let mut typed = self.pending.clone();
         typed.push(stroke.spellings());
         let available = |action: &str| self.available(action);
@@ -161,6 +170,26 @@ impl Workspace {
             Lookup::Run(binding) => binding.clone(),
             Lookup::Prefix => {
                 self.pending = typed;
+                cx.stop_propagation();
+                cx.notify();
+                return;
+            }
+            Lookup::Swallow | Lookup::Unbound if copy_block.is_some() => {
+                self.pending.clear();
+                let explicitly_blocked = self.keymap.modes.get("copy").is_some_and(|mode| {
+                    mode.blocked
+                        .iter()
+                        .any(|keys| keys.len() == 1 && stroke.spellings().contains(&keys[0]))
+                });
+                if stroke.is_escape()
+                    && !explicitly_blocked
+                    && let Some(pane) = copy_block
+                        .as_deref()
+                        .and_then(|block| self.pane_entity(block))
+                {
+                    pane.update(cx, |pane, cx| pane.copy_mode(CopyCommand::Exit, cx))
+                        .ok();
+                }
                 cx.stop_propagation();
                 cx.notify();
                 return;
@@ -199,8 +228,11 @@ impl Workspace {
             return;
         }
         let args = binding.args.clone().unwrap_or(Value::Null);
-        if let Err((_, message)) =
-            self.run_action(&binding.action, args, "key", Target::default(), window, cx)
+        let target = Target {
+            block_id: copy_block,
+            ..Target::default()
+        };
+        if let Err((_, message)) = self.run_action(&binding.action, args, "key", target, window, cx)
         {
             self.notice = Some(message);
         }
@@ -322,6 +354,51 @@ impl Workspace {
         }
         self.host().handle.call("client.action", payload);
         Ok(Value::Null)
+    }
+
+    fn perform_copy_mode(
+        &mut self,
+        name: &str,
+        args: &Value,
+        block: &str,
+        cx: &mut Context<Self>,
+    ) -> Result<(), (String, String)> {
+        let pane = self
+            .pane_entity(block)
+            .ok_or_else(|| refused("That pane isn't shown"))?;
+        let command = match name {
+            "pane.copy_mode.enter" => CopyCommand::Enter,
+            "pane.copy_mode.exit" => CopyCommand::Exit,
+            "pane.copy_mode.swap_ends" => CopyCommand::SwapEnds,
+            "pane.copy_mode.move" => {
+                let motion = serde_json::from_value::<Motion>(args["motion"].clone())
+                    .map_err(|_| refused("Choose a copy mode motion"))?;
+                CopyCommand::Move(motion)
+            }
+            "pane.copy_mode.select" => {
+                let kind = serde_json::from_value::<SelectionKind>(args["kind"].clone())
+                    .map_err(|_| refused("Choose character, line, or block selection"))?;
+                CopyCommand::Select(kind)
+            }
+            "pane.copy_mode.count" => {
+                let digit = args["digit"]
+                    .as_u64()
+                    .filter(|&digit| digit <= 9)
+                    .ok_or_else(|| refused("Choose a digit from 0 to 9"))?;
+                CopyCommand::Count(digit as u8)
+            }
+            "pane.copy_mode.yank" | "pane.copy_mode.copy_to_line_end" => {
+                let to_line_end = name == "pane.copy_mode.copy_to_line_end";
+                pane.update(cx, |pane, cx| pane.yank_copy_mode(to_line_end, cx));
+                self.pending.clear();
+                return Ok(());
+            }
+            _ => unreachable!("not a copy mode action: {name}"),
+        };
+        pane.update(cx, |pane, cx| pane.copy_mode(command, cx))
+            .map_err(refused)?;
+        self.pending.clear();
+        Ok(())
     }
 
     fn perform(
@@ -508,12 +585,28 @@ impl Workspace {
                 if !self.keymap.modes.contains_key(mode) {
                     return Err(refused(format!("There's no mode named {mode}")));
                 }
-                self.modes.push(mode.to_owned());
+                if mode == "copy" {
+                    self.perform_copy_mode("pane.copy_mode.enter", args, &need_block()?, cx)?;
+                } else {
+                    self.modes.push(mode.to_owned());
+                }
             }
-            "client.mode.exit" => {
-                self.modes.pop();
+            "client.mode.exit" | "client.mode.exit_all" => {
+                let copy_pane = block
+                    .as_deref()
+                    .and_then(|id| self.pane_entity(id))
+                    .filter(|pane| pane.read(cx).in_copy_mode());
+                if let Some(pane) = &copy_pane {
+                    pane.update(cx, |pane, cx| pane.copy_mode(CopyCommand::Exit, cx))
+                        .map_err(refused)?;
+                    self.pending.clear();
+                }
+                if name == "client.mode.exit_all" {
+                    self.modes.clear();
+                } else if copy_pane.is_none() {
+                    self.modes.pop();
+                }
             }
-            "client.mode.exit_all" => self.modes.clear(),
 
             "session.new" => self.new_session(self.active, cx),
             "session.select" => {
@@ -843,6 +936,16 @@ impl Workspace {
                 self.move_pane_to_new_tab(session, block, None, cx);
             }
             "pane.copy_id" => cx.write_to_clipboard(ClipboardItem::new_string(need_block()?)),
+            "pane.copy_mode.enter"
+            | "pane.copy_mode.exit"
+            | "pane.copy_mode.move"
+            | "pane.copy_mode.select"
+            | "pane.copy_mode.swap_ends"
+            | "pane.copy_mode.count"
+            | "pane.copy_mode.yank"
+            | "pane.copy_mode.copy_to_line_end" => {
+                self.perform_copy_mode(name, args, &need_block()?, cx)?;
+            }
             "pane.paste"
             | "pane.copy"
             | "pane.select_all"

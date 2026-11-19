@@ -9,7 +9,7 @@ use super::{
 use crate::rex::images::{Layer, Placement};
 use crate::rex::{
     host::{HostCommand, HostHandle, PaneCommand, PaneStatus, Scroll},
-    stream::{CursorShape, Frame, SelectMode, flags},
+    stream::{CursorShape, Frame, SelectMode, copy_mode, flags},
 };
 use crate::settings::{PaddingFill, SelectionColor};
 use gpui::RenderImage;
@@ -811,7 +811,7 @@ impl TerminalPane {
     /// Type text an input method committed, or a character no key event names.
     fn commit_text(&mut self, text: &str, cx: &mut Context<Self>) {
         self.preedit = None;
-        if !text.is_empty() {
+        if !text.is_empty() && !self.in_copy_mode() {
             self.back_to_live();
             self.blink_on = true;
             self.input(
@@ -1029,6 +1029,9 @@ impl TerminalPane {
     }
 
     pub fn send_key(&mut self, event: &KeyDownEvent, cx: &mut Context<Self>) -> bool {
+        if self.in_copy_mode() {
+            return true;
+        }
         let Some(key) = keys::key_event(&event.keystroke, event.is_held) else {
             return false;
         };
@@ -1053,6 +1056,9 @@ impl TerminalPane {
     /// Paste what a clipboard holds: copied files as their paths, an image as a file, and
     /// text, after asking when it could run a command before it can be read.
     pub fn paste_item(&mut self, item: ClipboardItem, cx: &mut Context<Self>) {
+        if self.in_copy_mode() {
+            return;
+        }
         use crate::rex::upload::{self, Source};
         for entry in item.entries() {
             if let gpui::ClipboardEntry::ExternalPaths(paths) = entry {
@@ -1085,7 +1091,7 @@ impl TerminalPane {
     /// machine; uploaded first, for one on another.
     pub fn paste_files(&mut self, files: Vec<crate::rex::upload::Source>, cx: &mut Context<Self>) {
         use crate::rex::upload::{Source, shell_quote};
-        if files.is_empty() {
+        if files.is_empty() || self.in_copy_mode() {
             return;
         }
         if !self.host.endpoint.is_local() {
@@ -1111,7 +1117,7 @@ impl TerminalPane {
     }
 
     pub fn paste_text(&self, text: String) {
-        if text.is_empty() {
+        if text.is_empty() || self.in_copy_mode() {
             return;
         }
         self.back_to_live();
@@ -1138,6 +1144,45 @@ impl TerminalPane {
         .detach();
     }
 
+    pub(super) fn in_copy_mode(&self) -> bool {
+        self.pane().is_some_and(|pane| pane.in_copy_mode())
+    }
+
+    pub(super) fn copy_mode(
+        &mut self,
+        command: copy_mode::Command,
+        cx: &mut Context<Self>,
+    ) -> Result<(), &'static str> {
+        let pane = self.pane().ok_or("This terminal isn't ready")?;
+        if !pane.copy_mode(command) {
+            return Err("This terminal isn't ready");
+        }
+        if matches!(command, copy_mode::Command::Enter) {
+            self.preedit = None;
+            self.scroll_carry = 0.;
+            self.selecting = false;
+        }
+        cx.notify();
+        Ok(())
+    }
+
+    pub(super) fn yank_copy_mode(&self, to_line_end: bool, cx: &mut Context<Self>) {
+        let Some(answer) = self
+            .pane()
+            .and_then(|pane| pane.yank_copy_mode(to_line_end))
+        else {
+            return;
+        };
+        cx.spawn(async move |_, cx| {
+            if let Ok(Some(text)) = answer.await
+                && !text.is_empty()
+            {
+                cx.update(|cx| cx.write_to_clipboard(ClipboardItem::new_string(text)));
+            }
+        })
+        .detach();
+    }
+
     /// How far the copy shine has gone, from 0 to 1, while it runs.
     fn shine_progress(&mut self) -> Option<f32> {
         let t = self.shine?.elapsed().as_secs_f32() / SHINE.as_secs_f32();
@@ -1154,7 +1199,7 @@ impl TerminalPane {
     }
 
     pub fn select_all(&mut self) {
-        if let Some(pane) = self.pane() {
+        if let Some(pane) = self.pane().filter(|pane| !pane.in_copy_mode()) {
             pane.send(PaneCommand::SelectAll);
         }
     }
@@ -1225,6 +1270,9 @@ impl TerminalPane {
         );
         let at = self.cell_at(event.position);
         self.pointer = Some(at);
+        if self.in_copy_mode() {
+            return;
+        }
         if event.button == MouseButton::Left && event.modifiers.control && event.modifiers.shift {
             cx.emit(PaneEvent::QuickLook);
             return;
@@ -1289,6 +1337,9 @@ impl TerminalPane {
             self.mouse_report("motion", Some(button), at, &event.modifiers);
             return;
         }
+        if self.in_copy_mode() {
+            return;
+        }
         if self.selecting && event.pressed_button == Some(MouseButton::Left) {
             if let Some(pane) = self.pane() {
                 pane.send(PaneCommand::SelectTo { x: at.0, y: at.1 });
@@ -1340,6 +1391,9 @@ impl TerminalPane {
     }
 
     fn on_scroll(&mut self, event: &ScrollEvent, _: &mut Window, cx: &mut Context<Self>) {
+        if self.in_copy_mode() {
+            return;
+        }
         let Some(cell) = self.cell else { return };
         let frame = self.frame();
         let app_scrolls = frame
@@ -1590,6 +1644,7 @@ impl Render for TerminalPane {
         let cell = self.measure(window);
         let model = self.pane().map(|p| p.snapshot());
         let frame = model.as_ref().and_then(|m| m.frame.clone());
+        let copy_position = frame.as_ref().and_then(|frame| frame.copy_position);
         let focused = self.focus.is_focused(window);
         let background = frame
             .as_ref()
@@ -1632,21 +1687,29 @@ impl Render for TerminalPane {
         let padding_fill = self.padding_fill;
         let scroll_shift = self.scroll_offset();
         let anchor = self.anchor;
-        let cursor_color = dim(color(theme.terminal.cursor));
-        let cursor_text = dim(color(theme.terminal.cursor_text));
+        let (cursor_color, cursor_text) = if copy_position.is_some() {
+            (dim(theme.primary), dim(theme.on_primary))
+        } else {
+            (
+                dim(color(theme.terminal.cursor)),
+                dim(color(theme.terminal.cursor_text)),
+            )
+        };
         // Only a focused pane's cursor blinks, and only if its program asks.
         let cursor = frame.as_ref().and_then(|f| f.cursor);
         self.blinking = focused && self.blink.is_some() && cursor.is_some_and(|c| c.blinking);
         let cursor_hidden = self.blinking && !self.blink_on;
         let cursor_shape = cursor.map(|c| {
-            if focused {
+            if focused && copy_position.is_none() {
                 self.force_cursor.unwrap_or(c.shape)
+            } else if focused {
+                c.shape
             } else {
                 CursorShape::HollowBlock
             }
         });
         self.drawn_cursor = cursor_shape;
-        let trail = self.track_trail(cursor.filter(|_| focused));
+        let trail = self.track_trail(cursor.filter(|_| focused && copy_position.is_none()));
         if trail.is_some() {
             window.request_animation_frame();
         }
@@ -1674,11 +1737,13 @@ impl Render for TerminalPane {
                 }
             },
             move |bounds, (), window, cx| {
-                window.handle_input(
-                    &focus_handle,
-                    gpui::ElementInputHandler::new(bounds, entity.clone()),
-                    cx,
-                );
+                if copy_position.is_none() {
+                    window.handle_input(
+                        &focus_handle,
+                        gpui::ElementInputHandler::new(bounds, entity.clone()),
+                        cx,
+                    );
+                }
                 let Some(frame) = frame else {
                     window.paint_quad(fill(bounds, background.opacity(opacity)));
                     return;
@@ -2079,6 +2144,29 @@ impl Render for TerminalPane {
             .on_mouse_up_out(MouseButton::Left, cx.listener(Self::on_mouse_up))
             .on_scroll(cx.listener(Self::on_scroll))
             .child(grid)
+            .children(copy_position.map(|at| {
+                use copy_mode::SelectionKind;
+                let mode = match at.selection {
+                    None => "Copy Mode",
+                    Some(SelectionKind::Character) => "Copy Mode · Visual",
+                    Some(SelectionKind::Line) => "Copy Mode · Visual Line",
+                    Some(SelectionKind::Block) => "Copy Mode · Visual Block",
+                };
+                let count = at.count.map_or_else(String::new, |n| format!(" · ×{n}"));
+                div()
+                    .id("copy-mode-badge")
+                    .absolute()
+                    .top(px(8.))
+                    .right(px(8.))
+                    .px(px(8.))
+                    .py(px(4.))
+                    .rounded(theme.radius_small())
+                    .bg(theme.primary)
+                    .text_color(theme.on_primary)
+                    .text_size(px(12.))
+                    .font_family(theme.ui_font.clone())
+                    .child(format!("{mode} · {}:{}{count}", at.line, at.column))
+            }))
             .children(notice.map(|text| {
                 div()
                     .absolute()
@@ -2165,7 +2253,7 @@ impl gpui::EntityInputHandler for TerminalPane {
         _: &mut Window,
         cx: &mut Context<Self>,
     ) {
-        self.preedit = (!text.is_empty()).then(|| text.to_owned());
+        self.preedit = (!text.is_empty() && !self.in_copy_mode()).then(|| text.to_owned());
         cx.notify();
     }
 
@@ -2273,6 +2361,7 @@ mod tests {
             alternate_screen: alternate,
             scrollbar: Default::default(),
             has_selection: false,
+            copy_position: None,
             search: None,
             ansi: [0; 16],
             images: Vec::new(),

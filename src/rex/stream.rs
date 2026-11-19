@@ -15,6 +15,9 @@ use ghostty_vt::{
 };
 use serde_json::Value;
 
+pub mod copy_mode;
+use copy_mode::{Command as CopyCommand, CopyMode};
+
 pub mod flags {
     pub const BOLD: u16 = 1;
     pub const ITALIC: u16 = 1 << 1;
@@ -103,6 +106,7 @@ pub struct Frame {
     pub alternate_screen: bool,
     pub scrollbar: Scrollbar,
     pub has_selection: bool,
+    pub copy_position: Option<copy_mode::Position>,
     /// Match count and the selected match's index, while a search is open.
     pub search: Option<(usize, Option<usize>)>,
     /// The 16 ANSI colors, for chrome that matches the terminal.
@@ -194,6 +198,7 @@ pub struct TerminalTheme {
 pub struct TerminalState {
     // Declared before `terminal` so it's dropped first: it points into the terminal.
     search: Option<Search>,
+    copy_mode: Option<CopyMode>,
     terminal: Option<Terminal>,
     snapshot: SnapshotBuffer,
     parser: ApcParser,
@@ -237,6 +242,7 @@ impl TerminalState {
     pub fn new(nonce: u64) -> Result<Self> {
         Ok(Self {
             search: None,
+            copy_mode: None,
             terminal: None,
             snapshot: SnapshotBuffer::default(),
             parser: ApcParser::new(nonce),
@@ -497,6 +503,42 @@ impl TerminalState {
         }
     }
 
+    pub fn copy_mode(&mut self, command: CopyCommand) -> Result<()> {
+        let Some(terminal) = self.terminal.as_mut() else {
+            return Ok(());
+        };
+        match command {
+            CopyCommand::Enter if self.copy_mode.is_none() => {
+                self.anchor = None;
+                self.copy_mode = Some(CopyMode::enter(terminal)?);
+            }
+            CopyCommand::Exit => {
+                if let Some(mode) = self.copy_mode.take() {
+                    mode.exit(terminal)?;
+                }
+            }
+            command => {
+                if let Some(mode) = &mut self.copy_mode {
+                    mode.apply(terminal, command)?;
+                }
+            }
+        }
+        Ok(())
+    }
+
+    pub fn copy_mode_yank(&mut self, to_line_end: bool) -> Result<Option<String>> {
+        let (Some(terminal), Some(mode)) = (self.terminal.as_mut(), self.copy_mode.as_mut()) else {
+            return Ok(None);
+        };
+        mode.sync(terminal)?;
+        if to_line_end {
+            mode.select_to_line_end(terminal)?;
+        }
+        let text = self.selection_text();
+        self.copy_mode(CopyCommand::Exit)?;
+        text
+    }
+
     /// Move the viewport to the previous (`-1`) or next (`1`) shell prompt (OSC 133).
     /// Reflow the terminal to `cols` by `rows` here, before the server's own resize
     /// arrives; that one finds it already this size.
@@ -700,6 +742,9 @@ impl TerminalState {
         };
         // Playing animations move to the frame due now.
         self.next_animation_ms = terminal.kitty_animation_tick(now).unwrap_or(None);
+        if let Some(mode) = &mut self.copy_mode {
+            mode.sync(terminal)?;
+        }
         let terminal = &*terminal;
         let mut matches: Vec<(u32, u16, u32, u16, bool)> = Vec::new();
         let mut search_state = None;
@@ -731,7 +776,9 @@ impl TerminalState {
         for (index, slot) in ansi.iter_mut().enumerate() {
             *slot = rgb(colors.palette[index]);
         }
-        let cursor = if snapshot.cursor_visible()? {
+        let cursor = if let Some(mode) = &self.copy_mode {
+            mode.viewport_cursor(terminal)?
+        } else if snapshot.cursor_visible()? {
             snapshot.cursor_viewport()?.map(|at| Cursor {
                 x: at.x,
                 y: at.y,
@@ -768,6 +815,11 @@ impl TerminalState {
                 visible: bar.len,
             },
             has_selection: terminal.selection()?.is_some(),
+            copy_position: self
+                .copy_mode
+                .as_ref()
+                .map(CopyMode::position)
+                .transpose()?,
             search: search_state,
             ansi,
             images: Vec::new(),
@@ -920,6 +972,117 @@ mod tests {
         let mut state = TerminalState::new(42).unwrap();
         state.feed(&snapshot).unwrap();
         state
+    }
+
+    #[test]
+    fn copy_mode_yanks_from_history_and_restores_the_original_view() {
+        use copy_mode::{Motion, SelectionKind};
+
+        let output: String = (0..18).map(|line| format!("line {line:02}\r\n")).collect();
+        let mut state = stream_from(output.as_bytes(), 12, 4);
+        state.scroll(ScrollViewport::Row(6));
+        let original = state.frame().unwrap().unwrap().scrollbar;
+        assert_eq!(original.offset, 6);
+
+        state.copy_mode(CopyCommand::Enter).unwrap();
+        state
+            .copy_mode(CopyCommand::Move(Motion::HistoryTop))
+            .unwrap();
+        state
+            .copy_mode(CopyCommand::Select(SelectionKind::Line))
+            .unwrap();
+        state.copy_mode(CopyCommand::Count(2)).unwrap();
+        state.copy_mode(CopyCommand::Move(Motion::Down)).unwrap();
+        state.copy_mode(CopyCommand::SwapEnds).unwrap();
+        let frame = state.frame().unwrap().unwrap();
+        let position = frame.copy_position.unwrap();
+        assert_eq!((position.line, position.column), (1, 1));
+        assert_eq!(position.selection, Some(SelectionKind::Line));
+        assert!(frame.lines[1][2].has(flags::SELECTED));
+        assert_eq!(
+            state
+                .copy_mode_yank(false)
+                .unwrap()
+                .as_deref()
+                .map(str::trim_end),
+            Some("line 00\nline 01\nline 02")
+        );
+        let frame = state.frame().unwrap().unwrap();
+        assert_eq!(frame.scrollbar, original);
+        assert_eq!(frame.copy_position, None);
+        assert!(!frame.has_selection);
+    }
+
+    #[test]
+    fn copy_mode_skips_wide_spacers_and_unwraps_character_selections() {
+        use copy_mode::{Motion, SelectionKind};
+
+        let mut state = stream_from("a界bcdEF".as_bytes(), 6, 4);
+        state.copy_mode(CopyCommand::Enter).unwrap();
+        state
+            .copy_mode(CopyCommand::Move(Motion::HistoryTop))
+            .unwrap();
+        state.copy_mode(CopyCommand::Move(Motion::Right)).unwrap();
+        assert!(state.frame().unwrap().unwrap().cursor.unwrap().wide);
+        state
+            .copy_mode(CopyCommand::Select(SelectionKind::Character))
+            .unwrap();
+        state.copy_mode(CopyCommand::Move(Motion::Right)).unwrap();
+        assert_eq!(
+            state
+                .frame()
+                .unwrap()
+                .unwrap()
+                .copy_position
+                .unwrap()
+                .column,
+            4
+        );
+        state.copy_mode(CopyCommand::Move(Motion::Down)).unwrap();
+        assert_eq!(
+            state.copy_mode_yank(false).unwrap().as_deref(),
+            Some("界bcdEF")
+        );
+    }
+
+    #[test]
+    fn copy_mode_word_motions_and_rectangle_selection_use_terminal_cells() {
+        use copy_mode::{Motion, SelectionKind};
+
+        let mut state = stream_from(b"ab.cd ef\r\n12345678", 12, 4);
+        state.copy_mode(CopyCommand::Enter).unwrap();
+        state
+            .copy_mode(CopyCommand::Move(Motion::HistoryTop))
+            .unwrap();
+        for (motion, expected) in [
+            (Motion::WordForward, 3),
+            (Motion::WordForward, 4),
+            (Motion::WordEnd, 5),
+            (Motion::BigWordBackward, 1),
+            (Motion::BigWordForward, 7),
+            (Motion::WordBackward, 4),
+        ] {
+            state.copy_mode(CopyCommand::Move(motion)).unwrap();
+            assert_eq!(
+                state
+                    .frame()
+                    .unwrap()
+                    .unwrap()
+                    .copy_position
+                    .unwrap()
+                    .column,
+                expected
+            );
+        }
+        state
+            .copy_mode(CopyCommand::Select(SelectionKind::Block))
+            .unwrap();
+        state.copy_mode(CopyCommand::Move(Motion::Down)).unwrap();
+        state.copy_mode(CopyCommand::Move(Motion::Left)).unwrap();
+        assert_eq!(
+            state.copy_mode_yank(false).unwrap().as_deref(),
+            Some(".c\n34")
+        );
     }
 
     /// A Kitty graphics command, as a program sends it.

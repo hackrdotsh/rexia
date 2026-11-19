@@ -9,6 +9,7 @@ pub struct ActionDef {
     pub keywords: &'static str,
     /// Default bindings: keys (one per stroke of a sequence) and fixed arguments.
     pub keys: &'static [(&'static [&'static str], Option<&'static str>)],
+    pub mode: Option<&'static str>,
     /// A JSON Schema of the arguments, when the action takes any.
     pub args: Option<&'static str>,
     pub repeats: bool,
@@ -26,15 +27,34 @@ const KEY: &str = r#"{"type":"object","properties":{"key":{"type":"string"}},"re
 const HOST: &str = r#"{"type":"object","properties":{"host":{"type":"string"}}}"#;
 const MUTE_TAB: &str =
     r#"{"type":"object","properties":{"window_id":{"type":"string"},"muted":{"type":"boolean"}}}"#;
+const COPY_MOTION: &str = r#"{"type":"object","properties":{"motion":{"type":"string","enum":["left","right","up","down","word_forward","word_backward","word_end","big_word_forward","big_word_backward","big_word_end","line_start","first_non_blank","line_end","viewport_top","viewport_middle","viewport_bottom","half_page_up","half_page_down","page_up","page_down","history_top","history_bottom","paragraph_up","paragraph_down"]}},"required":["motion"]}"#;
+const COPY_SELECTION: &str = r#"{"type":"object","properties":{"kind":{"type":"string","enum":["character","line","block"]}},"required":["kind"]}"#;
+const COPY_COUNT: &str = r#"{"type":"object","properties":{"digit":{"type":"integer","minimum":0,"maximum":9}},"required":["digit"]}"#;
+
+macro_rules! copy_binding {
+    ($key:literal, $arg:literal, $value:literal) => {
+        (&[$key], Some(concat!("{\"", $arg, "\":\"", $value, "\"}")))
+    };
+}
+
+macro_rules! copy_digit {
+    ($digit:literal) => {
+        (
+            &[stringify!($digit)],
+            Some(concat!("{\"digit\":", stringify!($digit), "}")),
+        )
+    };
+}
 
 macro_rules! action {
-    ($name:literal, $title:literal, $category:literal, $keywords:literal, [$($keys:expr),* $(,)?] $(, args = $args:expr)? $(, repeats = $repeats:expr)?) => {
+    ($name:literal, $title:literal, $category:literal, $keywords:literal, [$($keys:expr),* $(,)?] $(, args = $args:expr)? $(, repeats = $repeats:expr)? $(, mode = $mode:literal)?) => {
         ActionDef {
             name: $name,
             title: $title,
             category: $category,
             keywords: $keywords,
             keys: &[$($keys),*],
+            mode: [None $(, Some($mode))?].last().copied().flatten(),
             args: { #[allow(unused_mut, unused_assignments)] let mut a = None; $(a = Some($args);)? a },
             repeats: { #[allow(unused_mut, unused_assignments)] let mut r = false; $(r = $repeats;)? r },
         }
@@ -692,6 +712,120 @@ pub const ACTIONS: &[ActionDef] = &[
         [(&["ctrl+shift+c"], None)]
     ),
     action!(
+        "pane.copy_mode.enter",
+        "Enter Copy Mode",
+        "Pane",
+        "copy mode vim keyboard select scrollback",
+        [(&["ctrl+alt+c"], None)]
+    ),
+    action!(
+        "pane.copy_mode.exit",
+        "Exit Copy Mode",
+        "Pane",
+        "copy mode leave escape",
+        [(&["esc"], None), (&["q"], None)],
+        mode = "copy"
+    ),
+    action!(
+        "pane.copy_mode.move",
+        "Move Copy Mode Cursor",
+        "Pane",
+        "copy mode cursor vim motion scrollback",
+        [
+            copy_binding!("h", "motion", "left"),
+            copy_binding!("left", "motion", "left"),
+            copy_binding!("l", "motion", "right"),
+            copy_binding!("right", "motion", "right"),
+            copy_binding!("k", "motion", "up"),
+            copy_binding!("up", "motion", "up"),
+            copy_binding!("j", "motion", "down"),
+            copy_binding!("down", "motion", "down"),
+            copy_binding!("w", "motion", "word_forward"),
+            copy_binding!("b", "motion", "word_backward"),
+            copy_binding!("e", "motion", "word_end"),
+            copy_binding!("shift+w", "motion", "big_word_forward"),
+            copy_binding!("shift+b", "motion", "big_word_backward"),
+            copy_binding!("shift+e", "motion", "big_word_end"),
+            copy_binding!("home", "motion", "line_start"),
+            copy_binding!("shift+6", "motion", "first_non_blank"),
+            copy_binding!("shift+4", "motion", "line_end"),
+            copy_binding!("end", "motion", "line_end"),
+            copy_binding!("shift+h", "motion", "viewport_top"),
+            copy_binding!("shift+m", "motion", "viewport_middle"),
+            copy_binding!("shift+l", "motion", "viewport_bottom"),
+            copy_binding!("ctrl+u", "motion", "half_page_up"),
+            copy_binding!("ctrl+d", "motion", "half_page_down"),
+            copy_binding!("ctrl+b", "motion", "page_up"),
+            copy_binding!("pageup", "motion", "page_up"),
+            copy_binding!("ctrl+f", "motion", "page_down"),
+            copy_binding!("pagedown", "motion", "page_down"),
+            (&["g", "g"], Some(r#"{"motion":"history_top"}"#)),
+            copy_binding!("shift+g", "motion", "history_bottom"),
+            copy_binding!("shift+[", "motion", "paragraph_up"),
+            copy_binding!("shift+]", "motion", "paragraph_down"),
+        ],
+        args = COPY_MOTION,
+        repeats = true,
+        mode = "copy"
+    ),
+    action!(
+        "pane.copy_mode.select",
+        "Select in Copy Mode",
+        "Pane",
+        "copy mode visual character line block selection",
+        [
+            copy_binding!("v", "kind", "character"),
+            copy_binding!("shift+v", "kind", "line"),
+            copy_binding!("ctrl+v", "kind", "block"),
+        ],
+        args = COPY_SELECTION,
+        mode = "copy"
+    ),
+    action!(
+        "pane.copy_mode.swap_ends",
+        "Swap Copy Mode Selection Ends",
+        "Pane",
+        "copy mode visual selection anchor",
+        [(&["o"], None)],
+        mode = "copy"
+    ),
+    action!(
+        "pane.copy_mode.yank",
+        "Yank Copy Mode Selection",
+        "Pane",
+        "copy mode selection clipboard",
+        [(&["y"], None), (&["enter"], None)],
+        mode = "copy"
+    ),
+    action!(
+        "pane.copy_mode.copy_to_line_end",
+        "Yank to End of Line in Copy Mode",
+        "Pane",
+        "copy mode line clipboard",
+        [(&["shift+d"], None)],
+        mode = "copy"
+    ),
+    action!(
+        "pane.copy_mode.count",
+        "Type Copy Mode Count",
+        "Pane",
+        "copy mode count repeat prefix",
+        [
+            copy_digit!(0),
+            copy_digit!(1),
+            copy_digit!(2),
+            copy_digit!(3),
+            copy_digit!(4),
+            copy_digit!(5),
+            copy_digit!(6),
+            copy_digit!(7),
+            copy_digit!(8),
+            copy_digit!(9),
+        ],
+        args = COPY_COUNT,
+        mode = "copy"
+    ),
+    action!(
         "pane.select_all",
         "Select All in Pane",
         "Pane",
@@ -860,7 +994,7 @@ static SETTING_ENTRIES: std::sync::LazyLock<Vec<(String, crate::settings_index::
 
 static SETTING_ACTIONS: std::sync::LazyLock<Vec<ActionDef>> = std::sync::LazyLock::new(|| {
     SETTING_ENTRIES.iter().map(|(name, entry)| ActionDef {
-        name, title: &entry.title, category: "Settings", keywords: &entry.path, keys: &[],
+        name, title: &entry.title, category: "Settings", keywords: &entry.path, keys: &[], mode: None,
         args: Some(r#"{"type":"object","properties":{"value":{},"increase":{"type":"boolean"},"decrease":{"type":"boolean"},"reset":{"type":"boolean"}}}"#),
         repeats: false,
     }).collect()
@@ -904,7 +1038,7 @@ pub type Shortcuts = std::collections::BTreeMap<String, Vec<String>>;
 /// Whether Change Shortcut can rebind `action`: actions whose default keys carry
 /// arguments, such as Go to Tab 1–9, keep them.
 pub fn rebindable(action: &ActionDef) -> bool {
-    action.keys.iter().all(|(_, args)| args.is_none())
+    action.mode.is_none() && action.keys.iter().all(|(_, args)| args.is_none())
 }
 
 pub fn keymap_request(shortcuts: &Shortcuts) -> Value {
@@ -939,9 +1073,14 @@ pub fn keymap_request(shortcuts: &Shortcuts) -> Value {
             }
             a.keys
                 .iter()
-                .filter(|(keys, _)| !claimed.iter().any(|c| c.as_slice() == *keys))
+                .filter(|(keys, _)| {
+                    a.mode.is_some() || !claimed.iter().any(|c| c.as_slice() == *keys)
+                })
                 .map(|(keys, args)| {
                     let mut binding = json!({"keys": keys, "action": a.name});
+                    if let Some(mode) = a.mode {
+                        binding["mode"] = json!(mode);
+                    }
                     if let Some(args) = args {
                         binding["args"] = serde_json::from_str(args).expect("valid args");
                     }
@@ -950,7 +1089,8 @@ pub fn keymap_request(shortcuts: &Shortcuts) -> Value {
                 .collect()
         })
         .collect();
-    json!({"actions": actions, "defaults": [{"name": "rexia", "bindings": bindings}]})
+    json!({"actions": actions, "defaults": [{"name": "rexia", "bindings": bindings,
+        "modes": [{"name": "copy", "exclusive": true}]}]})
 }
 
 /// rexia's default bindings alone, for before the server's keymap arrives.
@@ -958,6 +1098,7 @@ pub fn fallback_keymap(shortcuts: &Shortcuts) -> crate::keymap::Keymap {
     let request = keymap_request(shortcuts);
     crate::keymap::Keymap::parse(&json!({
         "bindings": request["defaults"][0]["bindings"],
+        "modes": request["defaults"][0]["modes"],
         "actions": request["actions"],
     }))
 }
@@ -991,7 +1132,7 @@ mod tests {
             for (binding, args) in action.keys {
                 let key = (binding.join(" "), *args);
                 assert!(
-                    keys.insert(binding.join(" ")),
+                    keys.insert((action.mode, binding.join(" "))),
                     "{} is bound twice ({:?})",
                     key.0,
                     key.1

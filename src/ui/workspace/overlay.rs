@@ -263,7 +263,9 @@ fn command_items(ws: &Workspace) -> Vec<Item> {
     let mut items: Vec<Item> = actions::ACTIONS
         .iter()
         // Actions that need arguments run from keys and other clients, not from a list.
-        .filter(|a| a.args.is_none_or(|schema| !schema.contains("\"required\"")))
+        .filter(|a| {
+            a.mode.is_none() && a.args.is_none_or(|schema| !schema.contains("\"required\""))
+        })
         .map(|a| Item {
             title: a.title.to_owned(),
             detail: Some(a.category.to_owned()),

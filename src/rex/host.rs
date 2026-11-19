@@ -7,7 +7,7 @@ use super::{
     data::{self, PROTOCOL, TERMINAL_CREATOR},
     endpoint::{self, Endpoint},
     prompt,
-    stream::{CursorShape, Frame, SelectMode, TermEvent, TerminalState, TerminalTheme},
+    stream::{CursorShape, Frame, SelectMode, TermEvent, TerminalState, TerminalTheme, copy_mode},
     view::{SessionSummary, View},
 };
 use anyhow::{Context, Result, anyhow};
@@ -220,6 +220,8 @@ pub struct PaneModel {
     pub clipboard: Option<String>,
     pub bells: u64,
     pub exit_code: Option<i64>,
+    // Keyboard routing needs to see the transition before rendering catches up.
+    copy_mode: bool,
 }
 
 pub enum Scroll {
@@ -244,6 +246,11 @@ pub enum PaneCommand {
     SelectAll,
     ClearSelection,
     Copy(oneshot::Sender<Option<String>>),
+    CopyMode(copy_mode::Command),
+    YankCopyMode {
+        to_line_end: bool,
+        reply: oneshot::Sender<Option<String>>,
+    },
     Text(oneshot::Sender<Option<String>>),
     Search(Option<String>),
     SearchStep {
@@ -276,6 +283,35 @@ impl std::fmt::Debug for PaneHandle {
 }
 
 impl PaneHandle {
+    pub fn in_copy_mode(&self) -> bool {
+        self.model.lock().expect("pane model").copy_mode
+    }
+
+    pub fn copy_mode(&self, command: copy_mode::Command) -> bool {
+        let mut model = self.model.lock().expect("pane model");
+        match command {
+            copy_mode::Command::Enter if model.status != PaneStatus::Live => return false,
+            copy_mode::Command::Enter if model.copy_mode => return true,
+            copy_mode::Command::Enter => model.copy_mode = true,
+            _ if !model.copy_mode => return true,
+            copy_mode::Command::Exit => model.copy_mode = false,
+            _ => {}
+        }
+        self.send(PaneCommand::CopyMode(command));
+        true
+    }
+
+    pub fn yank_copy_mode(&self, to_line_end: bool) -> Option<oneshot::Receiver<Option<String>>> {
+        let mut model = self.model.lock().expect("pane model");
+        if !model.copy_mode {
+            return None;
+        }
+        let (reply, answer) = oneshot::channel();
+        model.copy_mode = false;
+        self.send(PaneCommand::YankCopyMode { to_line_end, reply });
+        Some(answer)
+    }
+
     pub fn send(&self, command: PaneCommand) {
         let _ = self.commands.send(command);
     }
@@ -1742,7 +1778,10 @@ async fn stream(
                 fresh_state.set_default_cursor(cursor)?;
                 state = Some(fresh_state);
                 welcome = Some(fresh);
-                publish(&|m| m.status = PaneStatus::Restoring);
+                publish(&|m| {
+                    m.copy_mode = false;
+                    m.status = PaneStatus::Restoring;
+                });
                 socket = Some(next);
             }
             let mut socket = socket.expect("data socket");
@@ -1786,6 +1825,10 @@ async fn stream(
                             PaneCommand::SelectAll => terminal.select_all()?,
                             PaneCommand::ClearSelection => terminal.clear_selection()?,
                             PaneCommand::Copy(reply) => { let _ = reply.send(terminal.selection_text()?); }
+                            PaneCommand::CopyMode(command) => terminal.copy_mode(command)?,
+                            PaneCommand::YankCopyMode { to_line_end, reply } => {
+                                let _ = reply.send(terminal.copy_mode_yank(to_line_end)?);
+                            }
                             PaneCommand::Text(reply) => { let _ = reply.send(terminal.text().ok()); }
                             PaneCommand::Search(needle) => terminal.search(needle.as_deref())?,
                             PaneCommand::SearchStep { older } => terminal.search_step(older)?,
@@ -1821,7 +1864,10 @@ async fn stream(
                     .downcast_ref::<data::Closed>()
                     .is_some_and(data::Closed::is_final)
                 {
-                    publish(&|m| m.status = PaneStatus::Closed);
+                    publish(&|m| {
+                        m.copy_mode = false;
+                        m.status = PaneStatus::Closed;
+                    });
                     return;
                 }
                 // A failed resume or corrupt stream starts over from a fresh snapshot.

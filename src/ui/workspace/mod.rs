@@ -2530,7 +2530,16 @@ impl Workspace {
 
     /// The innermost active key mode.
     pub fn active_mode(&self) -> Option<String> {
-        self.modes.last().cloned()
+        let copy = self
+            .focused
+            .as_deref()
+            .and_then(|block| self.host().handle.pane(block))
+            .is_some_and(|pane| pane.in_copy_mode());
+        if copy {
+            Some("copy".into())
+        } else {
+            self.modes.last().cloned()
+        }
     }
 
     /// How many keys of a sequence are waiting for the rest.
@@ -2545,9 +2554,11 @@ impl Workspace {
     }
 
     fn key_hint(&self, theme: &Theme) -> Option<AnyElement> {
-        let mode = self.modes.last();
+        let mode = self.active_mode();
+        // The pane draws its own mode badge; only the sequence hint belongs here.
+        let badge = mode.as_deref().filter(|&mode| mode != "copy");
         let hints = self.settings.terminal.key_hints && !self.pending.is_empty();
-        if mode.is_none() && !hints {
+        if badge.is_none() && !hints {
             return None;
         }
         let mut pill = div()
@@ -2566,7 +2577,7 @@ impl Workspace {
             })
             .when(theme.popup_shadows, |d| d.shadow_lg())
             .text_size(px(12.));
-        if let Some(mode) = mode {
+        if let Some(mode) = badge {
             pill = pill.child(
                 div()
                     .flex()
@@ -2577,7 +2588,7 @@ impl Workspace {
                             .rounded(theme.radius_small())
                             .bg(theme.primary)
                             .text_color(theme.on_primary)
-                            .child(mode.clone()),
+                            .child(mode.to_owned()),
                     )
                     .child(div().text_color(theme.text_muted).child("Esc leaves")),
             );
@@ -2586,7 +2597,7 @@ impl Workspace {
             let typed = self.pending.len();
             for binding in self
                 .keymap
-                .continuations(mode.map(String::as_str), &self.pending)
+                .continuations(mode.as_deref(), &self.pending)
                 .into_iter()
                 .take(12)
             {
