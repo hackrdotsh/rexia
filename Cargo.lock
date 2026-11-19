@@ -5111,6 +5111,7 @@ name = "rexia"
 version = "0.1.0"
 dependencies = [
  "anyhow",
+ "ashpd",
  "base64 0.22.1",
  "clap",
  "flume 0.11.1",

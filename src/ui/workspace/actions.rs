@@ -408,6 +408,13 @@ impl Workspace {
             "pane.insert_path" => {
                 self.open_list(overlay::ListKind::Directory { insert: true }, window, cx)
             }
+            "pane.insert_file" | "pane.insert_photo" => {
+                let block = need_block()?;
+                if !self.panes.contains_key(&block) {
+                    return Err(refused("No terminal is open"));
+                }
+                self.pick_files(block, name == "pane.insert_photo", window, cx);
+            }
             "client.host.add" => self.open_add_host(window, cx),
             "client.host.remove" => self.open_list(overlay::ListKind::RemoveHost, window, cx),
             "client.host.forward_port" => self.open_list(overlay::ListKind::Forwards, window, cx),

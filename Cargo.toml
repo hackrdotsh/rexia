@@ -9,6 +9,7 @@ publish = false
 
 [dependencies]
 anyhow = "1"
+ashpd = { version = "0.13", default-features = false, features = ["async-io", "file_chooser"] }
 base64 = "0.22"
 clap = { version = "4", features = ["derive"] }
 flume = "0.11"

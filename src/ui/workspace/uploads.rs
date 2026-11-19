@@ -7,10 +7,11 @@ use crate::{
     ui::{icons::icon, theme::Theme},
 };
 use gpui::{
-    AnyElement, Context, IntoElement, ParentElement, SharedString, Styled, div, prelude::*, px,
-    relative,
+    AnyElement, Context, IntoElement, ParentElement, PathPromptOptions, SharedString, Styled,
+    Window, div, prelude::*, px, relative,
 };
 use std::{
+    path::PathBuf,
     sync::{Arc, atomic::Ordering},
     time::{Duration, Instant},
 };
@@ -26,6 +27,47 @@ pub struct Upload {
 }
 
 impl Workspace {
+    pub(super) fn pick_files(
+        &mut self,
+        block: String,
+        photos: bool,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        let host = self.host().config.id.clone();
+        let files = (!photos).then(|| {
+            cx.prompt_for_paths(PathPromptOptions {
+                files: true,
+                directories: false,
+                multiple: true,
+                prompt: Some("Insert".into()),
+            })
+        });
+        cx.spawn_in(window, async move |this, cx| {
+            let result = match files {
+                Some(picker) => match picker.await {
+                    Ok(result) => result,
+                    Err(_) => return,
+                },
+                None => pick_photos().await,
+            };
+            let _ = this.update_in(cx, |ws, _, cx| match result {
+                Ok(Some(paths)) if ws.host().config.id == host => {
+                    if let Some(pane) = ws.panes.get(&block) {
+                        let files = paths.into_iter().map(Source::Path).collect();
+                        pane.update(cx, |pane, cx| pane.paste_files(files, cx));
+                    }
+                }
+                Ok(_) => {}
+                Err(error) => {
+                    ws.notice = Some(format!("Couldn't open the picker: {error}"));
+                    cx.notify();
+                }
+            });
+        })
+        .detach();
+    }
+
     /// Upload `files` to the machine `block`'s terminal runs on.
     pub(super) fn start_upload(
         &mut self,
@@ -242,5 +284,31 @@ impl Workspace {
                 .children(cards)
                 .into_any_element(),
         )
+    }
+}
+
+async fn pick_photos() -> anyhow::Result<Option<Vec<PathBuf>>> {
+    use ashpd::desktop::file_chooser::{FileFilter, OpenFileRequest};
+
+    let photos = FileFilter::new("Images").mimetype("image/*");
+    let request = OpenFileRequest::default()
+        .title("Insert Photo")
+        .accept_label("Insert")
+        .modal(true)
+        .multiple(true)
+        .filter(photos.clone())
+        .current_filter(photos)
+        .send()
+        .await?;
+    match request.response() {
+        Ok(response) => Ok(Some(
+            response
+                .uris()
+                .iter()
+                .filter_map(|uri| url::Url::parse(uri.as_str()).ok()?.to_file_path().ok())
+                .collect(),
+        )),
+        Err(ashpd::Error::Response(_)) => Ok(None),
+        Err(error) => Err(error.into()),
     }
 }

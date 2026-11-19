@@ -650,6 +650,20 @@ pub const ACTIONS: &[ActionDef] = &[
         [(&["ctrl+alt+i"], None)]
     ),
     action!(
+        "pane.insert_file",
+        "Insert File…",
+        "Pane",
+        "insert file document attach upload paste",
+        []
+    ),
+    action!(
+        "pane.insert_photo",
+        "Insert Photo…",
+        "Pane",
+        "insert photo image picture screenshot attach upload paste",
+        []
+    ),
+    action!(
         "pane.rename",
         "Rename Pane",
         "Pane",
