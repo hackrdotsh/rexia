@@ -1263,6 +1263,7 @@ impl TerminalPane {
         window: &mut Window,
         cx: &mut Context<Self>,
     ) {
+        let focus_only = !self.has_focus(window) || event.first_mouse;
         self.focus(window, cx);
         self.host.call(
             "session.focus_block",
@@ -1270,6 +1271,11 @@ impl TerminalPane {
         );
         let at = self.cell_at(event.position);
         self.pointer = Some(at);
+        if focus_only {
+            cx.stop_propagation();
+            cx.notify();
+            return;
+        }
         if self.in_copy_mode() {
             return;
         }

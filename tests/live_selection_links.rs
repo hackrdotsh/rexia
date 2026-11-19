@@ -34,6 +34,10 @@ fn pane<R>(h: &mut Harness, read: impl FnOnce(&rexia::ui::terminal::TerminalPane
 
 /// Ctrl+click the cell at `col`, `row` of the focused pane.
 fn ctrl_click(h: &mut Harness, col: u16, row: u16) {
+    ctrl_click_with_activation(h, col, row, false);
+}
+
+fn ctrl_click_with_activation(h: &mut Harness, col: u16, row: u16, first_mouse: bool) {
     let at = pane(h, |p| p.cell_point(col, row)).expect("a measured pane");
     let modifiers = Modifiers {
         control: true,
@@ -44,7 +48,7 @@ fn ctrl_click(h: &mut Harness, col: u16, row: u16) {
         position: at,
         modifiers,
         click_count: 1,
-        first_mouse: false,
+        first_mouse,
     }));
     h.input(PlatformInput::MouseUp(MouseUpEvent {
         button: MouseButton::Left,
@@ -120,7 +124,10 @@ fn selection_looks_and_link_prompts() {
             .unwrap()
     });
 
-    // A web link opens at once.
+    // The click that activated the window focuses the terminal but opens nothing.
+    ctrl_click_with_activation(&mut h, 2, 1, true);
+    assert!(opened.borrow().is_empty());
+    // The next click opens the web link.
     ctrl_click(&mut h, 2, 1);
     println!("after the web link: {:?}", opened.borrow());
     assert_eq!(*opened.borrow(), ["https://example.com/rexia"]);
