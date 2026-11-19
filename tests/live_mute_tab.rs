@@ -87,7 +87,11 @@ fn muted_tabs_stay_quiet_and_keep_their_mark() {
     let control = common::connect(&address);
     let sessions = Sessions::create(&control, "rexia-mute");
     let session = sessions.ids[0].clone();
-    let mut h = Harness::open(&address, &session, 1280., 800.);
+    let mut settings = common::test_settings(&address, &session);
+    settings
+        .shortcuts
+        .insert("client.tab.mute".into(), vec!["ctrl+alt+m".into()]);
+    let mut h = Harness::open_with(settings, 1280., 800.);
     h.attach_desktop(&desktop.address);
     h.activate();
     h.wait("a prompt", |m| {
@@ -129,6 +133,9 @@ fn muted_tabs_stay_quiet_and_keep_their_mark() {
         menu,
         ["Rename Tab…", "Mute Tab", "Close Other Tabs", "Close Tab"]
     );
+    let shortcut = h.workspace(|ws| ws.context_menu_shortcut("Mute Tab").map(str::to_owned));
+    assert_eq!(shortcut.as_deref(), Some("Ctrl+Alt+M"));
+    println!("Mute Tab menu shortcut: {}", shortcut.unwrap());
     choose(&mut h, "Mute Tab");
     assert_eq!(h.workspace(|ws| ws.tab_mutes()), [false, true]);
     let saved = h.workspace(|ws| ws.settings.muted_tabs.clone());

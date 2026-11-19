@@ -284,6 +284,16 @@ impl Workspace {
         )
     }
 
+    /// The shortcut printed beside a menu item while the menu is open.
+    pub fn context_menu_shortcut(&self, label: &str) -> Option<&str> {
+        self.context_menu
+            .as_ref()?
+            .items()
+            .find(|item| item.label == label)?
+            .shortcut
+            .as_deref()
+    }
+
     pub fn close_context_menu(&mut self, cx: &mut Context<Self>) {
         if self.context_menu.take().is_some() {
             cx.notify();
