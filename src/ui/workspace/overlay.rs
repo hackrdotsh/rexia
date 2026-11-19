@@ -786,6 +786,10 @@ impl Workspace {
     /// Give focus back to the focused pane.
     pub fn refocus(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         self.focused = None;
+        if self.pending_tab.is_some() {
+            window.focus(&self.focus, cx);
+            return;
+        }
         if let Some(block) = self
             .model()
             .view()

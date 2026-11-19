@@ -26,11 +26,14 @@ uses an external Rex server and has been tested on API revisions 14 and 18.
 - Use `rex do client.tab.mute window_id=<id> muted=true` to set a tab's mute,
   or bind **Mute Tab** without arguments to toggle it.
 - Rexia retains terminal views when switching back and prepares nearby tabs in
-  the background. Terminal data streams retry temporary connection failures.
+  the background. For a cold tab, it briefly keeps the old layout on screen so
+  the new layout and terminal frames arrive together. If the streams stall,
+  Rexia shows the new tab's connection status and keeps trying.
 - First clicks focus inactive terminal panes without sending a click to the
-  program. Minimized floating panes stay restorable when a tab moves into its
-  own window. Floating headers keep room for their title and controls, and
-  short notices fit their text.
+  program. On X11, this also applies to the click the window manager replays
+  after activating Rexia. Minimized floating panes stay restorable when a tab
+  moves into its own window. Floating headers keep room for their title and
+  controls, and short notices fit their text.
 - The shortcut recorder accepts Page Up, Page Down, Home, End, Ctrl+J and
   Ctrl+K. Left returns without replacing the shortcut. Git keeps its title
   and icon while Delta pages its output.

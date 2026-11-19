@@ -23,6 +23,7 @@ pub mod onboarding;
 mod overlay;
 pub mod palette_host;
 mod preferences;
+mod presentation;
 pub mod quick_look;
 pub mod remote;
 mod script_prompt;
@@ -248,6 +249,8 @@ pub struct Workspace {
     drag: Option<Drag>,
     /// The block this client last focused for the server's focused block.
     focused: Option<String>,
+    presented_tab: Option<presentation::Tab>,
+    pending_tab: Option<presentation::Pending>,
     /// Sessions opened in this window, by host and session ID. Explicit collapses override these.
     expanded_sessions: HashSet<(String, String)>,
     host_filter_open: bool,
@@ -471,6 +474,8 @@ impl Workspace {
             window_active: true,
             drag: None,
             focused: None,
+            presented_tab: None,
+            pending_tab: None,
             expanded_sessions: HashSet::new(),
             host_filter_open: false,
             sessions_scroll: gpui::ScrollHandle::new(),
@@ -724,11 +729,13 @@ impl Workspace {
                 }
             });
         }
+        self.sync_presented_tab(&model, window, cx);
         let focused = model
             .view()
             .and_then(view::View::active_window)
             .and_then(|w| w.focused_block_id.clone());
-        if self.overlay.is_none()
+        if self.pending_tab.is_none()
+            && self.overlay.is_none()
             && focused != self.focused
             && let Some(block) = &focused
             && let Some(pane) = self.panes.get(block)
@@ -1312,7 +1319,13 @@ impl Workspace {
             .into_any_element()
     }
 
-    fn render_sidebar(&self, window: &Window, theme: &Theme, cx: &mut Context<Self>) -> AnyElement {
+    fn render_sidebar(
+        &self,
+        visible: &HostModel,
+        window: &Window,
+        theme: &Theme,
+        cx: &mut Context<Self>,
+    ) -> AnyElement {
         let hover = self.dragging().is_none();
         let (session_text, tab_text, tab_height) =
             self.settings.interface.sidebar_text_size.metrics();
@@ -1320,7 +1333,13 @@ impl Workspace {
         let mut any_host = false;
         for (index, host) in self.hosts.iter().enumerate() {
             let host_id = &host.config.id;
-            let model = host.handle.snapshot();
+            let snapshot;
+            let model = if index == self.active {
+                visible
+            } else {
+                snapshot = host.handle.snapshot();
+                &snapshot
+            };
             if !self.show_sidebar_host(host_id, &model.connection) {
                 continue;
             }
@@ -1432,7 +1451,7 @@ impl Workspace {
                         || self
                             .expanded_sessions
                             .contains(&(host_id.clone(), id.clone())));
-                let activity = self.session_mark(index, &session.session_id, &model);
+                let activity = self.session_mark(index, &session.session_id, model);
                 let (offset, grabbed) = preview.as_ref().map_or((px(0.), false), |preview| {
                     preview.placement(&id, cx.reduce_motion())
                 });
@@ -1584,7 +1603,7 @@ impl Workspace {
                         let active =
                             selected && view.active_window_id.as_deref() == Some(window.id());
                         let window_id = window.id().to_owned();
-                        let (label, path) = titles::sidebar_tab_title(window, &model);
+                        let (label, path) = titles::sidebar_tab_title(window, model);
                         let active_fill = theme.overlay(0.16);
                         let (offset, grabbed) =
                             preview.as_ref().map_or((px(0.), false), |preview| {
@@ -1614,7 +1633,7 @@ impl Workspace {
                                         .when(self.sidebar_drag_has_ghost(), |d| d.opacity(0.))
                                 })
                                 .children(tab_icons::render_icons(
-                                    &self.icons_for_tab(window, &model, active, true),
+                                    &self.icons_for_tab(window, model, active, true),
                                     self.settings.interface.shell_icon_theme,
                                     if active { theme.text } else { theme.text_muted },
                                     if active {
@@ -1658,7 +1677,7 @@ impl Workspace {
                                 .when(self.tab_muted(index, window.id()), |d| {
                                     d.child(muted_mark(theme.text_muted, theme))
                                 })
-                                .children(self.tab_mark(index, window, &model).map(
+                                .children(self.tab_mark(index, window, model).map(
                                     |(state, badge)| activity_mark(state, badge, false, theme),
                                 ))
                                 // Close, shown while the pointer is on the row.
@@ -2730,7 +2749,8 @@ impl Render for Workspace {
         self.drawn_bounds = std::mem::take(&mut self.element_bounds);
         self.settle_session_preview();
         let theme = Theme::get(cx).clone();
-        let model = self.model();
+        let mut model = self.model();
+        self.apply_presented_tab(&mut model);
         let layout = self.settings.interface.toolbar_layout;
         let floats = self.toolbar_floats();
         let shown = self.toolbar_visible();
@@ -2773,7 +2793,7 @@ impl Render for Workspace {
             let content = if activity_only {
                 self.render_sidebar_activity(false, &theme, cx)
             } else {
-                self.render_sidebar(window, &theme, cx)
+                self.render_sidebar(&model, window, &theme, cx)
             };
             let side_bar = if layout.vertical() && shown {
                 Some(self.render_side_toolbar(session_label, &theme, cx))
@@ -2830,6 +2850,18 @@ impl Render for Workspace {
             None
         };
         let panes = self.render_panes(&model, &theme, cx);
+        let panes = if self.pending_tab.is_some() {
+            div()
+                .relative()
+                .flex()
+                .flex_1()
+                .min_w_0()
+                .child(panes)
+                .child(div().id("switching-tab").absolute().inset_0().occlude())
+                .into_any_element()
+        } else {
+            panes
+        };
         let row = div().relative().flex().flex_1().min_h_0();
         // The sidebar's edge goes over both sides of the border, drawn after the panes so
         // its pane side can be grabbed too. Not while the sidebar slides.
