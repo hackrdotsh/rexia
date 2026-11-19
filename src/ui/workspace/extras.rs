@@ -163,7 +163,25 @@ impl Workspace {
                 None => return,
             },
         };
-        self.update_settings(|s| drop(s.shortcuts.insert(action, keys)), cx);
+        self.update_settings(
+            |settings| {
+                if !keys.is_empty()
+                    && let Some(binding) = crate::ui::actions::ModeShortcut::find(&action)
+                {
+                    for (other, previous) in &mut settings.shortcuts {
+                        if *other != action
+                            && *previous == keys
+                            && crate::ui::actions::ModeShortcut::find(other)
+                                .is_some_and(|other| other.mode == binding.mode)
+                        {
+                            previous.clear();
+                        }
+                    }
+                }
+                settings.shortcuts.insert(action, keys);
+            },
+            cx,
+        );
         self.send_keymap();
         self.close_overlay(window, cx);
         self.back_to_shortcuts(window, cx);

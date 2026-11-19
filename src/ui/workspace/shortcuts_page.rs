@@ -138,8 +138,11 @@ impl Workspace {
         };
         let mut rows: Vec<ShortcutRow> = actions::all()
             .filter(|a| a.name != "client.key.forward")
-            .map(|a| {
+            .filter_map(|a| {
                 let (keys, config) = keys_of(a.name);
+                if a.mode.is_some() && config.is_none() {
+                    return None;
+                }
                 let changed = self.settings.shortcuts.contains_key(a.name);
                 // rexia's own keys come first; init.lua's are noted beside them.
                 let own = self
@@ -154,7 +157,7 @@ impl Workspace {
                     (_, false, None) => Source::None,
                 };
                 let config = config.filter(|_| own);
-                ShortcutRow {
+                Some(ShortcutRow {
                     action: a.name.to_owned(),
                     title: a.title.trim_end_matches('…').to_owned(),
                     keys,
@@ -162,9 +165,48 @@ impl Workspace {
                     config,
                     editable: actions::rebindable(a),
                     changed,
-                }
+                })
             })
             .collect();
+        rows.extend(actions::mode_shortcuts().map(|binding| {
+            let action = binding.id();
+            let changed = self.settings.shortcuts.contains_key(&action);
+            let keys = self
+                .settings
+                .shortcuts
+                .get(&action)
+                .cloned()
+                .unwrap_or_else(|| binding.keys.iter().map(|key| (*key).into()).collect());
+            let expected_args: Option<serde_json::Value> = binding
+                .args
+                .map(|args| serde_json::from_str(args).expect("valid binding args"));
+            let effective = self.keymap.bindings.iter().find(|row| {
+                row.mode.as_deref() == Some(binding.mode)
+                    && row.keys == keys
+                    && row.action == binding.action.name
+                    && (row.args == expected_args
+                        || (expected_args.is_none()
+                            && row.args.as_ref().is_some_and(|args| {
+                                args.as_object().is_some_and(|obj| obj.is_empty())
+                            })))
+            });
+            let shown = effective.map(|_| format!("{}: {}", binding.mode, keymap::display(&keys)));
+            let source = match effective.and_then(|row| row.source.as_deref()) {
+                Some(file) if file.contains(".lua") => Source::Config(file.to_owned()),
+                _ if shown.is_some() && changed => Source::Yours,
+                _ if shown.is_some() => Source::Default,
+                _ => Source::None,
+            };
+            ShortcutRow {
+                action,
+                title: binding.title(),
+                keys: shown.into_iter().collect(),
+                source,
+                config: None,
+                editable: true,
+                changed,
+            }
+        }));
         // Actions the server's configuration defines, such as Lua actions.
         for action in &self.keymap.actions {
             if actions::find(&action.name).is_some() || rows.iter().any(|r| r.action == action.name)
@@ -232,6 +274,18 @@ impl Workspace {
     pub fn shortcuts_as_lua(&self) -> String {
         let mut lines = vec!["-- rexia's shortcut changes, for ~/.config/rex/init.lua".to_owned()];
         for (name, keys) in &self.settings.shortcuts {
+            if let Some(binding) = actions::ModeShortcut::find(name) {
+                let mode = binding.mode;
+                let action = binding.action.name;
+                let default = format!("{mode}/{}", binding.keys.join(">"));
+                lines.push(format!("rex.unbind({default:?}, {action:?})"));
+                if !keys.is_empty() {
+                    let keys = format!("{mode}/{}", keys.join(">"));
+                    let args = binding.args.map(lua_binding_args).unwrap_or_default();
+                    lines.push(format!("rex.bind({keys:?}, {action:?}{args})"));
+                }
+                continue;
+            }
             let Some(action) = actions::find(name) else {
                 continue;
             };
@@ -257,6 +311,21 @@ impl Workspace {
     /// Put an action's default keys back. When another action has taken one of them,
     /// ask first: resetting takes the key back from it.
     pub fn reset_shortcut(&mut self, action: &str, window: &mut Window, cx: &mut Context<Self>) {
+        if let Some(binding) = actions::ModeShortcut::find(action) {
+            let taken = self
+                .settings
+                .shortcuts
+                .iter()
+                .find(|(id, keys)| {
+                    id.as_str() != action
+                        && keys.as_slice() == binding.keys
+                        && actions::ModeShortcut::find(id)
+                            .is_some_and(|other| other.mode == binding.mode)
+                })
+                .map(|(id, _)| id.clone());
+            self.reset_now(action, taken, cx);
+            return;
+        }
         let Some(def) = actions::find(action) else {
             return;
         };
@@ -453,4 +522,15 @@ impl Workspace {
             self.show_settings_section(super::SettingsSection::Shortcuts, window, cx);
         }
     }
+}
+
+fn lua_binding_args(args: &str) -> String {
+    let values: BTreeMap<String, serde_json::Value> =
+        serde_json::from_str(args).expect("valid binding args");
+    let parts = values
+        .iter()
+        .map(|(key, value)| format!("{key} = {value}"))
+        .collect::<Vec<_>>()
+        .join(", ");
+    format!(", {{ {parts} }}")
 }

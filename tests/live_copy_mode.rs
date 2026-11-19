@@ -78,6 +78,34 @@ fn enter_move_and_yank_with_the_keyboard_against_rex() {
         && r.editable
         && r.keys.iter().any(|key| key == "Ctrl+Alt+C")));
     println!("Shortcuts: {} copy mode rows", rows.len());
+    let right = "pane.copy_mode.move/l";
+    assert!(rows.iter().any(|r| r.action == right && r.editable));
+    let window = h.window;
+    h.cx.update(|cx| {
+        window
+            .update(cx, |ws, window, cx| {
+                ws.record_from_settings(right.into(), "Move Right".into(), window, cx);
+            })
+            .unwrap()
+    });
+    h.press("f2");
+    h.wait("the copy binding with its original arguments", |m| {
+        m.keymap.as_ref()?["bindings"]
+            .as_array()?
+            .iter()
+            .any(|binding| {
+                binding["keys"] == serde_json::json!(["f2"])
+                    && binding["mode"] == "copy"
+                    && binding["action"] == "pane.copy_mode.move"
+                    && binding["args"]["motion"] == "right"
+            })
+            .then_some(())
+    });
+    assert!(h.workspace(|ws| {
+        ws.shortcuts_as_lua()
+            .contains(r#"rex.bind("copy/f2", "pane.copy_mode.move", { motion = "right" })"#)
+    }));
+    h.press("ctrl-,");
 
     h.press("ctrl-shift-p");
     h.type_text("Enter Copy Mode");
@@ -95,7 +123,7 @@ fn enter_move_and_yank_with_the_keyboard_against_rex() {
         (at.line == 1 && frame.scrollbar.offset == 0).then(|| frame.line_text(0))
     });
     assert_eq!(top, "history-001");
-    h.press("v 6 l");
+    h.press("v 6 f2");
     let at = h.wait("seven selected columns", |m| {
         let frame = frame(m)?;
         let at = frame.copy_position?;

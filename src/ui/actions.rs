@@ -1041,6 +1041,54 @@ pub fn rebindable(action: &ActionDef) -> bool {
     action.mode.is_none() && action.keys.iter().all(|(_, args)| args.is_none())
 }
 
+/// Settings edits one in-mode default at a time, keeping that binding's arguments.
+pub(crate) struct ModeShortcut {
+    pub action: &'static ActionDef,
+    pub keys: &'static [&'static str],
+    pub args: Option<&'static str>,
+    pub mode: &'static str,
+}
+
+impl ModeShortcut {
+    pub fn id(&self) -> String {
+        format!("{}/{}", self.action.name, self.keys.join(">"))
+    }
+
+    pub fn find(id: &str) -> Option<Self> {
+        let (name, keys) = id.split_once('/')?;
+        mode_shortcuts().find(|binding| {
+            binding.action.name == name && binding.keys.iter().copied().eq(keys.split('>'))
+        })
+    }
+
+    pub fn title(&self) -> String {
+        format!(
+            "{} ({})",
+            self.action.title,
+            crate::keymap::display(
+                &self
+                    .keys
+                    .iter()
+                    .map(|key| key.to_string())
+                    .collect::<Vec<_>>()
+            )
+        )
+    }
+}
+
+pub(crate) fn mode_shortcuts() -> impl Iterator<Item = ModeShortcut> {
+    all()
+        .filter_map(|action| action.mode.map(|mode| (action, mode)))
+        .flat_map(|(action, mode)| {
+            action.keys.iter().map(move |&(keys, args)| ModeShortcut {
+                action,
+                keys,
+                args,
+                mode,
+            })
+        })
+}
+
 pub fn keymap_request(shortcuts: &Shortcuts) -> Value {
     let actions: Vec<Value> = all()
         .map(|a| {
@@ -1056,8 +1104,13 @@ pub fn keymap_request(shortcuts: &Shortcuts) -> Value {
         })
         .collect();
     // A key the user gave one action leaves every other action's defaults.
-    let claimed: Vec<&Vec<String>> = shortcuts.values().filter(|k| !k.is_empty()).collect();
+    let claimed: Vec<&Vec<String>> = shortcuts
+        .iter()
+        .filter(|(name, keys)| find(name).is_some() && !keys.is_empty())
+        .map(|(_, keys)| keys)
+        .collect();
     let bindings: Vec<Value> = all()
+        .filter(|a| a.mode.is_none())
         .flat_map(|a| -> Vec<Value> {
             let keys = shortcuts.get(a.name).or_else(|| {
                 (a.name == "client.tab.mute")
@@ -1073,14 +1126,9 @@ pub fn keymap_request(shortcuts: &Shortcuts) -> Value {
             }
             a.keys
                 .iter()
-                .filter(|(keys, _)| {
-                    a.mode.is_some() || !claimed.iter().any(|c| c.as_slice() == *keys)
-                })
+                .filter(|(keys, _)| !claimed.iter().any(|c| c.as_slice() == *keys))
                 .map(|(keys, args)| {
                     let mut binding = json!({"keys": keys, "action": a.name});
-                    if let Some(mode) = a.mode {
-                        binding["mode"] = json!(mode);
-                    }
                     if let Some(args) = args {
                         binding["args"] = serde_json::from_str(args).expect("valid args");
                     }
@@ -1088,6 +1136,26 @@ pub fn keymap_request(shortcuts: &Shortcuts) -> Value {
                 })
                 .collect()
         })
+        .chain(mode_shortcuts().filter_map(|binding| {
+            let override_keys = shortcuts.get(&binding.id());
+            if override_keys.is_some_and(Vec::is_empty)
+                || (override_keys.is_none()
+                    && shortcuts.iter().any(|(id, keys)| {
+                        keys.as_slice() == binding.keys
+                            && ModeShortcut::find(id)
+                                .is_some_and(|other| other.mode == binding.mode)
+                    }))
+            {
+                return None;
+            }
+            let keys = override_keys.map_or_else(|| json!(binding.keys), |keys| json!(keys));
+            let mut result =
+                json!({"keys": keys, "action": binding.action.name, "mode": binding.mode});
+            if let Some(args) = binding.args {
+                result["args"] = serde_json::from_str(args).expect("valid args");
+            }
+            Some(result)
+        }))
         .collect();
     json!({"actions": actions, "defaults": [{"name": "rexia", "bindings": bindings,
         "modes": [{"name": "copy", "exclusive": true}]}]})
