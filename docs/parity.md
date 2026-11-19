@@ -37,7 +37,9 @@ uses an external Rex server and has been tested on API revisions 14 and 18.
   moves into its own window. Narrow floating splits make room for their header
   controls. If the window can't fit the full controls, they move into the pane's
   actions menu. When even the menu button won't fit, use **Floating Pane
-  Actions** below the panes or in the command palette. Short notices fit their text.
+  Actions** below the panes or in the command palette. Multiline notices can
+  collapse to their first line, including via **Toggle Notice Details** in the
+  command palette. Only the visible text sets the collapsed width.
 - The shortcut recorder accepts Page Up, Page Down, Home, End, Ctrl+J and
   Ctrl+K. Left returns without replacing the shortcut. Git keeps its title
   and icon while Delta pages its output.

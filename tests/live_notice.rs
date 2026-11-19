@@ -2,11 +2,78 @@
 mod common;
 
 use common::{Harness, Sessions, focused_text};
+use gpui::{Modifiers, MouseButton, MouseDownEvent, MouseUpEvent, PlatformInput};
 use rexia::settings::NoticePosition;
 use serde_json::Value;
 
 const WIDTH: f32 = 1280.;
 const HEIGHT: f32 = 800.;
+
+#[test]
+fn collapsed_notice_width_ignores_hidden_details() {
+    let Some(address) = common::server() else {
+        return;
+    };
+    let control = common::connect(&address);
+    let sessions = Sessions::create(&control, "rexia-notice-disclosure");
+    let mut h = Harness::open(&address, &sessions.ids[0], WIDTH, HEIGHT);
+    let window = h.window;
+    let mut widths = Vec::new();
+    for detail in [
+        "Retry in a moment.",
+        "The second line deliberately has enough text to make this notice much wider than the first line.",
+    ] {
+        let message = format!("Couldn't connect\n{detail}");
+        h.cx.update(|cx| {
+            window
+                .update(cx, |ws, _, cx| {
+                    ws.notice = Some(message.clone());
+                    cx.notify();
+                })
+                .unwrap();
+        });
+        h.pump();
+        let expanded = h.workspace(|ws| ws.notice_bounds()).unwrap();
+        let click_toggle = |h: &mut Harness| {
+            let position = h
+                .workspace(|ws| ws.element_bounds("notice-disclosure"))
+                .expect("a multiline notice has an expand/collapse control")
+                .center();
+            h.input(PlatformInput::MouseDown(MouseDownEvent {
+                button: MouseButton::Left,
+                position,
+                modifiers: Modifiers::default(),
+                click_count: 1,
+                first_mouse: false,
+            }));
+            h.input(PlatformInput::MouseUp(MouseUpEvent {
+                button: MouseButton::Left,
+                position,
+                modifiers: Modifiers::default(),
+                click_count: 1,
+            }));
+        };
+        click_toggle(&mut h);
+        let collapsed = h.workspace(|ws| ws.notice_bounds()).unwrap();
+        assert!(collapsed.size.height < expanded.size.height);
+        assert_eq!(
+            h.workspace(|ws| ws.notice.clone()).as_deref(),
+            Some(message.as_str())
+        );
+        h.run("client.notice.toggle_details", Value::Null);
+        assert_eq!(h.workspace(|ws| ws.notice_bounds()), Some(expanded));
+        click_toggle(&mut h);
+        println!(
+            "notice: {:?} expanded, {:?} collapsed",
+            expanded.size, collapsed.size
+        );
+        widths.push((expanded.size.width, collapsed.size.width));
+    }
+    assert!(widths[1].0 > widths[0].0);
+    assert_eq!(widths[0].1, widths[1].1);
+    h.run("client.notice.dismiss", Value::Null);
+    assert!(h.workspace(|ws| ws.notice_bounds()).is_none());
+}
 
 #[test]
 fn notices_float_where_the_setting_says() {

@@ -92,6 +92,13 @@ pub const ACTIONS: &[ActionDef] = &[
         []
     ),
     action!(
+        "client.notice.toggle_details",
+        "Toggle Notice Details",
+        "App",
+        "expand collapse notice banner",
+        []
+    ),
+    action!(
         "client.notice.dismiss",
         "Dismiss Notice",
         "App",

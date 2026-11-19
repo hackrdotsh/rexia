@@ -569,6 +569,7 @@ impl Workspace {
                     *programs = busy;
                 }
             }
+            "client.notice.toggle_details" => self.toggle_notice_details(cx),
             "client.notice.dismiss" => self.notice = None,
             "client.config.copy_path" => {
                 let path = self

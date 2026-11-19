@@ -261,6 +261,7 @@ pub struct Workspace {
     sidebar_scroll_target: Option<String>,
     sidebar_scroll_pending: bool,
     pub notice: Option<String>,
+    collapsed_notice: Option<String>,
     forwards: forwards::Forwards,
     new_window_session: Option<(String, Option<String>)>,
     /// The active host's keymap, and the reply it came from.
@@ -485,6 +486,7 @@ impl Workspace {
             sidebar_scroll_target: None,
             sidebar_scroll_pending: false,
             notice: None,
+            collapsed_notice: None,
             forwards: forwards::Forwards::default(),
             new_window_session: None,
             keymap: fallback,
@@ -2804,6 +2806,19 @@ impl Workspace {
         self.notice_area
     }
 
+    fn toggle_notice_details(&mut self, cx: &mut Context<Self>) {
+        let Some(message) = self
+            .notice
+            .as_ref()
+            .filter(|message| notice_summary(message).is_some())
+        else {
+            return;
+        };
+        self.collapsed_notice =
+            (self.collapsed_notice.as_ref() != Some(message)).then(|| message.clone());
+        cx.notify();
+    }
+
     /// The innermost active key mode.
     pub fn active_mode(&self) -> Option<String> {
         let copy = self
@@ -3075,10 +3090,20 @@ impl Render for Workspace {
         if self.notice.is_none() {
             self.notice_area = None;
         }
+        if self.collapsed_notice != self.notice {
+            self.collapsed_notice = None;
+        }
         let position = self.settings.notifications.notice_position;
         let entity = cx.entity();
         let notice = self.notice.clone().map(|message| {
             let copy_link = self.notice_forward_link(&message);
+            let summary = notice_summary(&message);
+            let collapsed = summary.is_some() && self.collapsed_notice.is_some();
+            let visible = if collapsed {
+                summary.unwrap_or(&message)
+            } else {
+                &message
+            };
             let tracker = canvas(
                 move |bounds, _, cx| entity.update(cx, |ws, _| ws.notice_area = Some(bounds)),
                 |_, _, _, _| {},
@@ -3112,7 +3137,15 @@ impl Render for Workspace {
                         .size(px(16.))
                         .text_color(theme.error)
                 })
-                .child(div().min_w_0().text_size(px(13.)).child(message))
+                .child(
+                    div()
+                        .min_w_0()
+                        .text_size(px(13.))
+                        .when(collapsed, |d| {
+                            d.overflow_hidden().text_ellipsis().whitespace_nowrap()
+                        })
+                        .child(visible.to_owned()),
+                )
                 .children(copy_link.map(|link| {
                     preferences::button("copy-forward-link", "Copy Link", false, &theme).on_click(
                         move |_, _, cx| {
@@ -3120,6 +3153,38 @@ impl Render for Workspace {
                         },
                     )
                 }))
+                .when(summary.is_some(), |card| {
+                    let label = if collapsed {
+                        "Expand Notice"
+                    } else {
+                        "Collapse Notice"
+                    };
+                    card.child(
+                        small_icon_button(
+                            "notice-disclosure",
+                            if collapsed {
+                                "chevron-down"
+                            } else {
+                                "chevron-up"
+                            },
+                            theme.text_muted,
+                            &theme,
+                            cx.listener(|ws, _, _, cx| ws.toggle_notice_details(cx)),
+                        )
+                        .size(px(24.))
+                        .relative()
+                        .focusable()
+                        .tab_index(0)
+                        .role(Role::Button)
+                        .aria_label(label)
+                        .aria_expanded(!collapsed)
+                        .border_2()
+                        .border_color(theme.text.opacity(0.))
+                        .focus_visible(|d| d.border_color(theme.primary))
+                        .tooltip(crate::ui::components::tooltip(label, None))
+                        .child(self.track_bounds("notice-disclosure".into(), cx)),
+                    )
+                })
                 .child(
                     small_icon_button(
                         "dismiss-notice",
@@ -3194,4 +3259,9 @@ impl Render for Workspace {
             .children(self.render_ssh_question(&theme, cx))
             .children(self.render_focus_trail(window, &theme, cx))
     }
+}
+
+fn notice_summary(message: &str) -> Option<&str> {
+    let (first, _) = message.trim().split_once('\n')?;
+    Some(first.trim_end())
 }
