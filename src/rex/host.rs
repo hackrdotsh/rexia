@@ -558,6 +558,7 @@ struct Worker {
     session_id: String,
     pane: PaneHandle,
     size: Option<(u16, u16, u16, u16)>,
+    visible: bool,
     task: tokio::task::JoinHandle<()>,
 }
 
@@ -1457,9 +1458,10 @@ impl Host {
         }
     }
 
-    /// Stream the terminals of the selected session's active window; pause the rest.
+    /// Prepare the selected session's tabs before switching to them. Hidden
+    /// terminals publish at a lower cadence than visible ones.
     fn reconcile(&mut self) {
-        let (visible, known): (HashSet<String>, HashMap<String, String>) = self.shared.read(|m| {
+        let (visible, warm, known) = self.shared.read(|m| {
             let mut known = HashMap::new();
             for (id, view) in &m.views {
                 for block in view.terminal_blocks() {
@@ -1482,7 +1484,34 @@ impl Host {
             } else {
                 HashSet::new()
             };
-            (visible, known)
+            // Pre-warm a few neighboring tabs, without opening an unbounded number
+            // of data connections in a session with many tabs.
+            let mut warm = visible.clone();
+            if self.visible
+                && let Some(view) = m.view()
+            {
+                let shown = view.active_window().and_then(|active| {
+                    view.windows
+                        .iter()
+                        .position(|window| window.id() == active.id())
+                });
+                if let Some(shown) = shown {
+                    for offset in [-1_isize, 1, -2, 2] {
+                        if let Some(index) = shown.checked_add_signed(offset)
+                            && let Some(window) = view.windows.get(index)
+                        {
+                            warm.extend(
+                                window
+                                    .panes()
+                                    .into_iter()
+                                    .map(|pane| pane.block_id)
+                                    .filter(|block| known.contains_key(block)),
+                            );
+                        }
+                    }
+                }
+            }
+            (visible, warm, known)
         });
         let stale: Vec<String> = self
             .workers
@@ -1496,7 +1525,7 @@ impl Host {
                 m.panes.remove(&id);
             });
         }
-        for block in &visible {
+        for block in &warm {
             if self.workers.contains_key(block) {
                 continue;
             }
@@ -1512,6 +1541,7 @@ impl Host {
             if self.cursor.is_some() {
                 pane.send(PaneCommand::DefaultCursor(self.cursor));
             }
+            pane.send(PaneCommand::Visible(visible.contains(block)));
             self.shared.update(|m| {
                 m.panes.insert(block.clone(), pane.clone());
             });
@@ -1530,13 +1560,18 @@ impl Host {
                     session_id,
                     pane,
                     size: None,
+                    visible: visible.contains(block),
                     task,
                 },
             );
         }
         self.update_owners();
-        for (id, worker) in &self.workers {
-            worker.pane.send(PaneCommand::Visible(visible.contains(id)));
+        for (id, worker) in &mut self.workers {
+            let shown = visible.contains(id);
+            if worker.visible != shown {
+                worker.pane.send(PaneCommand::Visible(shown));
+                worker.visible = shown;
+            }
         }
     }
 
@@ -1790,6 +1825,8 @@ async fn stream(
             let mut dirty = true;
             let mut tick = tokio::time::interval(Duration::from_millis(16));
             tick.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
+            let mut background_tick = tokio::time::interval(Duration::from_millis(150));
+            background_tick.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
             loop {
                 // A playing Kitty animation draws its next frame when it's due.
                 let animation = terminal.animation_wait();
@@ -1840,7 +1877,9 @@ async fn stream(
                             PaneCommand::Stop => return Ok(StreamEnd::Stop),
                         }
                     }
-                    _ = tick.tick(), if dirty && visible => {
+                    _ = async {
+                        if visible { tick.tick().await } else { background_tick.tick().await }
+                    }, if dirty => {
                         dirty = false;
                         if let Some(frame) = terminal.frame()? {
                             let frame = Arc::new(frame);

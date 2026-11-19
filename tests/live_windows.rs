@@ -43,6 +43,51 @@ fn shown_tab(ws: &Workspace) -> Option<String> {
 }
 
 #[test]
+fn switching_tabs_draws_warm_frames_and_reuses_the_terminal() {
+    let Some(address) = common::server() else {
+        return;
+    };
+    let control = common::connect(&address);
+    let sessions = Sessions::create(&control, "rexia-warm-tabs");
+    let session = &sessions.ids[0];
+    let mut h = Harness::open(&address, session, 920., 540.);
+    let first = h
+        .wait_ui("first terminal entity", |ws| ws.focused_terminal())
+        .entity_id();
+    let other = common::request(
+        &control,
+        "session.new_window",
+        json!({
+            "session_id": session, "window_label": "Warm", "focus": false,
+        "layout": {"block": {"flavor": rexia::rex::data::SHELL_FLAVOR, "options": {
+            "shell": "none", "command": ["sh", "-c", "printf 'warm-tab-ready\\n'; exec cat"]
+        }}},
+        }),
+    )
+    .unwrap();
+    let block = other["block_ids"][0].as_str().unwrap();
+    h.wait("an unpublished tab to have a frame before focus", |m| {
+        let frame = m.panes.get(block)?.snapshot().frame?;
+        (0..usize::from(frame.rows))
+            .any(|row| frame.line_text(row).contains("warm-tab-ready"))
+            .then_some(())
+    });
+    h.run("client.tab.next", Value::Null);
+    h.wait("first view of the new active tab", |m| {
+        (m.view()?.active_window()?.label == "Warm").then_some(())
+    });
+    assert!(focused_text(&h.host.snapshot()).contains("warm-tab-ready"));
+    assert_ne!(
+        h.workspace(|ws| ws.focused_terminal().unwrap().entity_id()),
+        first
+    );
+    h.run("client.tab.previous", Value::Null);
+    h.wait_ui("the first terminal entity to return", |ws| {
+        (ws.focused_terminal()?.entity_id() == first).then_some(())
+    });
+}
+
+#[test]
 fn tabs_move_to_their_own_windows_and_windows_open_and_close() {
     let Some(address) = common::server() else {
         return;
@@ -69,6 +114,27 @@ fn tabs_move_to_their_own_windows_and_windows_open_and_close() {
     });
     let first = h.window;
 
+    // The moved tab also owns a minimized floating pane.
+    h.run("pane.new_floating", Value::Null);
+    let layer = h.wait("the floating layer", |m| {
+        m.view()?
+            .active_window()?
+            .layers
+            .iter()
+            .find(|layer| layer.kind != "tiled")?
+            .layer_id
+            .clone()
+    });
+    h.run("pane.minimize_floating", Value::Null);
+    h.wait("the floating layer to minimize", |m| {
+        m.view()?
+            .active_window()?
+            .minimized_layers()
+            .iter()
+            .any(|minimized| minimized.layer_id.as_deref() == Some(&layer))
+            .then_some(())
+    });
+
     // Move the logs tab out: a second window shows it, the first shows the tab before it.
     h.run("client.tab.move_to_new_window", Value::Null);
     let all = windows(&mut h);
@@ -91,6 +157,64 @@ fn tabs_move_to_their_own_windows_and_windows_open_and_close() {
     let kept = wait_in(&mut h, second, "the second window's tab", shown_tab);
     println!("after Previous Tab in the first: first shows {switched}, second shows {kept}");
     assert_eq!(kept, "logs");
+    wait_in(&mut h, second, "its minimized layer", |ws| {
+        let model = ws.model();
+        model
+            .view()?
+            .active_window()?
+            .minimized_layers()
+            .iter()
+            .any(|minimized| minimized.layer_id.as_deref() == Some(&layer))
+            .then_some(())
+    });
+    h.cx.update(|cx| {
+        second
+            .update(cx, |ws, _, _| ws.restore_layer(layer.clone()))
+            .unwrap()
+    });
+    let floated = wait_in(
+        &mut h,
+        second,
+        "a restored floating terminal instead of a placeholder",
+        |ws| {
+            let model = ws.model();
+            let tab = model.view()?.active_window()?;
+            let pane = tab
+                .panes()
+                .into_iter()
+                .find(|pane| pane.floating.as_deref() == Some(&layer))?;
+            model
+                .panes
+                .get(&pane.block_id)?
+                .snapshot()
+                .frame
+                .map(|_| pane.block_id)
+        },
+    );
+    common::request(
+        &control,
+        "session.resize_layer",
+        json!({
+            "session_id": session, "layer_id": layer, "bounds": [0.88, 0.15, 0.10, 0.4]
+        }),
+    )
+    .unwrap();
+    let width = wait_in(
+        &mut h,
+        second,
+        "a narrow floating header with room for the title",
+        |ws| {
+            let model = ws.model();
+            let current = model.view()?.active_window()?.layer_of(&floated)?;
+            if current.bounds.get(2).is_none_or(|width| *width > 0.13) {
+                return None;
+            }
+            let title_width =
+                f32::from(ws.element_bounds(&format!("header:{floated}"))?.size.width);
+            (title_width >= 18.).then_some(title_width)
+        },
+    );
+    println!("Narrow floating pane leaves {width}px for its title");
     let shot = h.cx.capture_screenshot(second.into()).unwrap();
     let path = common::shot_dir().join("window-moved-tab.png");
     shot.save(&path).unwrap();

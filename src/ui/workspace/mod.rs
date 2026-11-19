@@ -635,8 +635,10 @@ impl Workspace {
         for block in walkthroughs {
             self.fetch_onboarding(&session_id, &block, cx);
         }
+        // Keep the GPUI terminal entities for tabs we've shown. A switch then
+        // reuses focus, sizing and drawing state rather than creating new panes.
         self.panes
-            .retain(|block, _| visible.iter().any(|(_, id)| id == block));
+            .retain(|block, _| model.panes.contains_key(block));
         let copy_on_select = self.settings.terminal.copy_on_select;
         let force_cursor = self
             .settings
@@ -720,7 +722,8 @@ impl Workspace {
             .view()
             .and_then(view::View::active_window)
             .and_then(|w| w.focused_block_id.clone());
-        if focused != self.focused
+        if self.overlay.is_none()
+            && focused != self.focused
             && let Some(block) = &focused
             && let Some(pane) = self.panes.get(block)
         {
@@ -1878,6 +1881,14 @@ impl Workspace {
                 rect.y += bounds.y - origin.y;
                 dragging = true;
             }
+            if pane.floating.is_some()
+                && self.header_shown(&pane.block_id)
+                && window
+                    .layer_of(&pane.block_id)
+                    .is_some_and(|layer| layer.blocks.len() == 1)
+            {
+                rect = fit_floating_header(rect, self.area.size.width, gap, theme.border_width);
+            }
             let place = self.place_pane(&pane.block_id, rect, dragging, first, cx);
             let block = window.block(&pane.block_id).cloned().unwrap_or_default();
             let state = model.blocks.get(&pane.block_id);
@@ -2177,6 +2188,7 @@ impl Workspace {
                     .flex()
                     .flex_1()
                     .min_w_0()
+                    .overflow_hidden()
                     .h_full()
                     .items_center()
                     .gap(px(6.))
@@ -2406,6 +2418,17 @@ fn resize_pane(session: &str, divider: &view::Divider) -> (&'static str, Value) 
             "ratio": divider.ratio,
         }),
     )
+}
+
+/// The title keeps room for its icon, while the five controls keep their full hit targets.
+fn fit_floating_header(mut rect: Rect, area: Pixels, gap: f32, border: Pixels) -> Rect {
+    let area = f64::from(f32::from(area));
+    if area > 0. {
+        let chrome = 5. * 22. + 5. * 6. + 2. * 8. + 18. + gap + 2. * f32::from(border);
+        rect.w = rect.w.max((f64::from(chrome) / area).min(1.));
+        rect.x = rect.x.min(1. - rect.w).max(0.);
+    }
+    rect
 }
 
 /// A line where a dragged divider will land.
@@ -2774,19 +2797,11 @@ impl Render for Workspace {
             )
             .absolute()
             .inset_0();
-            div()
+            let card = div()
                 .id("notice")
                 .occlude()
-                .absolute()
-                // Clear of the toolbar at the top, and of the window's edge.
-                .when(position.top(), |d| d.top(px(60.)))
-                .when(!position.top(), |d| d.bottom(px(16.)))
-                .map(|d| match position.column() {
-                    0 => d.left(px(16.)),
-                    2 => d.right(px(16.)),
-                    _ => d.left(relative(0.5)).ml(px(-220.)),
-                })
-                .w(px(440.))
+                .relative()
+                .max_w(px(440.))
                 .child(tracker)
                 .flex()
                 .items_center()
@@ -2799,11 +2814,17 @@ impl Render for Workspace {
                 })
                 .when(theme.popup_shadows, |d| d.shadow_lg())
                 .child(if copy_link.is_some() {
-                    icon("world").size(px(16.)).text_color(theme.primary)
+                    icon("world")
+                        .flex_none()
+                        .size(px(16.))
+                        .text_color(theme.primary)
                 } else {
-                    icon("alert-triangle").size(px(16.)).text_color(theme.error)
+                    icon("alert-triangle")
+                        .flex_none()
+                        .size(px(16.))
+                        .text_color(theme.error)
                 })
-                .child(div().flex_1().text_size(px(13.)).child(message))
+                .child(div().min_w_0().text_size(px(13.)).child(message))
                 .children(copy_link.map(|link| {
                     preferences::button("copy-forward-link", "Copy Link", false, &theme).on_click(
                         move |_, _, cx| {
@@ -2823,7 +2844,20 @@ impl Render for Workspace {
                         }),
                     )
                     .tooltip(self.tip("client.notice.dismiss", None)),
-                )
+                );
+            div()
+                .absolute()
+                .left(px(16.))
+                .right(px(16.))
+                .when(position.top(), |d| d.top(px(60.)))
+                .when(!position.top(), |d| d.bottom(px(16.)))
+                .flex()
+                .map(|d| match position.column() {
+                    0 => d.justify_start(),
+                    2 => d.justify_end(),
+                    _ => d.justify_center(),
+                })
+                .child(card)
         });
         div()
             .id("workspace")

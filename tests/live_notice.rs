@@ -35,6 +35,7 @@ fn notices_float_where_the_setting_says() {
         let bounds = h.wait_ui("the notice to draw", |ws| ws.notice_bounds());
         let (x, y) = (f32::from(bounds.origin.x), f32::from(bounds.origin.y));
         let (w, hgt) = (f32::from(bounds.size.width), f32::from(bounds.size.height));
+        assert!(w < 330., "a one-line notice should fit its contents: {w}");
         let center = x + w / 2.;
         println!(
             "{:>13}: x {x:.0}..{:.0}, y {y:.0}..{:.0}",
