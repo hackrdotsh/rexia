@@ -927,16 +927,17 @@ impl Workspace {
                 let window = window_view
                     .as_ref()
                     .ok_or_else(|| refused("No tab is open"))?;
-                let divider = view::nudge(window, &need_block()?, &dir, amount)
-                    .ok_or_else(|| refused(format!("There's no divider to move {dir}")))?;
+                let block = need_block()?;
+                let divider = match window.layer_of(&block) {
+                    Some(layer) if layer.kind != "tiled" && window.zoomed_block_id.is_none() => {
+                        self.nudge_floating_divider(layer, &block, &dir, amount, super::Theme::get(cx))
+                    }
+                    _ => view::nudge(window, &block, &dir, amount),
+                }
+                .ok_or_else(|| refused(format!("There's no divider to move {dir}")))?;
                 self.pin_split(divider.split_id.clone());
-                call(
-                    self,
-                    "session.resize_pane",
-                    json!({"session_id": need_session()?,
-                    "direction": if divider.horizontal { "horizontal" } else { "vertical" },
-                    "before_block_id": divider.before_block, "after_block_id": divider.after_block, "ratio": divider.ratio}),
-                );
+                let (method, payload) = super::resize_pane(&need_session()?, &divider);
+                call(self, method, payload);
             }
             "pane.move_to_new_tab" => {
                 let block = need_block()?;

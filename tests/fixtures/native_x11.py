@@ -203,6 +203,39 @@ class X11:
         self.button(self.display, 1, 0, 0)
         self.sync(self.display, 0)
 
+    def drag(self, start, end, y):
+        self.motion(self.display, -1, start, y, 0)
+        self.button(self.display, 1, 1, 0)
+        self.sync(self.display, 0)
+        for step in range(1, 11):
+            self.motion(self.display, -1, start + (end - start) * step // 10, y, 0)
+            self.sync(self.display, 0)
+            time.sleep(0.03)
+        self.button(self.display, 1, 0, 0)
+        self.sync(self.display, 0)
+
+    def row(self, window, width, y):
+        frame = self.image(self.display, window, 0, y, width, 1, 0xFFFFFFFF, 2)
+        assert frame
+        try:
+            return [self.pixel(frame, x, 0) & 0xFFFFFF for x in range(width)]
+        finally:
+            self.destroy_image(frame)
+
+    def snapshot(self, window, path, width, height):
+        frame = self.image(self.display, window, 0, 0, width, height, 0xFFFFFFFF, 2)
+        assert frame
+        try:
+            pixels = bytearray()
+            for y in range(height):
+                for x in range(width):
+                    pixels.extend(
+                        (self.pixel(frame, x, y) & 0xFFFFFF).to_bytes(3, "big")
+                    )
+            path.write_bytes(f"P6\n{width} {height}\n255\n".encode() + pixels)
+        finally:
+            self.destroy_image(frame)
+
     def sample(self, window):
         # Capture the tab strip and terminal together in one X request.
         frame = self.image(self.display, window, 0, 0, 1260, 500, 0xFFFFFFFF, 2)
@@ -346,6 +379,10 @@ def run(binary, case, directory):
                 ["rex", "--autostart=false", "-S", f"unix://{server}", *args]
             )
             return json.loads(result) if as_json else result
+
+        if case == "floating-resize":
+            verify_floating_resize(binary, directory, display, x, launch, rex, server)
+            return
 
         old_color, cold_color, split_color = 0xD92143, 0x16CB52, 0x1379DE
         other_color = 0xB552E0
@@ -629,6 +666,184 @@ def run(binary, case, directory):
                 )
 
 
+def verify_floating_resize(binary, directory, display, x, launch, rex, server):
+    created = rex("new", "floating-resize", "--shell=none", "--", "cat")
+    session = created["session_id"]
+    left, right = 0xD92143, 0x1379DE
+
+    def pane(label, color):
+        rgb = ";".join(str(color >> shift & 255) for shift in (16, 8, 0))
+        fill = f"\x1b[48;2;{rgb}m\x1b[2J\x1b[H\x1b[?25l".encode()
+        script = (
+            "import os, signal, time\n"
+            f"def paint(*_): os.write(1, {fill!r})\n"
+            "signal.signal(signal.SIGWINCH, paint)\npaint()\ntime.sleep(60)\n"
+        )
+        return {
+            "block": {
+                "label": label,
+                "flavor": "com.superlogical.terminal.shell",
+                "options": {"shell": "none", "command": [sys.executable, "-c", script]},
+            }
+        }
+
+    rex(
+        "api",
+        "call",
+        "-s",
+        session,
+        "session.new_layer",
+        json.dumps(
+            {
+                "session_id": session,
+                "bounds": [0.2, 0.2, 0.6, 0.6],
+                "focus": True,
+                "layout": {
+                    "split": {
+                        "direction": "horizontal",
+                        "ratio": 0.5,
+                        "before": pane("Left", left),
+                        "after": pane("Right", right),
+                    }
+                },
+            }
+        ),
+        as_json=False,
+    )
+    config = directory / "settings.toml"
+    config.write_text(
+        '[interface]\nsidebar = false\nanimation = "off"\npane_style = "comfortable"\n'
+    )
+    env = dict(os.environ, DISPLAY=display, XDG_CONFIG_HOME=str(directory / "config"))
+    env.pop("WAYLAND_DISPLAY", None)
+    launch(
+        "rexia",
+        [
+            binary,
+            "--config",
+            str(config),
+            "--server",
+            f"unix://{server}",
+            "--session",
+            session,
+        ],
+        env=env,
+        stdout=sp.DEVNULL,
+    )
+    window = wait("the Rexia X11 window", x.window)
+    attrs = WindowAttributes()
+    assert x.attributes(x.display, window, C.byref(attrs))
+    x.focus(x.display, window, 2, 0)
+    x.sync(x.display, 0)
+
+    def spans():
+        row = x.row(window, attrs.width, attrs.height // 2)
+        if left not in row or right not in row:
+            return None
+        return [
+            (row.index(color), len(row) - row[::-1].index(color))
+            for color in (left, right)
+        ]
+
+    def tab():
+        return rex("session", "inspect", session)["windows"][0]
+
+    def split():
+        layer = next(layer for layer in tab()["layers"] if layer["kind"] != "tiled")
+        assert layer["bounds"] == [0.2, 0.2, 0.6, 0.6], "the drag moved the whole layer"
+        return layer["layout"]["split"]
+
+    def divider(stretches):
+        # The terminal origin is consistently inset; its right edge is rounded to whole cells.
+        return attrs.x + stretches[1][0] - inset
+
+    initial = wait("both floating terminals", spans)
+    inset = initial[0][0] - round(attrs.width * 0.2)
+    y = attrs.y + attrs.height // 2
+    edge = attrs.x + initial[-1][1]
+    x.snapshot(window, directory / "before-drag.ppm", attrs.width, attrs.height // 2)
+    print(
+        f"X11 drag from ({divider(initial)}, {y}) in window at ({attrs.x}, {attrs.y})",
+        flush=True,
+    )
+    x.drag(divider(initial), edge - 35, y)
+    first_ratio = split()["ratio"]
+    print(f"X11 floating resize: saved ratio={first_ratio:.4f}", flush=True)
+    assert 0.60 < first_ratio < 0.80, (
+        "floating divider did not move to the header width floor"
+    )
+    first = wait(
+        "both resized terminal frames",
+        lambda: (
+            current
+            if (current := spans()) and current[0][1] > initial[0][1] + 80
+            else None
+        ),
+    )
+    right_width = round(attrs.width * 0.8) + attrs.x - divider(first)
+    print(f"X11 right pane stopped at {right_width}px (with gutters)", flush=True)
+    assert 210 <= right_width <= 218
+    x.snapshot(window, directory / "right-limit.ppm", attrs.width, attrs.height // 2)
+
+    x.drag(divider(first), edge - 5, y)
+    assert abs(split()["ratio"] - first_ratio) < 0.001, (
+        "dragging farther shrank the header"
+    )
+    assert divider(spans()) == divider(first), "the divider drifted past the floor"
+
+    x.drag(divider(first), attrs.x + initial[0][0] + 5, y)
+    last_ratio = split()["ratio"]
+    assert 0.20 < last_ratio < 0.40
+    last = wait(
+        "both terminal frames after reversing the drag",
+        lambda: (
+            current
+            if (current := spans()) and current[1][0] < initial[1][0] - 80
+            else None
+        ),
+    )
+    left_width = divider(last) - attrs.x - round(attrs.width * 0.2)
+    assert 210 <= left_width <= 218
+    print(
+        f"X11 left pane stopped at {left_width}px (with gutters), saved ratio={last_ratio:.4f}",
+        flush=True,
+    )
+    x.snapshot(window, directory / "left-limit.ppm", attrs.width, attrs.height // 2)
+
+    left_block = split()["before"]["block_id"]
+    for direction, amount, expected in (
+        ("right", 0.08, last_ratio + 0.08),
+        ("left", 0.5, last_ratio),
+    ):
+        rex(
+            "do",
+            "-s",
+            session,
+            "-b",
+            left_block,
+            "pane.resize",
+            f"direction={direction}",
+            f"amount={amount}",
+        )
+        wait(
+            "Resize Pane's saved ratio",
+            lambda: abs(split()["ratio"] - expected) < 0.001,
+        )
+    print("Resize Pane moved away from the floor and stopped at it again", flush=True)
+    wait(
+        "the divider back at the left floor",
+        lambda: (current := spans()) and divider(current) == divider(last),
+    )
+
+    # Zoom is the middle of the five inline buttons, 80 px left of the split line.
+    x.click(divider(last) - 80, attrs.y + 217)
+    wait(
+        "the narrow header's inline Zoom button",
+        lambda: tab().get("zoomed_block_id") == left_block,
+    )
+    print("X11: narrow pane's inline Zoom button still works", flush=True)
+
+
 def send_marker(x, log):
     x.key("d")
     return b"d" in log.read_bytes()
@@ -713,6 +928,7 @@ if __name__ == "__main__":
         "close",
         "close-select",
         "cross-session",
+        "floating-resize",
     )
     parent = os.environ.get("REXIA_TEST_X11_LOG_DIR")
     if parent:

@@ -34,9 +34,10 @@ uses an external Rex server and has been tested on API revisions 14 and 18.
 - First clicks focus inactive terminal panes without sending a click to the
   program. On X11, this also applies to the click the window manager replays
   after activating Rexia. Minimized floating panes stay restorable when a tab
-  moves into its own window. Narrow floating splits make room for their header
-  controls. If the window can't fit the full controls, they move into the pane's
-  actions menu. When even the menu button won't fit, use **Floating Pane
+  moves into its own window. Dragging a floating divider or using Resize Pane
+  stops at the width needed for the title and controls. If the window can't fit
+  the full controls, they move into the pane's actions menu. When even the
+  menu button won't fit, use **Floating Pane
   Actions** below the panes or in the command palette. Multiline notices can
   collapse to their first line, including via **Toggle Notice Details** in the
   command palette. Only the visible text sets the collapsed width.

@@ -68,9 +68,9 @@ use crate::{
 };
 pub use actions::{Outcome, Target};
 use gpui::{
-    AnimationExt as _, AnyElement, App, Bounds, Context, Entity, FocusHandle, Focusable, Hsla,
-    MouseButton, MouseMoveEvent, MouseUpEvent, Pixels, Point, Role, SharedString, Task, Window,
-    canvas, div, prelude::*, px, relative,
+    AnimationExt as _, AnyElement, App, Bounds, Context, DispatchPhase, Entity, FocusHandle,
+    Focusable, Hsla, MouseButton, MouseMoveEvent, MouseUpEvent, Pixels, Point, Role, SharedString,
+    Task, Window, canvas, div, prelude::*, px, relative,
 };
 pub use overlay::{Confirm, ListKind, RenameTarget};
 pub use preferences::Section as SettingsSection;
@@ -140,8 +140,9 @@ enum Drag {
     Divider {
         session: String,
         divider: view::Divider,
-        sent: Instant,
-        at: Point<Pixels>,
+        limits: floating_layout::Limits,
+        sent: Option<Instant>,
+        original_ratio: f64,
     },
     Layer {
         session: String,
@@ -1070,19 +1071,21 @@ impl Workspace {
             Some(Drag::Divider {
                 session,
                 divider,
+                limits,
                 sent,
-                at,
+                ..
             }) => {
-                *at = event.position;
                 let rect = divider.rect;
                 let ratio = if divider.horizontal {
                     (fx - rect.x) / rect.w.max(1e-6)
                 } else {
                     (fy - rect.y) / rect.h.max(1e-6)
                 };
-                divider.ratio = autobalance::snapped(ratio.clamp(0.05, 0.95));
-                // Resize as the pointer moves, at most 20 times a second.
-                if sent.elapsed() > Duration::from_millis(50) {
+                divider.ratio = autobalance::snapped(ratio).clamp(limits.0, limits.1);
+                // Floating splits preview locally; tiled splits follow the server.
+                if let Some(sent) = sent
+                    && sent.elapsed() > Duration::from_millis(50)
+                {
                     *sent = Instant::now();
                     send = Some(resize_pane(session, divider));
                 }
@@ -1117,11 +1120,17 @@ impl Workspace {
         }
         match self.drag.take() {
             Some(Drag::Divider {
-                session, divider, ..
+                session,
+                divider,
+                sent,
+                original_ratio,
+                ..
             }) => {
-                self.pin_split(divider.split_id.clone());
-                let (method, payload) = resize_pane(&session, &divider);
-                self.call(method, payload);
+                if sent.is_some() || (divider.ratio - original_ratio).abs() > 1e-6 {
+                    self.pin_split(divider.split_id.clone());
+                    let (method, payload) = resize_pane(&session, &divider);
+                    self.call(method, payload);
+                }
             }
             Some(Drag::Layer {
                 session,
@@ -1144,6 +1153,37 @@ impl Workspace {
             None => return,
         }
         cx.notify();
+    }
+
+    /// A drag keeps receiving input when the pointer leaves its handle or crosses an occluding pane.
+    fn drag_input(&self, cx: &Context<Self>) -> impl IntoElement + use<> {
+        let moved = cx.listener(|ws, event: &MouseMoveEvent, window, cx| {
+            if ws.drag_input_active() {
+                ws.on_mouse_move(event, window, cx);
+            }
+        });
+        let released = cx.listener(Self::on_mouse_up);
+        canvas(
+            |_, _, _| (),
+            move |_, _, window, _| {
+                window.on_mouse_event(move |event: &MouseMoveEvent, phase, window, cx| {
+                    if phase == DispatchPhase::Capture {
+                        moved(event, window, cx);
+                    }
+                });
+                window.on_mouse_event(move |event: &MouseUpEvent, phase, window, cx| {
+                    if phase == DispatchPhase::Capture && event.button == MouseButton::Left {
+                        released(event, window, cx);
+                    }
+                });
+            },
+        )
+        .absolute()
+        .size_full()
+    }
+
+    fn drag_input_active(&self) -> bool {
+        self.drag.is_some() || self.moving.is_some() || self.sidebar_resizing.is_some()
     }
 
     fn render_toolbar(
@@ -1878,10 +1918,7 @@ impl Workspace {
             return (empty, false);
         };
         let session = model.selected.clone().unwrap_or_default();
-        let gap = match self.settings.interface.pane_style {
-            PaneStyle::Comfortable => 8.,
-            PaneStyle::Compact => 2.,
-        };
+        let gap = self.pane_gap();
         // Fading needs something to stand out against.
         let fade = if window.panes().len() > 1 {
             self.settings.interface.fade_inactive
@@ -1893,7 +1930,26 @@ impl Workspace {
         let focused = window.focused_block_id.clone();
         let zoomed = window.zoomed_block_id.is_some();
         let mut panes = window.panes();
-        let floating_bounds = self.fit_floating_layers(&window, &mut panes, gap, theme);
+        let floating_layouts: HashMap<_, _> = window
+            .layers
+            .iter()
+            .filter_map(|layer| {
+                Some((
+                    layer.layer_id.as_deref()?,
+                    self.fit_floating_layer(layer, theme)?,
+                ))
+            })
+            .collect();
+        for pane in &mut panes {
+            if let Some(layout) = pane
+                .floating
+                .as_deref()
+                .and_then(|id| floating_layouts.get(id))
+                && let Some(rect) = layout.panes.get(pane.block_id.as_str())
+            {
+                pane.rect = *rect;
+            }
+        }
         let highlighting = self.settings.interface.highlight_active_pane && panes.len() > 1;
         let focused_rect = panes
             .iter()
@@ -1919,7 +1975,35 @@ impl Workspace {
             .interface
             .focus_follows_mouse
             .then(|| Rc::new(RefCell::new(Vec::<(String, Bounds<Pixels>)>::new())));
-        for pane in panes {
+        let mut tiled_dividers = Some(window.dividers());
+        let mut previous_layer = None;
+        let mut add_dividers =
+            |ws: &Self, mut area: gpui::Div, layer: Option<&str>, cx: &mut Context<Self>| {
+                if let Some(layer) = layer {
+                    if let Some(layout) = floating_layouts.get(layer) {
+                        for (divider, limits) in &layout.dividers {
+                            area = area.child(ws.divider(
+                                &session,
+                                divider.clone(),
+                                Some(*limits),
+                                theme,
+                                cx,
+                            ));
+                        }
+                    }
+                } else if let Some(dividers) = tiled_dividers.take() {
+                    for divider in dividers {
+                        area = area.child(ws.divider(&session, divider, None, theme, cx));
+                    }
+                }
+                area
+            };
+        for pane in &panes {
+            let layer = pane.floating.as_deref();
+            if layer != previous_layer {
+                area = add_dividers(self, area, previous_layer, cx);
+                previous_layer = layer;
+            }
             let walkthrough = window
                 .block(&pane.block_id)
                 .is_some_and(onboarding::is_onboarding);
@@ -1928,9 +2012,9 @@ impl Workspace {
                 continue;
             }
             let rect = pane.rect;
-            let layer = pane.floating.as_deref();
-            let dragging =
-                matches!(&self.drag, Some(Drag::Layer { layer_id, .. }) if layer == Some(layer_id));
+            let dragging = matches!(&self.drag, Some(Drag::Layer { layer_id, .. }) if layer == Some(layer_id))
+                || (layer.is_some()
+                    && matches!(&self.drag, Some(Drag::Divider { sent: None, .. })));
             let place = self.place_pane(&pane.block_id, rect, dragging, first, cx);
             let block = window.block(&pane.block_id).cloned().unwrap_or_default();
             let state = model.blocks.get(&pane.block_id);
@@ -1972,8 +2056,7 @@ impl Workspace {
                     is_focused,
                     &session,
                     layer
-                        .and_then(|id| floating_bounds.get(id))
-                        .copied()
+                        .and_then(|id| floating_layouts.get(id).map(|layout| layout.rect))
                         .unwrap_or(rect),
                     inner_width,
                     overflow,
@@ -2040,6 +2123,7 @@ impl Workspace {
                 .id(SharedString::from(format!("card-{}", pane.block_id)))
                 .size_full()
                 .relative()
+                .when(floating.is_some(), |card| card.block_mouse_except_scroll())
                 // Ctrl-drag picks the pane up from anywhere over it.
                 .on_mouse_down(
                     MouseButton::Left,
@@ -2123,9 +2207,7 @@ impl Workspace {
             };
             area = area.child(positioned);
         }
-        for divider in window.dividers() {
-            area = area.child(self.divider(&session, divider, theme, cx));
-        }
+        area = add_dividers(self, area, previous_layer, cx);
         if highlighting {
             area = area.children(self.render_moving_highlight(gap, theme));
         }
@@ -2246,91 +2328,63 @@ impl Workspace {
             .into_any_element()
     }
 
-    /// Expand a floating layer proportionally first, then constrain individual splits
-    /// if the viewport can't fit those proportions at the minimum header width.
-    fn fit_floating_layers(
+    fn pane_gap(&self) -> f32 {
+        match self.settings.interface.pane_style {
+            PaneStyle::Comfortable => 8.,
+            PaneStyle::Compact => 2.,
+        }
+    }
+
+    /// Fit the layer independently of its ratios so dragging a split can't move the frame.
+    fn fit_floating_layer<'a>(
         &self,
-        window: &view::Window,
-        panes: &mut [view::Pane],
-        gap: f32,
+        layer: &'a view::Layer,
         theme: &Theme,
-    ) -> HashMap<String, Rect> {
+    ) -> Option<floating_layout::Layout<'a>> {
+        let id = layer.layer_id.as_deref()?;
+        let node = layer.layout.as_ref()?;
+        let mut rect = layer.rect();
+        if layer.kind == "tiled" || layer.state.as_deref() == Some("minimized") || rect.w <= 0. {
+            return None;
+        }
         let area = f32::from(self.area.size.width);
-        let frame_width = gap + 2. * f32::from(theme.border_width);
-        let header_width = if area > 0. {
-            f64::from((FLOATING_HEADER_MIN_WIDTH + frame_width) / area)
+        let has_headers = layer.blocks.iter().any(|block| {
+            block
+                .block_id
+                .as_deref()
+                .is_some_and(|id| self.header_shown(id))
+        });
+        let columns = floating_layout::columns(node) as f64;
+        let min_width = if area > 0. && has_headers {
+            let frame = self.pane_gap() + 2. * f32::from(theme.border_width);
+            let full = f64::from(FLOATING_HEADER_MIN_WIDTH + frame) / f64::from(area);
+            if full * columns <= 1. {
+                full
+            } else {
+                f64::from(FLOATING_HEADER_COMPACT_WIDTH + frame) / f64::from(area)
+            }
         } else {
             0.
         };
-        let mut bounds = HashMap::new();
-        for layer in &window.layers {
-            let Some(id) = layer.layer_id.as_deref() else {
-                continue;
-            };
-            let original = layer.rect();
-            if layer.kind == "tiled" || original.w <= 0. {
-                continue;
-            }
-            let narrowest_header = panes
-                .iter()
-                .filter(|pane| {
-                    pane.floating.as_deref() == Some(id) && self.header_shown(&pane.block_id)
-                })
-                .map(|pane| pane.rect.w)
-                .reduce(f64::min);
-            let mut fitted = original;
-            if let Some(narrowest) = narrowest_header
-                && header_width > 0.
-            {
-                fitted.w = if narrowest > 0. {
-                    original
-                        .w
-                        .max((original.w * header_width / narrowest).min(1.))
-                } else {
-                    1.
-                };
-                fitted.x = original.x.clamp(0., (1. - fitted.w).max(0.));
-            }
-            if let Some(Drag::Layer {
-                layer_id, bounds, ..
-            }) = &self.drag
-                && layer_id == id
-            {
-                fitted = *bounds;
-            }
-            let scale = fitted.w / original.w;
-            let mut adjusted = HashMap::new();
-            if narrowest_header.is_some_and(|width| width * scale + 1e-6 < header_width)
-                && let Some(layout) = &layer.layout
-            {
-                let available_per_column = fitted.w / floating_layout::columns(layout) as f64;
-                let compact_width = f64::from((FLOATING_HEADER_COMPACT_WIDTH + frame_width) / area);
-                let min_width = if available_per_column + 1e-6 >= header_width {
-                    header_width
-                } else {
-                    compact_width
-                };
-                floating_layout::horizontal_bounds(
-                    layout,
-                    fitted,
-                    min_width.min(available_per_column),
-                    &mut adjusted,
-                );
-            }
-            for pane in panes
-                .iter_mut()
-                .filter(|pane| pane.floating.as_deref() == Some(id))
-            {
-                (pane.rect.x, pane.rect.w) =
-                    adjusted.get(pane.block_id.as_str()).copied().unwrap_or((
-                        fitted.x + (pane.rect.x - original.x) * scale,
-                        pane.rect.w * scale,
-                    ));
-                pane.rect.y += fitted.y - original.y;
-            }
-            bounds.insert(id.to_owned(), fitted);
+        rect.w = rect.w.max((min_width * columns).min(1.));
+        rect.x = rect.x.clamp(0., (1. - rect.w).max(0.));
+        if let Some(Drag::Layer {
+            layer_id, bounds, ..
+        }) = &self.drag
+            && layer_id == id
+        {
+            rect = *bounds;
         }
-        bounds
+        let drag = match &self.drag {
+            Some(Drag::Divider {
+                divider,
+                sent: None,
+                ..
+            }) => Some(divider),
+            _ => None,
+        };
+        let min_width = min_width.min(rect.w / columns);
+        Some(floating_layout::Layout::fit(node, rect, min_width, drag))
     }
 
     #[allow(clippy::too_many_arguments)]
@@ -2605,6 +2659,7 @@ impl Workspace {
         &self,
         session: &str,
         divider: view::Divider,
+        floating: Option<floating_layout::Limits>,
         theme: &Theme,
         cx: &mut Context<Self>,
     ) -> AnyElement {
@@ -2622,12 +2677,13 @@ impl Workspace {
             .hover(|d| d.bg(theme.overlay(0.12)))
             .on_mouse_down(
                 MouseButton::Left,
-                cx.listener(move |ws, event: &gpui::MouseDownEvent, _, cx| {
+                cx.listener(move |ws, _, _, cx| {
                     ws.drag = Some(Drag::Divider {
                         session: session.clone(),
                         divider: divider.clone(),
-                        sent: Instant::now(),
-                        at: event.position,
+                        limits: floating.unwrap_or(floating_layout::DEFAULT_LIMITS),
+                        sent: floating.is_none().then(Instant::now),
+                        original_ratio: ratio,
                     });
                     cx.stop_propagation();
                     cx.notify();
@@ -3232,9 +3288,13 @@ impl Render for Workspace {
                     }
                 }),
             )
-            .on_mouse_move(cx.listener(Self::on_mouse_move))
+            .on_mouse_move(cx.listener(|ws, event: &MouseMoveEvent, window, cx| {
+                if !ws.drag_input_active() {
+                    ws.on_mouse_move(event, window, cx);
+                }
+            }))
             .on_scroll(cx.listener(|ws, event, _, cx| ws.on_swipe(event, cx)))
-            .on_mouse_up(MouseButton::Left, cx.listener(Self::on_mouse_up))
+            .child(self.drag_input(cx))
             .children(toolbar)
             .child(body)
             .children(shared_actions.then(|| self.floating_actions_footer(&theme, cx)))

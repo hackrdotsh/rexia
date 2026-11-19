@@ -57,3 +57,8 @@ fn another_tab_can_be_selected_while_the_successor_waits() {
 fn jumping_sessions_waits_for_both_cold_terminal_frames() {
     native("cross-session");
 }
+
+#[test]
+fn floating_divider_stops_at_the_header_width() {
+    native("floating-resize");
+}
